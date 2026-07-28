@@ -1,0 +1,16 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Duckling
+Name[en]=Duckling
+GenericName=Web Browser
+X-GNOME-FullName=Duckling
+Comment=Simple Yet Powerful Anti-Detect Browser
+Exec=ducklingbrowser %u
+Icon=ducklingbrowser
+StartupNotify=true
+NoDisplay=false
+Categories=Network;WebBrowser;
+MimeType=x-scheme-handler/http;x-scheme-handler/https;text/html;application/xhtml+xml;
+StartupWMClass=ducklingbrowser
+Keywords=browser;web;internet;productivity;
