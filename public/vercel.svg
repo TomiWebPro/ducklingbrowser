@@ -1,1 +1,8 @@
-<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1155 1000"><path d="m577.3 0 577.4 1000H0z" fill="#fff"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <title>Duckling Vercel</title>
+  <polygon points="50,10 90,80 10,80" fill="#FFC107"/>
+  <circle cx="50" cy="60" r="14" fill="#FFB300"/>
+  <circle cx="47" cy="55" r="4" fill="#1a1a2e"/>
+  <circle cx="48.5" cy="53.5" r="1.2" fill="white"/>
+  <path d="M58 61 C60 59, 64 60, 65 61 C64 64, 59 64, 58 61 Z" fill="#E65100"/>
+</svg>

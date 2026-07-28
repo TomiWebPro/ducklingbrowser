@@ -1,1 +1,12 @@
-<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill-rule="evenodd" clip-rule="evenodd" d="M1.5 2.5h13v10a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1zM0 1h16v11.5a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 0 12.5zm3.75 4.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5M7 4.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0m1.75.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5" fill="#666"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <title>Duckling Window</title>
+  <rect x="10" y="15" width="80" height="70" rx="5" fill="#FFC107" stroke="#FF8F00" stroke-width="2"/>
+  <rect x="10" y="15" width="80" height="18" rx="5" fill="#FF8F00"/>
+  <circle cx="20" cy="24" r="3" fill="#FF5252"/>
+  <circle cx="30" cy="24" r="3" fill="#FFC107"/>
+  <circle cx="40" cy="24" r="3" fill="#69F0AE"/>
+  <circle cx="50" cy="55" r="15" fill="#FFF176" opacity="0.6"/>
+  <circle cx="48" cy="50" r="4" fill="#1a1a2e"/>
+  <circle cx="49.5" cy="48.5" r="1.2" fill="white"/>
+  <path d="M60 58 C62 56, 66 57, 67 58 C66 61, 61 61, 60 58 Z" fill="#E65100"/>
+</svg>
