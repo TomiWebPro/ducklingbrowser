@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useWayfernTerms } from "@/hooks/use-wayfern-terms";
+import { useBrowserTerms } from "@/hooks/use-browser-terms";
 import { translateBackendError } from "@/lib/backend-errors";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import { cn } from "@/lib/utils";
@@ -123,7 +123,7 @@ export function IntegrationsDialog({
   const [busyAgentIds, setBusyAgentIds] = useState<Set<string>>(new Set());
   const [apiPortDraft, setApiPortDraft] = useState<string>("10108");
 
-  const { termsAccepted } = useWayfernTerms();
+  const { termsAccepted } = useBrowserTerms();
 
   const loadSettings = useCallback(async () => {
     try {

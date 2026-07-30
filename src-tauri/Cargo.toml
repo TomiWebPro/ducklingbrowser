@@ -92,7 +92,7 @@ clap = { version = "4", features = ["derive"] }
 async-socks5 = "0.6"
 
 
-# Wayfern CDP integration
+# Chromium CDP integration
 tokio-tungstenite = { version = "0.29", features = ["native-tls"] }
 rusqlite = { version = "0.40", features = ["bundled"] }
 serde_yaml = "0.9"
@@ -190,6 +190,4 @@ e2e = []
 
 # wayland-scanner 0.31.10 still pins vulnerable quick-xml 0.39. Upstream fixed
 # RUSTSEC-2026-0194 and RUSTSEC-2026-0195, but has not published the fix yet.
-# Remove this patch after the next wayland-scanner release is in the lockfile.
-[patch.crates-io]
-wayland-scanner = { git = "https://github.com/Smithay/wayland-rs", rev = "d07c4f91f28b42e5a485823ffd9d8d5a210b1053" }
+

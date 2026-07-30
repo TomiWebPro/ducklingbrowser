@@ -34,7 +34,7 @@ ducklingbrowser/
 │   │   ├── automation_rate_limiter.rs # Shared REST/MCP automation quota
 │   │   ├── sync/                    # Cloud sync (engine, encryption, manifest, scheduler)
 │   │   ├── vpn/                     # WireGuard tunnels
-│   │   ├── wayfern_manager.rs       # Wayfern (Chromium) browser management
+│   │   ├── chromium_manager.rs      # Chromium browser management
 │   │   ├── downloader.rs           # Browser binary downloader
 │   │   ├── extraction.rs           # Archive extraction (zip, tar, dmg, msi)
 │   │   ├── settings_manager.rs     # App settings persistence
@@ -52,7 +52,7 @@ ducklingbrowser/
 │   └── Cargo.toml                  # Rust dependencies
 ├── duckling-sync/                     # NestJS sync server (self-hostable)
 │   └── src/                        # Controllers, services, auth, S3 sync
-├── e2e/                            # Isolated native UI/sync/Wayfern E2E system
+├── e2e/                            # Isolated native UI/sync/Chromium E2E system
 │   ├── app/                        # Test-only Tauri harness that injects the private driver
 │   ├── lib/                        # WebDriver, CDP, fixtures, app-session helpers
 │   └── tests/                      # Smoke, UI, entity, integration, sync, browser suites
@@ -86,10 +86,10 @@ suite passes:
 | Profile/group/proxy/VPN/extension UI, proxy routing, VPN routing, or their browser-launch integration | `pnpm e2e:network` |
 | REST API/OpenAPI, MCP, cloud/update contracts, team locks, real-time synchronizer | `pnpm e2e:integrations` |
 | Sync client/server, manifests, timestamps, deletion, encryption, password rollover | `pnpm e2e:sync` |
-| Wayfern download/terms/fingerprint, browser runner, CDP, automation endpoints, process cleanup | `pnpm e2e:browser` |
+| Chromium download/terms/fingerprint, browser runner, CDP, automation endpoints, process cleanup | `pnpm e2e:browser` |
 | E2E harness, WebDriver plugin/driver, app isolation hooks, or changes spanning multiple rows | Run every affected row; use `pnpm e2e` for cross-cutting changes |
 
-`e2e:browser` requires `WAYFERN_TEST_TOKEN` in the environment or local `.env`. `e2e:network`
+`e2e:browser` requires `CHROMIUM_TEST_TOKEN` in the environment or local `.env`. `e2e:network`
 and the full suite additionally require Docker plus `RESIDENTIAL_PROXY_URL_ONE_HTTP` and
 `RESIDENTIAL_PROXY_URL_ONE_SOCKS`. Other individual suites must run without credentials. Use
 `--no-build` only when the frontend, Rust app, sidecar, and WebDriver binaries are already current.
@@ -103,7 +103,7 @@ evidence to the owning suite. `e2e:smoke` fails if command registration and the 
 
 Three log surfaces, in order of usefulness:
 
-- **Duckling Browser GUI** — `~/Library/Logs/com.ducklingbrowser/DucklingBrowser.log` on macOS (newest = active session; older `DucklingBrowser_<date>.log` are rotated). The GUI / Tauri / `browser_runner` / `proxy_manager` / `sync` all log here. Search for `Wayfern`, `Starting local proxy`, `Configured local proxy` to find a launch chain. Dev builds write to `DucklingBrowserDev.log` instead.
+- **Duckling Browser GUI** — `~/Library/Logs/com.ducklingbrowser/DucklingBrowser.log` on macOS (newest = active session; older `DucklingBrowser_<date>.log` are rotated). The GUI / Tauri / `browser_runner` / `proxy_manager` / `sync` all log here. Search for `Chromium`, `Starting local proxy`, `Configured local proxy` to find a launch chain. Dev builds write to `DucklingBrowserDev.log` instead.
 - **duckling-proxy worker** — `$TMPDIR/duckling-proxy-<config_id>.log`. One file per proxy worker process (each profile launch spawns a fresh one). Map a worker to its launch via the `Cleanup: browser PID X is dead, stopping proxy worker <id>` lines in DucklingBrowser.log, or by mtime. CONNECT requests, upstream accept/reject (status lines like `HTTP/1.1 402 user reached limit`), and tunnel errors are at INFO/WARN — anything finer is at TRACE and requires `RUST_LOG=duckling_proxy=trace`. The `Upstream CONNECT response coalesced N byte(s) of payload — these would be dropped without forwarding` warning marks a real bug in `handle_connect_from_buffer` if it ever fires.
 
 Linux/Windows swap `~/Library/Logs/com.ducklingbrowser/` for the platform-appropriate location (see `app_dirs::app_name()`), but the `$TMPDIR` worker logs are always under the system temp dir.

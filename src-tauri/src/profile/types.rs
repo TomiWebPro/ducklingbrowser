@@ -1,4 +1,4 @@
-use crate::wayfern_manager::WayfernConfig;
+use crate::chromium_manager::ChromiumConfig;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -38,8 +38,8 @@ pub struct BrowserProfile {
   pub last_launch: Option<u64>,
   #[serde(default = "default_release_type")]
   pub release_type: String,
-  #[serde(default)]
-  pub wayfern_config: Option<WayfernConfig>, // Wayfern configuration
+  #[serde(default, alias = "wayfern_config")]
+  pub chromium_config: Option<ChromiumConfig>, // Browser engine configuration
   #[serde(default)]
   pub group_id: Option<String>, // Reference to profile group
   #[serde(default)]
@@ -116,7 +116,7 @@ impl BrowserProfile {
     self
       .host_os
       .as_deref()
-      .or_else(|| self.wayfern_config.as_ref().and_then(|c| c.os.as_deref()))
+      .or_else(|| self.chromium_config.as_ref().and_then(|c| c.os.as_deref()))
   }
 
   /// Returns true when the profile was created on a different OS than the current host.

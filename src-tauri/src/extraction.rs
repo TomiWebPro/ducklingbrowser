@@ -198,15 +198,15 @@ impl Extractor {
     exe_path: &Path,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Determine browser type from the destination directory path
-    let browser_type = if dest_dir.to_string_lossy().contains("wayfern") {
-      "wayfern"
+    let browser_type = if dest_dir.to_string_lossy().contains("chromium") {
+      "chromium"
     } else {
       return Ok(());
     };
 
-    // For Wayfern on Linux, we expect the executable directly under version directory
-    // e.g., binaries/wayfern/<version>/wayfern, without an extra subdirectory
-    if browser_type == "wayfern" {
+    // For Chromium on Linux, we expect the executable directly under version directory
+    // e.g., binaries/chromium/<version>/chrome, without an extra subdirectory
+    if browser_type == "chromium" {
       return Ok(());
     }
 
@@ -1174,9 +1174,9 @@ impl Extractor {
       dest_dir.display()
     );
 
-    // Look for .exe files, preferring main browser executables. Wayfern is the
-    // current name; chromium/chrome cover builds extracted before the rename.
-    let priority_exe_names = ["wayfern.exe", "chromium.exe", "chrome.exe"];
+    // Look for .exe files, preferring main browser executables.
+    // chrome.exe is the default for Chrome for Testing builds.
+    let priority_exe_names = ["chrome.exe", "chromium.exe"];
 
     // First try priority executable names
     for exe_name in &priority_exe_names {
@@ -1241,7 +1241,6 @@ impl Extractor {
             if file_name.contains("chrome")
               || file_name.contains("chromium")
               || file_name.contains("browser")
-              || file_name.contains("wayfern")
             {
               return Ok(path);
             }
@@ -1287,15 +1286,9 @@ impl Extractor {
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
     log::info!("Searching for Linux executable in: {}", dest_dir.display());
 
-    // Enhanced list of common browser executable names, Wayfern first since it
-    // is the current name. Chrome/Chromium cover builds extracted before the
-    // rename.
+    // Enhanced list of common browser executable names.
+    // Chrome for Testing ships as `chrome` on Linux.
     let exe_names = [
-      // Wayfern variants (current naming)
-      "wayfern",
-      "wayfern-bin",
-      "wayfern-browser",
-      // Chrome/Chromium variants (builds extracted before the rename)
       "chrome",
       "chromium",
       "chromium-browser",
@@ -1319,8 +1312,6 @@ impl Extractor {
       "opt",
       "sbin",
       "usr/sbin",
-      "wayfern",
-      "wayfern-linux",
       "chrome",
       "chromium",
       "chrome-linux",
@@ -1421,7 +1412,6 @@ impl Extractor {
             if name_lower.contains("chrome")
               || name_lower.contains("brave")
               || name_lower.contains("zen")
-              || name_lower.contains("wayfern")
               || name_lower.ends_with(".appimage")
               || !name_lower.contains('.')
             {
@@ -1475,7 +1465,6 @@ impl Extractor {
             if name_lower.contains("chrome")
               || name_lower.contains("brave")
               || name_lower.contains("zen")
-              || name_lower.contains("wayfern")
               || file_name.ends_with(".AppImage")
             {
               log::info!(
@@ -1992,17 +1981,17 @@ mod tests {
     let extractor = Extractor::instance();
     let temp_dir = TempDir::new().unwrap();
 
-    // Create a Wayfern.app directory
-    let wayfern_app = temp_dir.path().join("Wayfern.app");
-    create_dir_all(&wayfern_app).unwrap();
+    // Create a Chrome.app directory (Chrome for Testing)
+    let chrome_app = temp_dir.path().join("Chrome.app");
+    create_dir_all(&chrome_app).unwrap();
 
     // Create the standard macOS app structure
-    let contents_dir = wayfern_app.join("Contents");
+    let contents_dir = chrome_app.join("Contents");
     let macos_dir = contents_dir.join("MacOS");
     create_dir_all(&macos_dir).unwrap();
 
     // Create the executable
-    let executable = macos_dir.join("Wayfern");
+    let executable = macos_dir.join("Chrome");
     File::create(&executable).unwrap();
 
     // Test finding the app
@@ -2010,7 +1999,7 @@ mod tests {
     assert!(result.is_ok());
 
     let found_app = result.unwrap();
-    assert_eq!(found_app.file_name().unwrap(), "Wayfern.app");
+    assert_eq!(found_app.file_name().unwrap(), "Chrome.app");
     assert!(found_app.exists());
   }
 

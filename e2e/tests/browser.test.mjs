@@ -7,7 +7,7 @@ import path from "node:path";
 import test from "node:test";
 import { appFromEnvironment } from "../lib/app.mjs";
 import { CdpClient } from "../lib/cdp.mjs";
-import { defaultWayfernPath, prepareWayfern } from "../lib/fixtures.mjs";
+import { defaultChromiumPath, prepareChromium } from "../lib/fixtures.mjs";
 
 const fixtureUrl = process.env.DUCKLING_E2E_FIXTURE_URL;
 
@@ -45,7 +45,7 @@ function processExists(pid) {
 async function waitForProcessExit(app, pid) {
   await app.waitFor(() => !processExists(pid), {
     timeoutMs: 20_000,
-    description: `Wayfern process ${pid} to exit`,
+    description: `Browser process ${pid} to exit`,
   });
 }
 
@@ -59,34 +59,34 @@ function assertIdleResourceBounds(pid) {
   const cpuPercent = Number(cpuText);
   assert.ok(
     rssKiB > 0 && rssKiB < 2_000_000,
-    `Wayfern main process RSS is ${rssKiB} KiB`,
+    `Browser main process RSS is ${rssKiB} KiB`,
   );
   assert.ok(
     cpuPercent >= 0 && cpuPercent < 200,
-    `Wayfern main process CPU is ${cpuPercent}%`,
+    `Browser main process CPU is ${cpuPercent}%`,
   );
 }
 
-function realWayfernTermsPath() {
+function realChromiumTermsPath() {
   if (process.platform === "darwin") {
     return path.join(
       os.homedir(),
       "Library",
       "Application Support",
-      "Wayfern",
+      "Chromium",
       "license-accepted",
     );
   }
   if (process.platform === "win32") {
     return path.join(
       process.env.APPDATA ?? path.join(os.homedir(), "AppData", "Roaming"),
-      "Wayfern",
+      "Chromium",
       "license-accepted",
     );
   }
   return path.join(
     process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), ".config"),
-    "Wayfern",
+    "Chromium",
     "license-accepted",
   );
 }
@@ -112,12 +112,12 @@ async function snapshotFile(file) {
 async function createRealProfile(app, version, name, fingerprint = null) {
   return app.invoke("create_browser_profile_new", {
     name,
-    browserStr: "wayfern",
+    browserStr: "chromium",
     version,
     releaseType: "stable",
     proxyId: null,
     vpnId: null,
-    wayfernConfig: {
+    chromiumConfig: {
       fingerprint,
       randomize_fingerprint_on_launch: false,
       geoip: false,
@@ -129,40 +129,40 @@ async function createRealProfile(app, version, name, fingerprint = null) {
   });
 }
 
-test("real Wayfern fingerprinting, terms, API automation, CDP, cookies, and process cleanup", async () => {
-  assert.ok(process.env.WAYFERN_TEST_TOKEN, "WAYFERN_TEST_TOKEN is required");
-  const realTermsFile = realWayfernTermsPath();
+test("real Chromium fingerprinting, terms, API automation, CDP, cookies, and process cleanup", async () => {
+  assert.ok(process.env.CHROMIUM_TEST_TOKEN, "CHROMIUM_TEST_TOKEN is required");
+  const realTermsFile = realChromiumTermsPath();
   const realTermsBefore = await snapshotFile(realTermsFile);
-  const hasLocalWayfern = existsSync(
-    defaultWayfernPath(process.env.DUCKLING_E2E_PROJECT_ROOT),
+  const hasLocalChromium = existsSync(
+    defaultChromiumPath(process.env.DUCKLING_E2E_PROJECT_ROOT),
   );
-  const app = appFromEnvironment("browser-wayfern", {
-    seedVersionCache: hasLocalWayfern,
-    wayfernTermsAccepted: false,
+  const app = appFromEnvironment("browser-chromium", {
+    seedVersionCache: hasLocalChromium,
+    chromiumTermsAccepted: false,
   });
   let cdp;
   let browserPid;
   try {
-    const prepared = await prepareWayfern(
+    const prepared = await prepareChromium(
       app,
       process.env.DUCKLING_E2E_PROJECT_ROOT,
     );
     if (!app.session) await app.start();
 
-    assert.equal(await app.invoke("check_wayfern_downloaded"), true);
-    assert.equal(await app.invoke("check_wayfern_terms_accepted"), false);
-    await app.invoke("accept_wayfern_terms");
-    assert.equal(await app.invoke("check_wayfern_terms_accepted"), true);
+    assert.equal(await app.invoke("check_chromium_downloaded"), true);
+    assert.equal(await app.invoke("check_chromium_terms_accepted"), false);
+    await app.invoke("accept_chromium_terms");
+    assert.equal(await app.invoke("check_chromium_terms_accepted"), true);
     assert.ok(
       (
         await app.invoke("get_downloaded_browser_versions", {
-          browserStr: "wayfern",
+          browserStr: "chromium",
         })
       ).includes(prepared.version),
     );
     assert.equal(
       await app.invoke("check_browser_exists", {
-        browserStr: "wayfern",
+        browserStr: "chromium",
         version: prepared.version,
       }),
       true,
@@ -170,68 +170,71 @@ test("real Wayfern fingerprinting, terms, API automation, CDP, cookies, and proc
     assert.deepEqual(await app.invoke("check_missing_binaries"), []);
     assert.deepEqual(await app.invoke("ensure_all_binaries_exist"), []);
     assert.deepEqual(await app.invoke("ensure_active_browsers_downloaded"), []);
-    assert.deepEqual(await app.invoke("get_supported_browsers"), ["wayfern"]);
+    assert.deepEqual(await app.invoke("get_supported_browsers"), ["chromium"]);
     assert.equal(
       await app.invoke("is_browser_supported_on_platform", {
-        browserStr: "wayfern",
+        browserStr: "chromium",
       }),
       true,
     );
     assert.ok(
       (
         await app.invoke("fetch_browser_versions_cached_first", {
-          browserStr: "wayfern",
+          browserStr: "chromium",
         })
       ).some((item) => item.version === prepared.version),
     );
     assert.ok(
       (
         await app.invoke("fetch_browser_versions_with_count_cached_first", {
-          browserStr: "wayfern",
+          browserStr: "chromium",
         })
       ).versions.includes(prepared.version),
     );
     assert.equal(
-      (await app.invoke("get_browser_release_types", { browserStr: "wayfern" }))
-        .stable,
+      (
+        await app.invoke("get_browser_release_types", {
+          browserStr: "chromium",
+        })
+      ).stable,
       prepared.version,
     );
     assert.match(
       await app.invokeError("cancel_download", {
-        browserStr: "wayfern",
+        browserStr: "chromium",
         version: prepared.version,
       }),
       /No active download/,
     );
 
     const sample = await app.invoke("generate_sample_fingerprint", {
-      browser: "wayfern",
+      browser: "chromium",
       version: prepared.version,
       configJson: JSON.stringify({ geoip: false }),
     });
     const fingerprint = JSON.parse(sample);
     assert.ok(
       Object.keys(fingerprint).length >= 10,
-      "Wayfern returned an incomplete fingerprint",
+      "Chromium returned an incomplete fingerprint",
     );
 
     const profile = await createRealProfile(
       app,
       prepared.version,
-      `Real Wayfern (${prepared.source})`,
+      `Chromium (${prepared.source})`,
     );
-    assert.ok(profile.wayfern_config.fingerprint);
+    assert.ok(profile.chromium_config.fingerprint);
     assert.ok(
-      Object.keys(JSON.parse(profile.wayfern_config.fingerprint)).length >= 10,
+      Object.keys(JSON.parse(profile.chromium_config.fingerprint)).length >= 10,
     );
     assert.equal(await app.invoke("check_missing_geoip_database"), true);
     assert.equal(await app.invoke("is_geoip_database_available"), false);
     await app.invoke("download_geoip_database");
     assert.equal(await app.invoke("is_geoip_database_available"), true);
     assert.equal(await app.invoke("check_missing_geoip_database"), false);
-    await app.invoke("update_wayfern_config", {
+    await app.invoke("update_chromium_config", {
       profileId: profile.id,
-      config: profile.wayfern_config,
+      config: profile.chromium_config,
     });
     await app.invoke("match_profile_fingerprint_to_exit", {
       profileId: profile.id,
@@ -275,7 +278,7 @@ test("real Wayfern fingerprinting, terms, API automation, CDP, cookies, and proc
     const launched = await request(`${base}/v1/profiles/${profile.id}/run`, {
       method: "POST",
       token: saved.api_token,
-      body: { url: `${fixtureUrl}/wayfern`, headless: true },
+      body: { url: `${fixtureUrl}/chromium`, headless: true },
     });
     assert.equal(launched.response.status, 200, JSON.stringify(launched.value));
     assert.equal(launched.value.headless, true);
@@ -286,7 +289,7 @@ test("real Wayfern fingerprinting, terms, API automation, CDP, cookies, and proc
     });
     assert.equal(
       await cdp.evaluate("document.querySelector('#path').textContent"),
-      "/wayfern",
+      "/chromium",
     );
     assert.equal(
       await cdp.evaluate(
@@ -297,13 +300,16 @@ test("real Wayfern fingerprinting, terms, API automation, CDP, cookies, and proc
     const echo = await cdp.evaluate(
       `fetch(${JSON.stringify(`${fixtureUrl}/api/echo`)}, {
         method: "POST",
-        body: "wayfern-cdp-body"
+        body: "chromium-cdp-body"
       }).then((response) => response.json())`,
     );
     assert.equal(echo.method, "POST");
-    assert.equal(echo.body, "wayfern-cdp-body");
+    assert.equal(echo.body, "chromium-cdp-body");
     assert.ok(echo.userAgent.length > 20);
-    assert.match(await cdp.evaluate("document.cookie"), /duckling_e2e=browser-ok/);
+    assert.match(
+      await cdp.evaluate("document.cookie"),
+      /duckling_e2e=browser-ok/,
+    );
 
     const runningProfile = (await app.invoke("list_browser_profiles")).find(
       (item) => item.id === profile.id,
@@ -341,7 +347,7 @@ test("real Wayfern fingerprinting, terms, API automation, CDP, cookies, and proc
         ).then((response) => response.json());
         return targets.some((target) => target.url.includes("/opened-via-api"));
       },
-      { timeoutMs: 20_000, description: "API-opened Wayfern target" },
+      { timeoutMs: 20_000, description: "API-opened browser target" },
     );
 
     const killed = await request(`${base}/v1/profiles/${profile.id}/kill`, {
@@ -363,7 +369,7 @@ test("real Wayfern fingerprinting, terms, API automation, CDP, cookies, and proc
     const batchProfile = await createRealProfile(
       app,
       prepared.version,
-      "Wayfern Batch Automation",
+      "Browser Automation",
       sample,
     );
     const batchRun = await request(`${base}/v1/profiles/batch/run`, {
@@ -420,7 +426,7 @@ test("real Wayfern fingerprinting, terms, API automation, CDP, cookies, and proc
     assert.deepEqual(
       await snapshotFile(realTermsFile),
       realTermsBefore,
-      "the browser suite modified the real Wayfern terms marker",
+      "the browser suite modified the real terms marker",
     );
   }
 });

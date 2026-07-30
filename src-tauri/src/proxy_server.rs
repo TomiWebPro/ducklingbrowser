@@ -1445,7 +1445,7 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
 
   log::info!("Successfully bound to port {}", actual_port);
 
-  // Protocol served to the browser: "socks5" (Wayfern) or "http" (default).
+  // Protocol served to the browser: "socks5" or "http" (default).
   let local_protocol = config.local_protocol_or_default();
   let serve_socks5 = local_protocol == "socks5";
 

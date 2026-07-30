@@ -60,14 +60,14 @@ async function configureSync(app) {
 async function createProfile(app, name) {
   return app.invoke("create_browser_profile_new", {
     name,
-    browserStr: "wayfern",
+    browserStr: "chromium",
     version: "150.0.7871.100",
     releaseType: "stable",
     proxyId: null,
     vpnId: null,
     // Keep sync tests deterministic and network-free; browser.test.mjs covers
-    // generation through the real Wayfern binary.
-    wayfernConfig: { fingerprint: "{}" },
+    // generation through the real Chromium binary.
+    chromiumConfig: { fingerprint: "{}" },
     groupId: null,
     ephemeral: false,
     dnsBlocklist: null,

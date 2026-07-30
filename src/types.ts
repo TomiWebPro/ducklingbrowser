@@ -22,7 +22,7 @@ export interface BrowserProfile {
   process_id?: number;
   last_launch?: number;
   release_type: string;
-  wayfern_config?: WayfernConfig; // Wayfern configuration
+  chromium_config?: BrowserConfig; // `chromium_config` for Rust serialization compat
   group_id?: string; // Reference to profile group
   tags?: string[];
   note?: string; // User note
@@ -263,9 +263,9 @@ export interface AppUpdateProgress {
   message: string;
 }
 
-export type WayfernOS = "windows" | "macos" | "linux" | "android" | "ios";
+export type TargetOS = "windows" | "macos" | "linux" | "android" | "ios";
 
-export interface WayfernConfig {
+export interface BrowserConfig {
   proxy?: string;
   screen_max_width?: number;
   screen_max_height?: number;
@@ -278,12 +278,12 @@ export interface WayfernConfig {
   executable_path?: string;
   fingerprint?: string; // JSON string of the complete fingerprint config
   randomize_fingerprint_on_launch?: boolean; // Generate new fingerprint on every launch
-  os?: WayfernOS; // Operating system for fingerprint generation
+  os?: TargetOS; // Operating system for fingerprint generation
   geo_proxy_signature?: string; // Internal: routing the fingerprint's location was computed for
 }
 
-// Wayfern fingerprint config - matches the C++ FingerprintData structure
-export interface WayfernFingerprintConfig {
+// Browser fingerprint config - matches the C++ FingerprintData structure
+export interface BrowserFingerprintConfig {
   // User agent and platform
   userAgent?: string;
   platform?: string;
@@ -392,7 +392,7 @@ export interface WayfernFingerprintConfig {
   performanceMemory?: number;
 }
 
-export interface WayfernLaunchResult {
+export interface BrowserLaunchResult {
   id: string;
   processId?: number;
   profilePath?: string;

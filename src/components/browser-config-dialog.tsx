@@ -11,11 +11,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { BrowserProfile, WayfernConfig, WayfernOS } from "@/types";
+import type { BrowserConfig, BrowserProfile, TargetOS } from "@/types";
 import { LoadingButton } from "./loading-button";
 import { RippleButton } from "./ui/ripple";
 
-const getCurrentOS = (): WayfernOS => {
+const getCurrentOS = (): TargetOS => {
   if (typeof navigator === "undefined") return "linux";
   const platform = navigator.platform.toLowerCase();
   if (platform.includes("win")) return "windows";
@@ -23,34 +23,34 @@ const getCurrentOS = (): WayfernOS => {
   return "linux";
 };
 
-interface WayfernConfigDialogProps {
+interface BrowserConfigDialogProps {
   isOpen: boolean;
   onClose: () => void;
   profile: BrowserProfile | null;
-  onSave: (profile: BrowserProfile, config: WayfernConfig) => Promise<void>;
+  onSave: (profile: BrowserProfile, config: BrowserConfig) => Promise<void>;
   isRunning?: boolean;
   crossOsUnlocked?: boolean;
 }
 
-export function WayfernConfigDialog({
+export function BrowserConfigDialog({
   isOpen,
   onClose,
   profile,
   onSave,
   isRunning = false,
   crossOsUnlocked = false,
-}: WayfernConfigDialogProps) {
+}: BrowserConfigDialogProps) {
   const { t } = useTranslation();
-  const [config, setConfig] = useState<WayfernConfig>(() => ({
+  const [config, setConfig] = useState<BrowserConfig>(() => ({
     geoip: true,
     os: getCurrentOS(),
   }));
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    if (profile?.browser === "wayfern") {
+    if (profile?.browser === "chromium") {
       setConfig(
-        profile.wayfern_config || {
+        profile.chromium_config || {
           geoip: true,
           os: getCurrentOS(),
         },
@@ -58,7 +58,7 @@ export function WayfernConfigDialog({
     }
   }, [profile]);
 
-  const updateConfig = (key: keyof WayfernConfig, value: unknown) => {
+  const updateConfig = (key: keyof BrowserConfig, value: unknown) => {
     setConfig((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -70,8 +70,8 @@ export function WayfernConfigDialog({
         JSON.parse(config.fingerprint);
       } catch (_error) {
         const { toast } = await import("sonner");
-        toast.error(t("wayfernConfigDialog.invalidFingerprint"), {
-          description: t("wayfernConfigDialog.invalidFingerprintDescription"),
+        toast.error(t("browserConfigDialog.invalidFingerprint"), {
+          description: t("browserConfigDialog.invalidFingerprintDescription"),
         });
         return;
       }
@@ -84,11 +84,11 @@ export function WayfernConfigDialog({
     } catch (error) {
       console.error("Failed to save config:", error);
       const { toast } = await import("sonner");
-      toast.error(t("wayfernConfigDialog.saveFailed"), {
+      toast.error(t("browserConfigDialog.saveFailed"), {
         description:
           error instanceof Error
             ? error.message
-            : t("wayfernConfigDialog.unknownError"),
+            : t("browserConfigDialog.unknownError"),
       });
     } finally {
       setIsSaving(false);
@@ -96,9 +96,9 @@ export function WayfernConfigDialog({
   };
 
   const handleClose = () => {
-    if (profile?.browser === "wayfern") {
+    if (profile?.browser === "chromium") {
       setConfig(
-        profile.wayfern_config || {
+        profile.chromium_config || {
           geoip: true,
           os: getCurrentOS(),
         },
@@ -107,7 +107,7 @@ export function WayfernConfigDialog({
     onClose();
   };
 
-  if (profile?.browser !== "wayfern") {
+  if (profile?.browser !== "chromium") {
     return null;
   }
 
@@ -117,13 +117,13 @@ export function WayfernConfigDialog({
         <DialogHeader className="shrink-0">
           <DialogTitle>
             {isRunning
-              ? t("wayfernConfigDialog.titleView", {
+              ? t("browserConfigDialog.titleView", {
                   name: profile.name,
-                  browser: "Wayfern",
+                  browser: "Chromium",
                 })
-              : t("wayfernConfigDialog.titleConfigure", {
+              : t("browserConfigDialog.titleConfigure", {
                   name: profile.name,
-                  browser: "Wayfern",
+                  browser: "Chromium",
                 })}
           </DialogTitle>
         </DialogHeader>
@@ -138,7 +138,7 @@ export function WayfernConfigDialog({
               crossOsUnlocked={crossOsUnlocked}
               limitedMode={!crossOsUnlocked}
               profileVersion={profile.version}
-              profileBrowser="wayfern"
+              profileBrowser={profile?.browser ?? "chromium"}
             />
           </div>
         </ScrollArea>

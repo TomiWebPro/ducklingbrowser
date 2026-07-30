@@ -4,7 +4,7 @@ use crate::downloaded_browsers_registry::DownloadedBrowsersRegistry;
 use crate::events;
 use crate::profile::types::{get_host_os, BrowserProfile, SyncMode};
 use crate::proxy_manager::PROXY_MANAGER;
-use crate::wayfern_manager::WayfernConfig;
+use crate::chromium_manager::ChromiumConfig;
 use std::fs::{self, create_dir_all};
 use std::path::{Path, PathBuf};
 use sysinfo::{Pid, ProcessRefreshKind, RefreshKind, System};
@@ -25,13 +25,13 @@ fn atomic_write(path: &Path, data: &[u8]) -> std::io::Result<()> {
 }
 
 pub struct ProfileManager {
-  wayfern_manager: &'static crate::wayfern_manager::WayfernManager,
+  chromium_manager: &'static crate::chromium_manager::ChromiumManager,
 }
 
 impl ProfileManager {
   fn new() -> Self {
     Self {
-      wayfern_manager: crate::wayfern_manager::WayfernManager::instance(),
+      chromium_manager: crate::chromium_manager::ChromiumManager::instance(),
     }
   }
 
@@ -76,7 +76,7 @@ impl ProfileManager {
     release_type: &str,
     proxy_id: Option<String>,
     vpn_id: Option<String>,
-    wayfern_config: Option<WayfernConfig>,
+    chromium_config: Option<ChromiumConfig>,
     group_id: Option<String>,
     ephemeral: bool,
     dns_blocklist: Option<String>,
@@ -136,11 +136,11 @@ impl ProfileManager {
       create_dir_all(&profile_data_dir)?;
     }
 
-    // For Wayfern profiles, generate fingerprint during creation
-    let final_wayfern_config = if browser == "wayfern" {
-      let mut config = wayfern_config.unwrap_or_else(|| {
-        log::info!("Creating default Wayfern config for profile: {name}");
-        crate::wayfern_manager::WayfernConfig::default()
+    // For Chromium profiles, generate fingerprint during creation
+    let final_chromium_config = if browser == "chromium" {
+      let mut config = chromium_config.unwrap_or_else(|| {
+        log::info!("Creating default browser config for profile: {name}");
+        crate::chromium_manager::ChromiumConfig::default()
       });
 
       // Always ensure executable_path is set to the user's binary location
@@ -168,7 +168,7 @@ impl ProfileManager {
           };
           config.proxy = Some(proxy_url);
           log::info!(
-            "Using upstream proxy for Wayfern fingerprint generation: {}://{}:{}",
+            "Using upstream proxy for fingerprint generation: {}://{}:{}",
             proxy_settings.proxy_type.to_lowercase(),
             proxy_settings.host,
             proxy_settings.port
@@ -183,7 +183,7 @@ impl ProfileManager {
 
       // Generate fingerprint if not already provided
       if config.fingerprint.is_none() {
-        log::info!("Generating fingerprint for Wayfern profile: {name}");
+        log::info!("Generating fingerprint for profile: {name}");
 
         // Create a temporary profile for fingerprint generation
         let temp_profile = BrowserProfile {
@@ -197,7 +197,7 @@ impl ProfileManager {
           process_id: None,
           last_launch: None,
           release_type: release_type.to_string(),
-          wayfern_config: None,
+          chromium_config: None,
           group_id: group_id.clone(),
           tags: Vec::new(),
           note: None,
@@ -219,23 +219,23 @@ impl ProfileManager {
         };
 
         match self
-          .wayfern_manager
+          .chromium_manager
           .generate_fingerprint_config(app_handle, &temp_profile, &config)
           .await
         {
           Ok((generated_fingerprint, geo_applied)) => {
             config.fingerprint = Some(generated_fingerprint);
             geolocation_applied = geo_applied;
-            log::info!("Successfully generated fingerprint for Wayfern profile: {name}");
+            log::info!("Successfully generated fingerprint for profile: {name}");
           }
           Err(e) => {
             return Err(
-              format!("Failed to generate fingerprint for Wayfern profile '{name}': {e}").into(),
+              format!("Failed to generate fingerprint for profile '{name}': {e}").into(),
             );
           }
         }
       } else {
-        log::info!("Using provided fingerprint for Wayfern profile: {name}");
+        log::info!("Using provided fingerprint for profile: {name}");
       }
 
       // Record which proxy/geoip the fingerprint's location data was computed
@@ -246,7 +246,7 @@ impl ProfileManager {
       // timezone/locale, and a stamped signature would match at launch and
       // suppress the refresh that repairs it — latching the leak permanently.
       config.geo_proxy_signature = if geolocation_applied {
-        Some(crate::wayfern_manager::WayfernManager::geo_signature(
+        Some(crate::chromium_manager::ChromiumManager::geo_signature(
           proxy_id
             .as_ref()
             .and_then(|id| PROXY_MANAGER.get_proxy_settings_by_id(id))
@@ -257,7 +257,7 @@ impl ProfileManager {
       } else {
         if !matches!(config.geoip.as_ref(), Some(serde_json::Value::Bool(false))) {
           log::warn!(
-            "Geolocation could not be applied for Wayfern profile {name}; leaving geo signature unset so the next launch refreshes location through the profile's proxy"
+            "Geolocation could not be applied for profile {name}; leaving geo signature unset so the next launch refreshes location through the profile's proxy"
           );
         }
         None
@@ -268,7 +268,7 @@ impl ProfileManager {
 
       Some(config)
     } else {
-      wayfern_config.clone()
+      chromium_config.clone()
     };
 
     let profile = BrowserProfile {
@@ -282,13 +282,13 @@ impl ProfileManager {
       process_id: None,
       last_launch: None,
       release_type: release_type.to_string(),
-      wayfern_config: final_wayfern_config,
+      chromium_config: final_chromium_config,
       group_id: group_id.clone(),
       tags: Vec::new(),
       note: None,
       // A random-looking pastel derived from the (random) profile id, so every
       // new profile gets a distinct, stable window color it can later override.
-      window_color: Some(crate::wayfern_manager::derive_profile_color(&profile_id)),
+      window_color: Some(crate::chromium_manager::derive_profile_color(&profile_id)),
       sync_mode: SyncMode::Disabled,
       encryption_salt: None,
       last_sync: None,
@@ -1034,7 +1034,7 @@ impl ProfileManager {
       process_id: None,
       last_launch: None,
       release_type: source.release_type,
-      wayfern_config: source.wayfern_config,
+      chromium_config: source.chromium_config,
       group_id: source.group_id,
       tags: source.tags,
       note: source.note,
@@ -1061,7 +1061,7 @@ impl ProfileManager {
     };
 
     // Duckling: a clone must NOT be linkable to its source. The source
-    // wayfern_config embeds the persisted fingerprint JSON (including the
+    // chromium_config embeds the persisted fingerprint JSON (including the
     // canvas_noise_seed), so copying it verbatim makes the clone emit
     // BYTE-IDENTICAL canvas/WebGL/audio readback hashes and identical device
     // signals as the source — trivially linkable if both run concurrently. Clear
@@ -1071,7 +1071,7 @@ impl ProfileManager {
     // user-data-dir copy above still duplicates cookies/localStorage/TLS state —
     // a separate storage-linkage vector the user must clear if they want full
     // isolation between a clone and its source.
-    if let Some(cfg) = new_profile.wayfern_config.as_mut() {
+    if let Some(cfg) = new_profile.chromium_config.as_mut() {
       cfg.fingerprint = None;
     }
 
@@ -1084,11 +1084,11 @@ impl ProfileManager {
     Ok(new_profile)
   }
 
-  pub async fn update_wayfern_config(
+  pub async fn update_chromium_config(
     &self,
     app_handle: tauri::AppHandle,
     profile_id: &str,
-    config: WayfernConfig,
+    config: ChromiumConfig,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Find the profile by ID
     let profile_uuid = uuid::Uuid::parse_str(profile_id).map_err(
@@ -1116,12 +1116,12 @@ impl ProfileManager {
 
     if is_running {
       return Err(
-        "Cannot update Wayfern configuration while browser is running. Please stop the browser first.".into(),
+        "Cannot update browser configuration while browser is running. Please stop the browser first.".into(),
       );
     }
 
-    // Update the Wayfern configuration
-    profile.wayfern_config = Some(config);
+    // Update the browser configuration
+    profile.chromium_config = Some(config);
 
     // Save the updated profile
     self
@@ -1133,7 +1133,7 @@ impl ProfileManager {
     crate::sync::queue_profile_sync_if_eligible(&profile);
 
     log::info!(
-      "Wayfern configuration updated for profile '{}' (ID: {}).",
+      "Browser configuration updated for profile '{}' (ID: {}).",
       profile.name,
       profile_id
     );
@@ -1319,12 +1319,12 @@ impl ProfileManager {
     app_handle: tauri::AppHandle,
     profile: &BrowserProfile,
   ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-    // Handle Wayfern profiles using WayfernManager-based status checking
-    if profile.browser == "wayfern" {
-      return self.check_wayfern_status(&app_handle, profile).await;
+    // Handle Chromium profiles using ChromiumManager-based status checking
+    if profile.browser == "chromium" {
+      return self.check_chromium_status(&app_handle, profile).await;
     }
 
-    // For non-wayfern browsers, use the existing PID-based logic
+    // For non-Chromium browsers, use the existing PID-based logic
     let inner_profile = profile.clone();
     let system = System::new_with_specifics(
       RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()),
@@ -1362,8 +1362,8 @@ impl ProfileManager {
           // Check if this is the right browser executable first
           let exe_name = process.name().to_string_lossy().to_lowercase();
           let is_correct_browser = match profile.browser.as_str() {
-            "wayfern" => {
-              exe_name.contains("wayfern")
+            "chromium" => {
+              exe_name.contains("chromium")
                 || exe_name.contains("chromium")
                 || exe_name.contains("chrome")
             }
@@ -1456,21 +1456,21 @@ impl ProfileManager {
     Ok(is_running)
   }
 
-  // Check Wayfern status using WayfernManager
-  async fn check_wayfern_status(
+  // Check browser status using ChromiumManager
+  async fn check_chromium_status(
     &self,
     app_handle: &tauri::AppHandle,
     profile: &BrowserProfile,
   ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-    let manager = self.wayfern_manager;
+    let manager = self.chromium_manager;
     let profiles_dir = self.get_profiles_dir();
     let profile_data_path =
       crate::ephemeral_dirs::get_effective_profile_path(profile, &profiles_dir);
     let profile_path_str = profile_data_path.to_string_lossy();
 
-    // Check if there's a running Wayfern instance for this profile
-    match manager.find_wayfern_by_profile(&profile_path_str).await {
-      Some(wayfern_process) => {
+    // Check if there's a running browser instance for this profile
+    match manager.find_chromium_by_profile(&profile_path_str).await {
+      Some(chromium_process) => {
         // Found a running instance, update profile with process info if changed
         let profiles_dir = self.get_profiles_dir();
         let profile_uuid_dir = profiles_dir.join(profile.id.to_string());
@@ -1487,13 +1487,13 @@ impl ProfileManager {
             None => profile.clone(),
           };
 
-          if latest.process_id != wayfern_process.processId {
+          if latest.process_id != chromium_process.processId {
             let old_pid = latest.process_id;
-            latest.process_id = wayfern_process.processId;
+            latest.process_id = chromium_process.processId;
             if let Err(e) = self.save_profile(&latest) {
-              log::warn!("Warning: Failed to update Wayfern profile with process info: {e}");
+              log::warn!("Warning: Failed to update profile with process info: {e}");
             }
-            if let (Some(prev), Some(new)) = (old_pid, wayfern_process.processId) {
+            if let (Some(prev), Some(new)) = (old_pid, chromium_process.processId) {
               let _ = crate::proxy_manager::PROXY_MANAGER.update_proxy_pid(prev, new);
             }
 
@@ -1503,9 +1503,9 @@ impl ProfileManager {
             }
 
             log::info!(
-              "Wayfern process has started for profile '{}' with PID: {:?}",
+              "Browser process has started for profile '{}' with PID: {:?}",
               profile.name,
-              wayfern_process.processId
+              chromium_process.processId
             );
           }
         }
@@ -1534,7 +1534,7 @@ impl ProfileManager {
           if latest.process_id.is_some() {
             latest.process_id = None;
             if let Err(e) = self.save_profile(&latest) {
-              log::warn!("Warning: Failed to clear Wayfern profile process info: {e}");
+              log::warn!("Warning: Failed to clear profile process info: {e}");
             }
 
             if let Some(updated) = crate::auto_updater::AutoUpdater::instance()
@@ -1683,7 +1683,7 @@ pub async fn create_browser_profile_with_group(
   release_type: String,
   proxy_id: Option<String>,
   vpn_id: Option<String>,
-  wayfern_config: Option<WayfernConfig>,
+  chromium_config: Option<ChromiumConfig>,
   group_id: Option<String>,
   ephemeral: bool,
   dns_blocklist: Option<String>,
@@ -1699,7 +1699,7 @@ pub async fn create_browser_profile_with_group(
       &release_type,
       proxy_id,
       vpn_id,
-      wayfern_config,
+      chromium_config,
       group_id,
       ephemeral,
       dns_blocklist,
@@ -1880,13 +1880,13 @@ pub async fn create_browser_profile_new(
   release_type: String,
   proxy_id: Option<String>,
   vpn_id: Option<String>,
-  wayfern_config: Option<WayfernConfig>,
+  chromium_config: Option<ChromiumConfig>,
   group_id: Option<String>,
   ephemeral: Option<bool>,
   dns_blocklist: Option<String>,
   launch_hook: Option<String>,
 ) -> Result<BrowserProfile, String> {
-  let fingerprint_os = wayfern_config.as_ref().and_then(|c| c.os.as_deref());
+  let fingerprint_os = chromium_config.as_ref().and_then(|c| c.os.as_deref());
 
   if !crate::cloud_auth::CLOUD_AUTH
     .is_fingerprint_os_allowed(fingerprint_os)
@@ -1909,7 +1909,7 @@ pub async fn create_browser_profile_new(
     release_type,
     proxy_id,
     vpn_id,
-    wayfern_config,
+    chromium_config,
     group_id,
     ephemeral.unwrap_or(false),
     dns_blocklist,
@@ -1919,10 +1919,10 @@ pub async fn create_browser_profile_new(
 }
 
 #[tauri::command]
-pub async fn update_wayfern_config(
+pub async fn update_chromium_config(
   app_handle: tauri::AppHandle,
   profile_id: String,
-  config: WayfernConfig,
+  config: ChromiumConfig,
 ) -> Result<(), String> {
   if config.fingerprint.is_some()
     && !crate::cloud_auth::CLOUD_AUTH
@@ -1941,9 +1941,9 @@ pub async fn update_wayfern_config(
 
   let profile_manager = ProfileManager::instance();
   profile_manager
-    .update_wayfern_config(app_handle, &profile_id, config)
+    .update_chromium_config(app_handle, &profile_id, config)
     .await
-    .map_err(|e| format!("Failed to update Wayfern config: {e}"))
+    .map_err(|e| format!("Failed to update browser config: {e}"))
 }
 
 #[tauri::command]

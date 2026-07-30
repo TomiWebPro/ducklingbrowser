@@ -20,7 +20,7 @@ pub struct ProxyConfig {
   /// only reach domains in the file; everything else is blocked.
   #[serde(default)]
   pub dns_allowlist_mode: bool,
-  /// Protocol the local worker serves to the browser: "socks5" (Wayfern/Chromium so QUIC and
+  /// Protocol the local worker serves to the browser: "socks5" (so QUIC and
   /// WebRTC UDP can be proxied without leaking the real IP). Independent of
   /// `upstream_url`, which is the real upstream proxy/VPN this worker dials.
   #[serde(default)]

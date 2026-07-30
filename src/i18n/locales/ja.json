@@ -284,9 +284,9 @@
       "stopFollower": "{{leaderName}}のアクションを追従中",
       "desyncedTooltip": "{{url}}で同期に失敗しました",
       "paidFeature": "シンクロナイザーは有料機能です",
-      "wayfernOnly": "Wayfernプロフィールのみ同期可能です",
+      "chromiumOnly": "Chromiumプロフィールのみ同期可能です",
       "selectFollowers": "フォロワープロフィールを選択",
-      "selectFollowersDesc": "リーダープロフィールのアクションを複製するプロフィールを選択してください。停止中のWayfernプロフィールのみ選択できます。",
+      "selectFollowersDesc": "リーダープロフィールのアクションを複製するプロフィールを選択してください。停止中のChromiumプロフィールのみ選択できます。",
       "leader": "リーダー",
       "follower": "フォロワー",
       "startSession": "同期セッションを開始",
@@ -352,7 +352,7 @@
     "antiDetect": {
       "title": "アンチ検出ブラウザ",
       "description": "アンチ検出機能を持つブラウザを選択",
-      "chromium": "Wayfern",
+      "chromium": "Chromium",
       "badge": "アンチ検出ブラウザ"
     },
     "regular": {
@@ -387,7 +387,7 @@
       "upgradeAvailable": "{{browser}} の新しいバージョン（{{version}}）が利用可能です。"
     },
     "chromiumLabel": "Chromium",
-    "chromiumSubtitle": "Wayfern搭載",
+    "chromiumSubtitle": "Chromium搭載",
     "platformUnavailable": "{{browser}} はまだお使いのプラットフォームで利用できません。",
     "passwordProtect": {
       "label": "このプロファイルをパスワードで保護",
@@ -739,7 +739,7 @@
     "tokenCopied": "トークンをコピーしました",
     "mcpEnableLabel": "MCP サーバーを有効にする (Model Context Protocol)",
     "mcpEnableDescription": "Claude Desktop などの AI アシスタントがブラウザを制御できます。",
-    "mcpAcceptTermsFirst": "(設定で先に Wayfern の規約に同意してください)",
+    "mcpAcceptTermsFirst": "(設定で先にブラウザの規約に同意してください)",
     "mcpStarted": "MCP サーバーをポート {{port}} で起動しました",
     "mcpStopped": "MCP サーバーを停止しました",
     "mcpToggleFailed": "MCP サーバーの切り替えに失敗しました",
@@ -758,8 +758,8 @@
     "error": "プロファイルのインポートに失敗しました"
   },
   "config": {
-    "wayfern": {
-      "title": "Wayfern設定",
+    "chromium": {
+      "title": "Chromium設定",
       "fingerprint": {
         "title": "フィンガープリント",
         "randomize": "起動時にランダム化",
@@ -812,7 +812,7 @@
       "sourcePlaceholder": "Cookie をコピーするプロファイルを選択",
       "running": "(実行中)",
       "targetProfiles": "対象プロファイル ({{count}})",
-      "noOtherTargets": "他に Wayfern プロファイルが選択されていません",
+      "noOtherTargets": "他に Chromium プロファイルが選択されていません",
       "selectSourceFirst": "最初にソースプロファイルを選択してください",
       "selectionStatus": "({{selected}} / {{total}} 選択中)",
       "searchPlaceholder": "ドメインまたは Cookie を検索...",
@@ -941,7 +941,7 @@
     "serverError": "サーバーエラー。後でもう一度お試しください。",
     "unknownError": "不明なエラーが発生しました。もう一度お試しください。",
     "noProfilesForUrl": "利用可能なプロファイルがありません。URLを開く前にプロファイルを作成してください。",
-    "updateWayfernConfigFailed": "wayfern設定の更新に失敗しました: {{error}}",
+    "updateBrowserConfigFailed": "ブラウザ設定の更新に失敗しました: {{error}}",
     "createProfileFailed": "プロファイルの作成に失敗しました: {{error}}",
     "launchBrowserFailed": "ブラウザの起動に失敗しました: {{error}}",
     "cannotDeleteRunningProfile": "ブラウザの実行中にプロファイルを削除できません。先にブラウザを停止してください。",
@@ -949,7 +949,7 @@
     "renameProfileFailed": "プロファイルの名前変更に失敗しました: {{error}}",
     "killBrowserFailed": "ブラウザの停止に失敗しました: {{error}}",
     "deleteSelectedProfilesFailed": "選択したプロファイルの削除に失敗しました: {{error}}",
-    "cookieCopyUnsupportedBrowser": "Cookieのコピーは Wayfern プロファイルでのみ機能します",
+    "cookieCopyUnsupportedBrowser": "Cookieのコピーは Chromium プロファイルでのみ機能します",
     "updateSyncSettingsFailed": "同期設定の更新に失敗しました",
     "cloneProfileFailed": "プロファイルの複製に失敗しました: {{error}}",
     "loadSupportedBrowsersFailed": "サポートされているブラウザの読み込みに失敗しました",
@@ -966,7 +966,7 @@
     "setProfilePasswordFailed": "プロファイルのパスワード設定に失敗しました: {{error}}"
   },
   "browser": {
-    "wayfern": "Wayfern"
+    "chromium": "Chromium"
   },
   "fingerprint": {
     "crossOsWarning": "異なるオペレーティングシステムのフィンガープリント偽装は、すべての基盤コンポーネントを完璧に模倣することが不可能なため、信頼性が低くなります。注意してご使用ください。",
@@ -1206,7 +1206,7 @@
       "cannotWhileRunning": "パスワードを変更する前にプロファイルを停止してください。"
     },
     "fingerprint": {
-      "notSupported": "フィンガープリント編集は Wayfern プロファイルでのみ利用できます。",
+      "notSupported": "フィンガープリント編集は Chromium プロファイルでのみ利用できます。",
       "lockedTitle": "フィンガープリントの表示と編集は Pro 機能です",
       "lockedDescription": "デバイス情報はすべてのプロファイルで保護されています。プロファイルのフィンガープリントを表示・編集するには、有効な有料プランが必要です。"
     },
@@ -1542,15 +1542,17 @@
     "badgeUnavailable": "利用不可",
     "openButton": "開く"
   },
-  "wayfernTerms": {
-    "title": "Wayfern 利用規約",
-    "description": "Duckling Browser を使用する前に、Wayfern の利用規約を読み、同意する必要があります。",
+  "browserTerms": {
+    "title": "ブラウザ",
+    "description": "Chromium は BSD ライセンスのオープンソースソフトウェアです。",
     "reviewLabel": "次の URL で利用規約をご確認ください:",
     "agreeNotice": "「同意します」をクリックすると、これらの条項に拘束されることに同意します。",
     "acceptButton": "同意します",
     "acceptSuccess": "規約に同意しました",
     "acceptFailed": "規約への同意に失敗しました",
-    "tryAgain": "もう一度お試しください"
+    "tryAgain": "もう一度お試しください",
+    "body": "Duckling Browser は Chromium ウェブブラウザエンジンを使用しています。Chromium は BSD ライセンスのもとで配布されており、自由な使用、変更、再配布が許可されています。",
+    "acknowledgeButton": "Acknowledge"
   },
   "commercialTrial": {
     "title": "商用試用期間が終了しました",
@@ -1812,11 +1814,10 @@
     "proxyNotWorking": "選択したプロキシが機能していないため、プロファイルは作成されませんでした。",
     "proxyPaymentRequired": "選択したプロキシは支払いが必要です（402）。サブスクリプションが期限切れの可能性があります。そのため、プロファイルは作成されませんでした。",
     "vpnNotWorking": "選択したVPNが機能していないため、プロファイルは作成されませんでした。",
-    "camoufoxImportDeprecated": "このタイプのプロファイルのインポートはサポートされなくなりました。代わりにWayfernを使用してください。",
+    "camoufoxImportDeprecated": "このタイプのプロファイルのインポートはサポートされなくなりました。代わりにChromiumを使用してください。",
     "updateChecksumsUnavailable": "アップデート {{version}} のチェックサムファイルを取得できなかったため、検証できませんでした。アップデートはインストールされませんでした。後で再試行されます。",
     "updateChecksumMismatch": "ダウンロードしたアップデートファイル {{file}} はチェックサム検証に失敗したため破棄されました。もう一度お試しください。",
     "nameCannotBeEmpty": "名前を空にすることはできません",
-    "wayfernVersionNotAvailable": "Wayfernのバージョン{{requested}}はダウンロードできません。現在のバージョンは{{current}}です。",
     "profileNameExists": "「{{name}}」という名前のプロファイルは既に存在します",
     "importSourceNotFound": "ソースパスが存在しません",
     "importNoItems": "インポートする項目が選択されていません",
@@ -1833,7 +1834,7 @@
     "proxySidecarVersionMismatch": "Duckling Browser のファイルに異なるバージョンが混在しています。最新のアップデートを再インストールしてください。プロファイルはそのまま保持されます。",
     "updateProfilesRunning": "アップデートをインストールする前に、実行中のプロファイルをすべて停止してください。",
     "updatePreparationFailed": "バックグラウンドのネットワークプロセスを安全に停止できませんでした。コンピューターを再起動してから、もう一度アップデートしてください。",
-    "wayfernTermsRequired": "MCPサーバーを起動する前にWayfernの利用規約に同意してください。",
+    "browserTermsRequired": "MCPサーバーを起動する前にブラウザの規約に同意してください。",
     "apiPortUnavailable": "APIサーバーで利用可能なポートが見つかりませんでした。",
     "mcpServerAlreadyRunning": "MCPサーバーはすでに実行中です。",
     "mcpServerNotRunning": "MCPサーバーは実行されていません。",
@@ -1841,7 +1842,8 @@
     "mcpConfigurationUnavailable": "MCPサーバーの設定を取得できません。サーバーを再起動して、もう一度お試しください。",
     "mcpAgentUnknown": "このMCPクライアントはサポートされていません。",
     "mcpAgentInstallFailed": "MCPクライアントにDuckling Browserを追加できませんでした：{{detail}}",
-    "mcpAgentRemoveFailed": "MCPクライアントからDuckling Browserを削除できませんでした：{{detail}}"
+    "mcpAgentRemoveFailed": "MCPクライアントからDuckling Browserを削除できませんでした：{{detail}}",
+    "chromiumVersionNotAvailable": "Chromiumのバージョン{{requested}}はダウンロードできません。現在のバージョンは{{current}}です。"
   },
   "rail": {
     "profiles": "プロファイル",
@@ -1976,7 +1978,7 @@
     "steps": {
       "createProfile": {
         "title": "最初のプロファイルを作成",
-        "content": "ここをクリックして最初のプロファイルを作成します。ブラウザには Wayfern を選んでください。フィンガープリント対策済みの推奨 Chromium です。"
+        "content": "ここをクリックして最初のプロファイルを作成します。ブラウザには Chromium を選んでください。フィンガープリント対策済みの推奨 Chromium です。"
       },
       "dnsBlocking": {
         "title": "DNS ブロック",
@@ -2009,7 +2011,7 @@
     },
     "ready": {
       "title": "準備しています",
-      "descDownloading": "最初のブラウザ（Wayfern）をダウンロードしています。この初回セットアップはバックグラウンドで実行されます。少々お待ちください。",
+      "descDownloading": "最初のブラウザ（Chromium）をダウンロードしています。この初回セットアップはバックグラウンドで実行されます。少々お待ちください。",
       "descReady": "ブラウザの準備ができました。最初のプロファイルを作成しましょう。",
       "cta": "最初のプロファイルを作成",
       "downloading": "ダウンロード中…",
@@ -2049,11 +2051,7 @@
       "commercialDesc": "2週間の評価期間は無料です。その後は有料プランが必要で、これによりプロジェクトの維持と発展が支えられます。"
     }
   },
-  "wayfernBlocked": {
-    "title": "ブラウザの自動化が一時停止しました",
-    "description": "通常は複数のデバイスで同時にサインインしたことが原因で、アカウントのProブラウザ機能が一時的に制限されました。他のデバイスからサインアウトし、プロファイルを再起動すると復元されます。"
-  },
-  "wayfernConfigDialog": {
+  "browserConfigDialog": {
     "titleView": "フィンガープリント設定を表示 - {{name}} ({{browser}})",
     "titleConfigure": "フィンガープリント設定 - {{name}} ({{browser}})",
     "invalidFingerprint": "無効なフィンガープリント設定",
@@ -2062,7 +2060,7 @@
     "unknownError": "不明なエラーが発生しました"
   },
   "cookieCopy": {
-    "noOtherTargets": "他に Wayfern プロファイルが選択されていません"
+    "noOtherTargets": "他に Chromium プロファイルが選択されていません"
   },
   "about": {
     "title": "このアプリについて",

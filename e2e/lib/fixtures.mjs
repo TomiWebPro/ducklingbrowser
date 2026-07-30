@@ -7,31 +7,31 @@ import path from "node:path";
 
 export const TEST_BROWSER_VERSION = "150.0.7871.100";
 
-export function defaultWayfernPath(projectRoot) {
-  if (process.env.DUCKLING_E2E_WAYFERN_PATH) {
-    return path.resolve(process.env.DUCKLING_E2E_WAYFERN_PATH);
+export function defaultChromiumPath(projectRoot) {
+  if (process.env.DUCKLING_E2E_CHROMIUM_PATH) {
+    return path.resolve(process.env.DUCKLING_E2E_CHROMIUM_PATH);
   }
-  const fixtureRoot = path.join(projectRoot, ".cache", "e2e-wayfern-fixture");
+  const fixtureRoot = path.join(projectRoot, ".cache", "e2e-chromium-fixture");
   return process.platform === "darwin"
-    ? path.join(fixtureRoot, "Wayfern.app")
+    ? path.join(fixtureRoot, "Chromium.app")
     : path.join(
         fixtureRoot,
-        process.platform === "win32" ? "Wayfern.exe" : "wayfern",
+        process.platform === "win32" ? "Chromium.exe" : "chromium",
       );
 }
 
-export function wayfernExecutable(bundlePath) {
+export function chromiumExecutable(bundlePath) {
   if (process.platform === "darwin") {
-    return path.join(bundlePath, "Contents", "MacOS", "Wayfern");
+    return path.join(bundlePath, "Contents", "MacOS", "Chromium");
   }
   return bundlePath;
 }
 
-export function inspectWayfern(bundlePath) {
-  const executable = wayfernExecutable(bundlePath);
+export function inspectChromium(bundlePath) {
+  const executable = chromiumExecutable(bundlePath);
   assert.ok(
     existsSync(executable),
-    `Wayfern executable is missing: ${executable}`,
+    `Chromium executable is missing: ${executable}`,
   );
   const output =
     process.platform === "darwin"
@@ -52,7 +52,7 @@ export function inspectWayfern(bundlePath) {
           timeout: 15_000,
         }).trim();
   const match = output.match(/(\d+\.\d+\.\d+\.\d+)/);
-  assert.ok(match, `Could not parse Wayfern version from: ${output}`);
+  assert.ok(match, `Could not parse Chromium version from: ${output}`);
   return { bundlePath, executable, version: match[1], output };
 }
 
@@ -69,34 +69,34 @@ async function cloneAppBundle(source, destination) {
   }
 }
 
-export async function seedWayfern(dataRoot, wayfern) {
+export async function seedChromium(dataRoot, chromium) {
   const installDir = path.join(
     dataRoot,
     "data",
     "binaries",
-    "wayfern",
-    wayfern.version,
+    "chromium",
+    chromium.version,
   );
   await mkdir(installDir, { recursive: true });
   if (process.platform === "darwin") {
     await cloneAppBundle(
-      wayfern.bundlePath,
-      path.join(installDir, "Wayfern.app"),
+      chromium.bundlePath,
+      path.join(installDir, "Chromium.app"),
     );
   } else {
-    const name = process.platform === "win32" ? "wayfern.exe" : "wayfern";
+    const name = process.platform === "win32" ? "chromium.exe" : "chromium";
     const destination = path.join(installDir, name);
-    await copyFile(wayfern.executable, destination);
+    await copyFile(chromium.executable, destination);
     if (process.platform !== "win32") {
       await chmod(destination, 0o755);
     }
   }
   const registry = {
     browsers: {
-      wayfern: {
-        [wayfern.version]: {
-          browser: "wayfern",
-          version: wayfern.version,
+      chromium: {
+        [chromium.version]: {
+          browser: "chromium",
+          version: chromium.version,
           file_path: installDir,
         },
       },
@@ -113,25 +113,25 @@ export async function seedWayfern(dataRoot, wayfern) {
   return installDir;
 }
 
-export async function prepareWayfern(app, projectRoot) {
-  const localBundle = defaultWayfernPath(projectRoot);
+export async function prepareChromium(app, projectRoot) {
+  const localBundle = defaultChromiumPath(projectRoot);
   if (existsSync(localBundle)) {
-    const wayfern = inspectWayfern(localBundle);
-    await seedWayfern(app.dataRoot, wayfern);
-    return { version: wayfern.version, source: "local fixture" };
+    const chromium = inspectChromium(localBundle);
+    await seedChromium(app.dataRoot, chromium);
+    return { version: chromium.version, source: "local fixture" };
   }
 
   if (!app.session) await app.start();
   const current = await app.invoke("fetch_browser_versions_with_count", {
-    browserStr: "wayfern",
+    browserStr: "chromium",
   });
   assert.ok(
     current.versions.length > 0,
-    "No Wayfern build is published for this platform",
+    "No Chromium build is published for this platform",
   );
   const version = current.versions[0];
   await app.invoke("download_browser", {
-    browserStr: "wayfern",
+    browserStr: "chromium",
     version,
   });
   return { version, source: "published download" };

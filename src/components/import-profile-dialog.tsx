@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next";
 import { FaFileArchive, FaFolder } from "react-icons/fa";
 import { LuChevronRight } from "react-icons/lu";
 import { toast } from "sonner";
+import { BrowserConfigForm } from "@/components/browser-config-form";
 import { LoadingButton } from "@/components/loading-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -39,7 +40,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { WayfernConfigForm } from "@/components/wayfern-config-form";
 import { useGroupEvents } from "@/hooks/use-group-events";
 import { useProxyEvents } from "@/hooks/use-proxy-events";
 import { useVpnEvents } from "@/hooks/use-vpn-events";
@@ -49,11 +49,11 @@ import { fireSprinkleConfetti } from "@/lib/confetti";
 import { cn } from "@/lib/utils";
 import type {
   ArchiveScanResult,
+  BrowserConfig,
   DetectedProfile,
   ImportProfileItem,
   ProfileImportBatchResult,
   ProfileImportProgress,
-  WayfernConfig,
 } from "@/types";
 import { RippleButton } from "./ui/ripple";
 
@@ -99,7 +99,7 @@ export function ImportProfileDialog({
   const [proxyAssignment, setProxyAssignment] = useState<string>("none");
   // "none" | a VPN config id (applied to every imported profile)
   const [vpnAssignment, setVpnAssignment] = useState<string>("none");
-  const [wayfernConfig, setWayfernConfig] = useState<WayfernConfig>({});
+  const [browserConfig, setBrowserConfig] = useState<BrowserConfig>({});
   // Fingerprint + advanced options collapse behind disclosures — the default
   // path is just names + proxy/VPN.
   const [showFingerprint, setShowFingerprint] = useState(false);
@@ -314,7 +314,7 @@ export function ImportProfileDialog({
           items,
           groupId: selectedGroupId === "none" ? null : selectedGroupId,
           duplicateStrategy: duplicateStrategy,
-          wayfernConfig,
+          browserConfig,
         },
       );
       setResult(batchResult);
@@ -342,7 +342,7 @@ export function ImportProfileDialog({
     vpnAssignment,
     selectedGroupId,
     duplicateStrategy,
-    wayfernConfig,
+    browserConfig,
     reducedMotion,
     t,
   ]);
@@ -362,7 +362,7 @@ export function ImportProfileDialog({
     setDuplicateStrategy("rename");
     setProxyAssignment("none");
     setVpnAssignment("none");
-    setWayfernConfig({});
+    setBrowserConfig({});
     setShowFingerprint(false);
     setShowAdvanced(false);
     setProgress(null);
@@ -577,7 +577,7 @@ export function ImportProfileDialog({
                 <Alert>
                   <AlertDescription>
                     {t("importProfile.importedAs", {
-                      browser: getBrowserDisplayName("wayfern"),
+                      browser: getBrowserDisplayName("chromium"),
                     })}
                   </AlertDescription>
                 </Alert>
@@ -793,10 +793,10 @@ export function ImportProfileDialog({
                     open={showFingerprint}
                     className="mt-3"
                   >
-                    <WayfernConfigForm
-                      config={wayfernConfig}
+                    <BrowserConfigForm
+                      config={browserConfig}
                       onConfigChange={(key, value) => {
-                        setWayfernConfig((prev) => ({ ...prev, [key]: value }));
+                        setBrowserConfig((prev) => ({ ...prev, [key]: value }));
                       }}
                       isCreating={true}
                       crossOsUnlocked={crossOsUnlocked}

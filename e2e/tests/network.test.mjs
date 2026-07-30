@@ -8,7 +8,7 @@ import { appFromEnvironment } from "../lib/app.mjs";
 import { CdpClient } from "../lib/cdp.mjs";
 import {
   extensionZipBase64,
-  prepareWayfern,
+  prepareChromium,
   wireGuardFixture,
 } from "../lib/fixtures.mjs";
 
@@ -423,19 +423,19 @@ test("visible UI creates and assigns profiles, groups, proxies, VPNs, extensions
     : null;
   const app = appFromEnvironment("network-visible-ui", {
     seedVersionCache: false,
-    wayfernTermsAccepted: false,
+    chromiumTermsAccepted: false,
   });
   let apiPort;
   let activeCdp;
   let activeVpnId;
   try {
-    const prepared = await prepareWayfern(
+    const prepared = await prepareChromium(
       app,
       process.env.DUCKLING_E2E_PROJECT_ROOT,
     );
     if (!app.session) await app.start();
-    if (!(await app.invoke("check_wayfern_terms_accepted"))) {
-      await app.invoke("accept_wayfern_terms");
+    if (!(await app.invoke("check_chromium_terms_accepted"))) {
+      await app.invoke("accept_chromium_terms");
       await app.restart();
     }
     assert.equal(
@@ -548,7 +548,7 @@ test("visible UI creates and assigns profiles, groups, proxies, VPNs, extensions
         const value = document.body?.innerText?.trim() ?? "";
         return /^[0-9a-f:.]+$/i.test(value) ? value : false;
       })()`,
-      { timeoutMs: 30_000, description: "Wayfern residential proxy exit IP" },
+      { timeoutMs: 30_000, description: "Chromium residential proxy exit IP" },
     );
     assert.ok(isIP(browserExitIp));
     await stopProfile(app, base, saved.api_token, profile.id, activeCdp);
@@ -576,7 +576,7 @@ test("visible UI creates and assigns profiles, groups, proxies, VPNs, extensions
       activeCdp = tunneled.cdp;
       await app.waitFor(wireGuardTargetWasReached, {
         timeoutMs: 30_000,
-        description: "Wayfern GET through local WireGuard peer",
+        description: "Chromium GET through local WireGuard peer",
       });
       await stopProfile(app, base, saved.api_token, profile.id, activeCdp);
       activeCdp = null;

@@ -146,11 +146,11 @@ impl Downloader {
     _download_info: &DownloadInfo,
   ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     match browser_type {
-      BrowserType::Wayfern => {
-        // For Wayfern, get the download URL from version.json
+      BrowserType::Chromium => {
+        // For Chromium, get the download URL from Chrome for Testing
         let version_info = self
           .api_client
-          .fetch_wayfern_version_with_caching(true)
+          .fetch_chromium_version_with_caching(true)
           .await?;
 
         // Never substitute: downloading the current build into the requested
@@ -158,7 +158,7 @@ impl Downloader {
         if version_info.version != version {
           return Err(
             serde_json::json!({
-              "code": "WAYFERN_VERSION_NOT_AVAILABLE",
+              "code": "CHROMIUM_VERSION_NOT_AVAILABLE",
               "params": { "requested": version, "current": version_info.version }
             })
             .to_string()
@@ -169,17 +169,11 @@ impl Downloader {
         // Get the download URL for current platform
         let download_url = self
           .api_client
-          .get_wayfern_download_url(&version_info)
+          .get_chromium_download_url(&version_info)
           .ok_or_else(|| {
             let (os, arch) = Self::get_platform_info();
             format!(
-              "No compatible download found for Wayfern on {os}/{arch}. Available platforms: {}",
-              version_info
-                .downloads
-                .iter()
-                .filter_map(|(k, v)| if v.is_some() { Some(k.as_str()) } else { None })
-                .collect::<Vec<_>>()
-                .join(", ")
+              "No compatible download found for Chromium on {os}/{arch}"
             )
           })?;
 
@@ -532,35 +526,29 @@ impl Downloader {
     browser_str: String,
     version: String,
   ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    // Only check Wayfern terms if Wayfern is already downloaded
-    let terms_manager = crate::wayfern_terms::WayfernTermsManager::instance();
-    if terms_manager.is_wayfern_downloaded() && !terms_manager.is_terms_accepted() {
-      return Err("Please accept Wayfern Terms and Conditions before downloading browsers".into());
-    }
-
     // Validate the browser type before touching the in-flight maps so a bad
     // request can't leave state behind.
     let browser_type =
       BrowserType::from_str(&browser_str).map_err(|e| format!("Invalid browser type: {e}"))?;
     let browser = create_browser(browser_type.clone());
 
-    // For Wayfern, only the currently published version can be fetched.
+    // For Chromium, only the currently published version can be fetched.
     // Requesting any other not-yet-downloaded version is an error — silently
     // substituting the latest would install a version the caller never asked
     // for while the response still echoes the requested one. The fetch must
     // succeed too: proceeding unverified would let resolve_download_url fetch
     // the current build into the requested version's directory (a mislabeled
     // install), and that URL resolution needs the same endpoint anyway.
-    if browser_str == "wayfern" && !self.registry.is_browser_downloaded(&browser_str, &version) {
+    if browser_str == "chromium" && !self.registry.is_browser_downloaded(&browser_str, &version) {
       let info = self
         .api_client
-        .fetch_wayfern_version_with_caching(true)
+        .fetch_chromium_version_with_caching(true)
         .await
-        .map_err(|e| format!("Failed to determine the current Wayfern version: {e}"))?;
+        .map_err(|e| format!("Failed to determine the current Chromium version: {e}"))?;
       if info.version != version {
         return Err(
           serde_json::json!({
-            "code": "WAYFERN_VERSION_NOT_AVAILABLE",
+            "code": "CHROMIUM_VERSION_NOT_AVAILABLE",
             "params": { "requested": version, "current": info.version }
           })
           .to_string()
@@ -1033,7 +1021,7 @@ mod tests {
   fn test_clear_download_state_for_browser_removes_stuck_keys() {
     // Simulate a download future that was abandoned without running its own cleanup,
     // leaving stuck bookkeeping for a version that differs from the requested one.
-    let key = "wayfern-1.2.3-resolved".to_string();
+    let key = "chromium-1.2.3-resolved".to_string();
     {
       let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
       downloading.insert(key.clone());
@@ -1050,17 +1038,17 @@ mod tests {
       downloading.insert(other.clone());
     }
 
-    clear_download_state_for_browser("wayfern");
+    clear_download_state_for_browser("chromium");
 
     assert!(
-      !is_downloading("wayfern", "1.2.3-resolved"),
-      "stuck wayfern key should be cleared even when version differs from request"
+      !is_downloading("chromium", "1.2.3-resolved"),
+      "stuck chromium key should be cleared even when version differs from request"
     );
     {
       let tokens = DOWNLOAD_CANCELLATION_TOKENS.lock().unwrap();
       assert!(
         !tokens.contains_key(&key),
-        "stuck wayfern cancellation token should be cleared"
+        "stuck chromium cancellation token should be cleared"
       );
     }
     assert!(
@@ -1069,7 +1057,7 @@ mod tests {
     );
 
     // Cleanup so we don't leak global state into other tests.
-    clear_download_state_for_browser("wayfern");
+    clear_download_state_for_browser("chromium");
     clear_download_state_for_browser("chromium");
   }
 }

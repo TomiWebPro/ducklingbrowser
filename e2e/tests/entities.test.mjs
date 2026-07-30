@@ -8,14 +8,14 @@ import { extensionZipBase64, wireGuardFixture } from "../lib/fixtures.mjs";
 async function createProfile(app, name = "Entity Profile") {
   return app.invoke("create_browser_profile_new", {
     name,
-    browserStr: "wayfern",
+    browserStr: "chromium",
     version: "150.0.7871.100",
     releaseType: "stable",
     proxyId: null,
     vpnId: null,
     // CRUD-focused suites use a deterministic stored fingerprint. The browser
-    // suite separately exercises real Wayfern fingerprint generation.
-    wayfernConfig: { fingerprint: "{}" },
+    // suite separately exercises real Chromium fingerprint generation.
+    chromiumConfig: { fingerprint: "{}" },
     groupId: null,
     ephemeral: false,
     dnsBlocklist: null,
@@ -198,7 +198,7 @@ test("profile, group, proxy, tag, metadata, clone, and bulk-delete lifecycle", a
       folderPath: importRoot,
     });
     assert.equal(scanned.length, 1);
-    assert.equal(scanned[0].mapped_browser, "wayfern");
+    assert.equal(scanned[0].mapped_browser, "chromium");
     const importBatch = await app.invoke("import_browser_profiles", {
       items: [
         {
@@ -211,7 +211,7 @@ test("profile, group, proxy, tag, metadata, clone, and bulk-delete lifecycle", a
       ],
       groupId: null,
       duplicateStrategy: "rename",
-      wayfernConfig: null,
+      chromiumConfig: null,
     });
     assert.equal(importBatch.imported_count + importBatch.failed_count, 1);
     const archivePath = path.join(app.root, "profile-import-fixture.zip");

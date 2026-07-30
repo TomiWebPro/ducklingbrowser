@@ -1,4 +1,5 @@
 const DEFAULT_REQUESTS_PER_HOUR = 100;
+
 import type { CloudUser, Entitlements } from "@/types";
 
 const UNLOCKED: Entitlements = {

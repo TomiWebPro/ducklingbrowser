@@ -284,9 +284,9 @@
       "stopFollower": "Повторяет действия {{leaderName}}",
       "desyncedTooltip": "Синхронизация не удалась на {{url}}",
       "paidFeature": "Синхронизатор — платная функция",
-      "wayfernOnly": "Синхронизировать можно только профили Wayfern",
+      "chromiumOnly": "Синхронизировать можно только профили Chromium",
       "selectFollowers": "Выберите профили-последователи",
-      "selectFollowersDesc": "Выберите профили, которые будут повторять действия профиля-лидера. Можно выбрать только остановленные профили Wayfern.",
+      "selectFollowersDesc": "Выберите профили, которые будут повторять действия профиля-лидера. Можно выбрать только остановленные профили Chromium.",
       "leader": "Лидер",
       "follower": "Последователь",
       "startSession": "Начать сессию синхронизации",
@@ -352,7 +352,7 @@
     "antiDetect": {
       "title": "Антидетект браузер",
       "description": "Выберите браузер с возможностями защиты от обнаружения",
-      "chromium": "Wayfern",
+      "chromium": "Chromium",
       "badge": "Антидетект браузер"
     },
     "regular": {
@@ -387,7 +387,7 @@
       "upgradeAvailable": "Доступна новая версия ({{version}}) {{browser}}."
     },
     "chromiumLabel": "Chromium",
-    "chromiumSubtitle": "На базе Wayfern",
+    "chromiumSubtitle": "На базе Chromium",
     "platformUnavailable": "{{browser}} пока недоступен на вашей платформе.",
     "passwordProtect": {
       "label": "Защитить этот профиль паролем",
@@ -739,7 +739,7 @@
     "tokenCopied": "Токен скопирован",
     "mcpEnableLabel": "Включить MCP сервер (Model Context Protocol)",
     "mcpEnableDescription": "Позволяет ИИ-ассистентам, таким как Claude Desktop, управлять браузерами.",
-    "mcpAcceptTermsFirst": "(Сначала примите условия Wayfern в Настройках)",
+    "mcpAcceptTermsFirst": "(Сначала примите условия браузера в Настройках)",
     "mcpStarted": "MCP сервер запущен на порту {{port}}",
     "mcpStopped": "MCP сервер остановлен",
     "mcpToggleFailed": "Не удалось переключить MCP сервер",
@@ -758,8 +758,8 @@
     "error": "Ошибка импорта профиля"
   },
   "config": {
-    "wayfern": {
-      "title": "Настройки Wayfern",
+    "chromium": {
+      "title": "Настройки Chromium",
       "fingerprint": {
         "title": "Отпечаток",
         "randomize": "Случайный при запуске",
@@ -812,7 +812,7 @@
       "sourcePlaceholder": "Выберите профиль для копирования cookies",
       "running": "(запущен)",
       "targetProfiles": "Целевые профили ({{count}})",
-      "noOtherTargets": "Других выбранных Wayfern профилей нет",
+      "noOtherTargets": "Других выбранных Chromium профилей нет",
       "selectSourceFirst": "Сначала выберите исходный профиль",
       "selectionStatus": "(выбрано {{selected}} из {{total}})",
       "searchPlaceholder": "Поиск доменов или cookies...",
@@ -941,7 +941,7 @@
     "serverError": "Ошибка сервера. Попробуйте позже.",
     "unknownError": "Произошла неизвестная ошибка. Попробуйте снова.",
     "noProfilesForUrl": "Нет доступных профилей. Сначала создайте профиль, прежде чем открывать URL.",
-    "updateWayfernConfigFailed": "Не удалось обновить настройки wayfern: {{error}}",
+    "updateBrowserConfigFailed": "Не удалось обновить настройки браузера: {{error}}",
     "createProfileFailed": "Не удалось создать профиль: {{error}}",
     "launchBrowserFailed": "Не удалось запустить браузер: {{error}}",
     "cannotDeleteRunningProfile": "Невозможно удалить профиль, пока браузер запущен. Сначала остановите браузер.",
@@ -949,7 +949,7 @@
     "renameProfileFailed": "Не удалось переименовать профиль: {{error}}",
     "killBrowserFailed": "Не удалось остановить браузер: {{error}}",
     "deleteSelectedProfilesFailed": "Не удалось удалить выбранные профили: {{error}}",
-    "cookieCopyUnsupportedBrowser": "Копирование cookies работает только с профилями Wayfern",
+    "cookieCopyUnsupportedBrowser": "Копирование cookies работает только с профилями Chromium",
     "updateSyncSettingsFailed": "Не удалось обновить параметры синхронизации",
     "cloneProfileFailed": "Не удалось клонировать профиль: {{error}}",
     "loadSupportedBrowsersFailed": "Не удалось загрузить поддерживаемые браузеры",
@@ -966,7 +966,7 @@
     "setProfilePasswordFailed": "Не удалось установить пароль профиля: {{error}}"
   },
   "browser": {
-    "wayfern": "Wayfern"
+    "chromium": "Chromium"
   },
   "fingerprint": {
     "crossOsWarning": "Подмена отпечатка для другой операционной системы менее надёжна, так как невозможно идеально имитировать все базовые компоненты. Используйте с осторожностью.",
@@ -1206,7 +1206,7 @@
       "cannotWhileRunning": "Остановите профиль перед сменой пароля."
     },
     "fingerprint": {
-      "notSupported": "Редактирование отпечатков доступно только для профилей Wayfern.",
+      "notSupported": "Редактирование отпечатков доступно только для профилей Chromium.",
       "lockedTitle": "Просмотр и редактирование отпечатка — функция Pro",
       "lockedDescription": "Информация о вашем устройстве защищена в каждом профиле. Для просмотра и редактирования отпечатка профиля требуется активный платный план."
     },
@@ -1542,15 +1542,17 @@
     "badgeUnavailable": "Недоступен",
     "openButton": "Открыть"
   },
-  "wayfernTerms": {
-    "title": "Условия использования Wayfern",
-    "description": "Прежде чем использовать Duckling Browser, необходимо прочитать и согласиться с Условиями использования Wayfern.",
+  "browserTerms": {
+    "title": "Браузер",
+    "description": "Chromium — это программное обеспечение с открытым исходным кодом, лицензируемое по лицензии BSD.",
     "reviewLabel": "Пожалуйста, ознакомьтесь с Условиями использования по адресу:",
     "agreeNotice": "Нажимая «Я принимаю», вы соглашаетесь с этими условиями.",
     "acceptButton": "Я принимаю",
     "acceptSuccess": "Условия успешно приняты",
     "acceptFailed": "Не удалось принять условия",
-    "tryAgain": "Пожалуйста, попробуйте снова"
+    "tryAgain": "Пожалуйста, попробуйте снова",
+    "body": "Duckling Browser использует движок веб-браузера Chromium. Chromium распространяется под лицензией BSD, которая разрешает свободное использование, изменение и распространение.",
+    "acknowledgeButton": "Acknowledge"
   },
   "commercialTrial": {
     "title": "Срок коммерческой пробной версии истёк",
@@ -1812,11 +1814,10 @@
     "proxyNotWorking": "Выбранный прокси не работает, поэтому профиль не создан.",
     "proxyPaymentRequired": "Выбранный прокси требует оплаты (402) — возможно, его подписка истекла — поэтому профиль не создан.",
     "vpnNotWorking": "Выбранный VPN не работает, поэтому профиль не создан.",
-    "camoufoxImportDeprecated": "Импорт профилей этого типа больше не поддерживается. Используйте Wayfern.",
+    "camoufoxImportDeprecated": "Импорт профилей этого типа больше не поддерживается. Используйте Chromium.",
     "updateChecksumsUnavailable": "Не удалось проверить обновление {{version}}: файл контрольных сумм не удалось получить. Обновление не было установлено; попытка будет повторена позже.",
     "updateChecksumMismatch": "Загруженный файл обновления {{file}} не прошёл проверку контрольной суммы и был удалён. Попробуйте ещё раз.",
     "nameCannotBeEmpty": "Имя не может быть пустым",
-    "wayfernVersionNotAvailable": "Версия Wayfern {{requested}} недоступна для загрузки. Текущая версия — {{current}}.",
     "profileNameExists": "Профиль с именем «{{name}}» уже существует",
     "importSourceNotFound": "Исходный путь не существует",
     "importNoItems": "Ничего не выбрано для импорта",
@@ -1833,7 +1834,7 @@
     "proxySidecarVersionMismatch": "Некоторые файлы Duckling Browser относятся к разным версиям. Переустановите последнее обновление — ваши профили останутся в безопасности.",
     "updateProfilesRunning": "Остановите все запущенные профили перед установкой обновления.",
     "updatePreparationFailed": "Duckling Browser не удалось безопасно остановить фоновый сетевой процесс. Перезагрузите компьютер и повторите обновление.",
-    "wayfernTermsRequired": "Примите Условия использования Wayfern перед запуском сервера MCP.",
+    "browserTermsRequired": "Примите условия браузера перед запуском сервера MCP.",
     "apiPortUnavailable": "Серверу API не удалось найти свободный порт.",
     "mcpServerAlreadyRunning": "Сервер MCP уже запущен.",
     "mcpServerNotRunning": "Сервер MCP не запущен.",
@@ -1841,7 +1842,8 @@
     "mcpConfigurationUnavailable": "Конфигурация сервера MCP недоступна. Перезапустите сервер и повторите попытку.",
     "mcpAgentUnknown": "Этот клиент MCP не поддерживается.",
     "mcpAgentInstallFailed": "Не удалось добавить Duckling Browser в клиент MCP: {{detail}}",
-    "mcpAgentRemoveFailed": "Не удалось удалить Duckling Browser из клиента MCP: {{detail}}"
+    "mcpAgentRemoveFailed": "Не удалось удалить Duckling Browser из клиента MCP: {{detail}}",
+    "chromiumVersionNotAvailable": "Версия Chromium {{requested}} недоступна для загрузки. Текущая версия — {{current}}."
   },
   "rail": {
     "profiles": "Профили",
@@ -1976,7 +1978,7 @@
     "steps": {
       "createProfile": {
         "title": "Создайте первый профиль",
-        "content": "Нажмите здесь, чтобы создать первый профиль. Выберите Wayfern в качестве браузера — рекомендуемый Chromium с защитой от цифровых отпечатков."
+        "content": "Нажмите здесь, чтобы создать первый профиль. Выберите Chromium в качестве браузера — рекомендуемый Chromium с защитой от цифровых отпечатков."
       },
       "dnsBlocking": {
         "title": "DNS-блокировка",
@@ -2009,7 +2011,7 @@
     },
     "ready": {
       "title": "Настраиваем",
-      "descDownloading": "Загружаем ваш первый браузер (Wayfern). Эта однократная настройка выполняется в фоне — подождите немного.",
+      "descDownloading": "Загружаем ваш первый браузер (Chromium). Эта однократная настройка выполняется в фоне — подождите немного.",
       "descReady": "Браузер готов. Давайте создадим ваш первый профиль.",
       "cta": "Создать первый профиль",
       "downloading": "Загрузка…",
@@ -2049,11 +2051,7 @@
       "commercialDesc": "Бесплатно в течение 2-недельного ознакомительного периода. После этого требуется платный план, что помогает поддерживать и развивать проект."
     }
   },
-  "wayfernBlocked": {
-    "title": "Автоматизация браузера приостановлена",
-    "description": "Доступ вашей учётной записи к Pro-функциям браузера временно ограничен — обычно из-за входа сразу на нескольких устройствах. Выйдите из аккаунта на других устройствах и перезапустите профиль, чтобы восстановить доступ."
-  },
-  "wayfernConfigDialog": {
+  "browserConfigDialog": {
     "titleView": "Просмотр настроек отпечатка - {{name}} ({{browser}})",
     "titleConfigure": "Настроить отпечаток - {{name}} ({{browser}})",
     "invalidFingerprint": "Неверная конфигурация отпечатка",
@@ -2062,7 +2060,7 @@
     "unknownError": "Произошла неизвестная ошибка"
   },
   "cookieCopy": {
-    "noOtherTargets": "Других выбранных Wayfern профилей нет"
+    "noOtherTargets": "Других выбранных Chromium профилей нет"
   },
   "about": {
     "title": "О приложении",

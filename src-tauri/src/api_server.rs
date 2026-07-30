@@ -56,7 +56,7 @@ pub struct ApiProfileResponse {
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct CreateProfileRequest {
   pub name: String,
-  /// Browser engine. Must be `"wayfern"` (anti-detect Chromium). Any other
+  /// Browser engine. Must be `"chromium"` (anti-detect Chromium). Any other
   /// value (e.g. `"chromium"`) is rejected with 400.
   pub browser: String,
   /// Optional. Omit (or pass `"latest"`) to use the newest already-downloaded
@@ -68,12 +68,12 @@ pub struct CreateProfileRequest {
   pub vpn_id: Option<String>,
   pub launch_hook: Option<String>,
   pub release_type: Option<String>,
-  /// Wayfern fingerprint/config. Send only when `browser` is `"wayfern"`.
+  /// Browser fingerprint/config. Send only when `browser` is `"chromium"`.
   /// Omit it, or pass an empty object `{}`, to have a fresh fingerprint
   /// generated automatically at creation. Provide a `fingerprint` field to
   /// pin a specific one.
   #[schema(value_type = Option<Object>)]
-  pub wayfern_config: Option<serde_json::Value>,
+  pub chromium_config: Option<serde_json::Value>,
   pub group_id: Option<String>,
   pub tags: Option<Vec<String>>,
 }
@@ -307,10 +307,10 @@ struct ImportProfilesRequest {
   /// How to handle an already-taken profile name: "skip" or "rename"
   /// (auto-suffix). Defaults to "rename".
   duplicate_strategy: Option<crate::profile_importer::DuplicateStrategy>,
-  /// Wayfern fingerprint/config applied to every imported profile. Omit to
+  /// Browser fingerprint/config applied to every imported profile. Omit to
   /// have fresh fingerprints generated automatically.
   #[schema(value_type = Option<Object>)]
-  wayfern_config: Option<serde_json::Value>,
+  chromium_config: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -598,8 +598,8 @@ async fn terms_check_middleware(
   request: axum::extract::Request,
   next: Next,
 ) -> Result<Response, StatusCode> {
-  // Check if Wayfern terms have been accepted
-  if !crate::wayfern_terms::WayfernTermsManager::instance().is_terms_accepted() {
+  // Check if browser terms have been accepted
+  if !crate::chromium_terms::ChromiumTermsManager::instance().is_terms_accepted() {
     return Err(StatusCode::FORBIDDEN);
   }
 
@@ -797,7 +797,7 @@ fn manager_error_response(err: impl std::fmt::Display) -> (StatusCode, String) {
         StatusCode::PAYMENT_REQUIRED
       } else {
         // Validation-style codes (NAME_CANNOT_BE_EMPTY, GROUP_ALREADY_EXISTS,
-        // WAYFERN_VERSION_NOT_AVAILABLE, ...).
+        // CHROMIUM_VERSION_NOT_AVAILABLE, ...).
         StatusCode::BAD_REQUEST
       };
       return (status, msg);
@@ -944,12 +944,12 @@ async fn get_profile(
 
 /// Create a profile.
 ///
-/// - `browser` must be `"wayfern"`; any other value is rejected
+/// - `browser` must be `"chromium"`; any other value is rejected
 ///   with 400.
 /// - `version` is optional: omit it or pass `"latest"` to use the newest
 ///   already-downloaded version of that browser. The version must be present
 ///   locally (this endpoint does not download new versions); 400 if none is.
-/// - Omitting the matching `wayfern_config`, or passing an
+/// - Omitting the matching `chromium_config`, or passing an
 ///   empty object `{}`, generates a fresh fingerprint automatically.
 #[utoipa::path(
   post,
@@ -973,16 +973,16 @@ async fn create_profile(
 ) -> Result<Json<ApiProfileResponse>, (StatusCode, String)> {
   let profile_manager = ProfileManager::instance();
 
-  // Only Wayfern profiles are launchable; the rest of the system
+  // Only Chromium profiles are launchable; the rest of the system
   // (fingerprint generation, launch, run) supports nothing else. Reject anything
   // else up front — otherwise the profile is created with no fingerprint and an
   // unrecognized browser, then crashes with a 500 on /run. Mirrors the MCP
   // create_profile validation.
-  if request.browser != "wayfern" {
+  if request.browser != "chromium" {
     return Err((
       StatusCode::BAD_REQUEST,
       format!(
-        "Invalid browser \"{}\". Must be \"wayfern\" (anti-detect Chromium).",
+        "Invalid browser \"{}\". Must be \"Chromium\" (Chromium-based).",
         request.browser
       ),
     ));
@@ -1015,8 +1015,8 @@ async fn create_profile(
     }
   };
 
-  // Parse wayfern config if provided
-  let wayfern_config = if let Some(config) = &request.wayfern_config {
+  // Parse Chromium config if provided
+  let chromium_config = if let Some(config) = &request.chromium_config {
     serde_json::from_value(config.clone()).ok()
   } else {
     None
@@ -1050,7 +1050,7 @@ async fn create_profile(
       request.release_type.as_deref().unwrap_or("stable"),
       request.proxy_id.clone(),
       request.vpn_id.clone(),
-      wayfern_config,
+      chromium_config,
       request.group_id.clone(),
       false,
       None,
@@ -2419,8 +2419,8 @@ async fn import_profiles_api(
   State(state): State<ApiServerState>,
   Json(request): Json<ImportProfilesRequest>,
 ) -> Result<Json<crate::profile_importer::ProfileImportBatchResult>, (StatusCode, String)> {
-  let wayfern_config: Option<crate::wayfern_manager::WayfernConfig> = request
-    .wayfern_config
+  let chromium_config: Option<crate::chromium_manager::ChromiumConfig> = request
+    .chromium_config
     .as_ref()
     .and_then(|config| serde_json::from_value(config.clone()).ok());
 
@@ -2433,7 +2433,7 @@ async fn import_profiles_api(
       request.items,
       request.group_id,
       request.duplicate_strategy.unwrap_or_default(),
-      wayfern_config,
+      chromium_config,
     )
     .await
     .map(Json)
@@ -2627,7 +2627,7 @@ mod tests {
   fn update_profile_request_ignores_unknown_fields() {
     // `browser` is no longer a field, plus a wholly unknown field. Both must
     // be accepted and ignored, not rejected.
-    let json = r#"{"name": "p", "browser": "wayfern", "totally_unknown": 123}"#;
+    let json = r#"{"name": "p", "browser": "chromium", "totally_unknown": 123}"#;
     let parsed: UpdateProfileRequest =
       serde_json::from_str(json).expect("unknown fields must be ignored, not rejected");
     assert_eq!(parsed.name.as_deref(), Some("p"));
@@ -2635,31 +2635,31 @@ mod tests {
 
   #[test]
   fn create_profile_request_ignores_unknown_fields() {
-    let json = r#"{"name": "p", "browser": "wayfern", "version": "latest", "future_field": true}"#;
+    let json = r#"{"name": "p", "browser": "chromium", "version": "latest", "future_field": true}"#;
     let parsed: CreateProfileRequest =
       serde_json::from_str(json).expect("unknown fields must be ignored, not rejected");
-    assert_eq!(parsed.browser, "wayfern");
+    assert_eq!(parsed.browser, "chromium");
   }
 
   #[test]
   fn create_profile_request_allows_omitting_version_and_configs() {
-    // Minimal body: no version, no wayfern_config. Must
+    // Minimal body: no version, no chromium_config. Must
     // deserialize (version resolves to latest-downloaded at the handler; an
     // absent config triggers fresh-fingerprint generation).
-    let json = r#"{"name": "p", "browser": "wayfern"}"#;
+    let json = r#"{"name": "p", "browser": "chromium"}"#;
     let parsed: CreateProfileRequest =
       serde_json::from_str(json).expect("version and configs are optional");
-    assert_eq!(parsed.browser, "wayfern");
+    assert_eq!(parsed.browser, "chromium");
     assert!(parsed.version.is_none());
-    assert!(parsed.wayfern_config.is_none());
+    assert!(parsed.chromium_config.is_none());
   }
 
   #[test]
   fn create_profile_browser_validation_matches_supported_engines() {
     // The handler rejects anything that isn't a launchable engine; this is the
     // same predicate it uses, kept in lockstep with MCP's create_profile.
-    let is_valid = |b: &str| b == "wayfern";
-    assert!(is_valid("wayfern"));
+    let is_valid = |b: &str| b == "chromium";
+    assert!(is_valid("chromium"));
     assert!(!is_valid("chromium"));
     assert!(!is_valid(""));
   }
@@ -2713,8 +2713,8 @@ mod tests {
 
     let create_profile = schema_required(&spec, "CreateProfileRequest");
     assert!(
-      !create_profile.iter().any(|f| f == "wayfern_config"),
-      "wayfern_config must be optional, required list: {create_profile:?}"
+      !create_profile.iter().any(|f| f == "chromium_config"),
+      "chromium_config must be optional, required list: {create_profile:?}"
     );
 
     let update_profile = schema_required(&spec, "UpdateProfileRequest");
@@ -2730,7 +2730,7 @@ mod tests {
     );
 
     let import_profiles = schema_required(&spec, "ImportProfilesRequest");
-    for field in ["group_id", "duplicate_strategy", "wayfern_config"] {
+    for field in ["group_id", "duplicate_strategy", "chromium_config"] {
       assert!(
         !import_profiles.iter().any(|f| f == field),
         "{field} must be optional on profile import, required list: {import_profiles:?}"
@@ -2782,8 +2782,8 @@ mod tests {
     }
 
     assert!(
-      !paths.keys().any(|p| p.contains("wayfern-token")),
-      "wayfern-token endpoints were removed and must stay out of the spec"
+      !paths.keys().any(|p| p.contains("Chromium-token")),
+      "Chromium-token endpoints were removed and must stay out of the spec"
     );
 
     for path in [

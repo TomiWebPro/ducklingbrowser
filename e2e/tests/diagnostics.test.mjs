@@ -21,7 +21,9 @@ after(async () => {
 });
 
 test("shared E2E diagnostics contain only redacted text logs", async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "duckling-diagnostics-test-"));
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "duckling-diagnostics-test-"),
+  );
   roots.push(root);
   const secretUrl = "http://real-user:real-password@proxy.example:8080";
   const token = ["github", "pat", "example", "token", "0123456789"].join("_");
@@ -40,9 +42,12 @@ test("shared E2E diagnostics contain only redacted text logs", async () => {
     mkdir(path.join(root, "sessions", "network", "duckling", "logs"), {
       recursive: true,
     }),
-    mkdir(path.join(root, "sessions", "network", "duckling", "data", "proxies"), {
-      recursive: true,
-    }),
+    mkdir(
+      path.join(root, "sessions", "network", "duckling", "data", "proxies"),
+      {
+        recursive: true,
+      },
+    ),
     mkdir(path.join(root, "sessions", "network", "artifacts"), {
       recursive: true,
     }),

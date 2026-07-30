@@ -284,9 +284,9 @@
       "stopFollower": "Seguindo as ações de {{leaderName}}",
       "desyncedTooltip": "A sincronização falhou em {{url}}",
       "paidFeature": "O sincronizador é um recurso pago",
-      "wayfernOnly": "Apenas perfis Wayfern podem ser sincronizados",
+      "chromiumOnly": "Apenas perfis Chromium podem ser sincronizados",
       "selectFollowers": "Selecionar perfis seguidores",
-      "selectFollowersDesc": "Escolha os perfis que replicarão as ações do perfil líder. Apenas perfis Wayfern parados podem ser selecionados.",
+      "selectFollowersDesc": "Escolha os perfis que replicarão as ações do perfil líder. Apenas perfis Chromium parados podem ser selecionados.",
       "leader": "Líder",
       "follower": "Seguidor",
       "startSession": "Iniciar sessão de sincronização",
@@ -352,7 +352,7 @@
     "antiDetect": {
       "title": "Navegador Anti-Detecção",
       "description": "Escolha um navegador com capacidades anti-detecção",
-      "chromium": "Wayfern",
+      "chromium": "Chromium",
       "badge": "Navegador Anti-Detecção"
     },
     "regular": {
@@ -387,7 +387,7 @@
       "upgradeAvailable": "Uma versão mais recente ({{version}}) do {{browser}} está disponível."
     },
     "chromiumLabel": "Chromium",
-    "chromiumSubtitle": "Desenvolvido com Wayfern",
+    "chromiumSubtitle": "Desenvolvido com Chromium",
     "platformUnavailable": "{{browser}} ainda não está disponível para sua plataforma.",
     "passwordProtect": {
       "label": "Proteger este perfil com senha",
@@ -739,7 +739,7 @@
     "tokenCopied": "Token copiado",
     "mcpEnableLabel": "Ativar servidor MCP (Model Context Protocol)",
     "mcpEnableDescription": "Permite que assistentes de IA como o Claude Desktop controlem navegadores.",
-    "mcpAcceptTermsFirst": "(Aceite primeiro os termos da Wayfern nas Configurações)",
+    "mcpAcceptTermsFirst": "(Aceite primeiro os termos do navegador nas Configurações)",
     "mcpStarted": "Servidor MCP iniciado na porta {{port}}",
     "mcpStopped": "Servidor MCP parado",
     "mcpToggleFailed": "Falha ao alternar o servidor MCP",
@@ -758,8 +758,8 @@
     "error": "Falha ao importar perfil"
   },
   "config": {
-    "wayfern": {
-      "title": "Configuração do Wayfern",
+    "chromium": {
+      "title": "Configuração do Chromium",
       "fingerprint": {
         "title": "Impressão Digital",
         "randomize": "Aleatorizar ao Iniciar",
@@ -812,7 +812,7 @@
       "sourcePlaceholder": "Selecione um perfil para copiar os cookies",
       "running": "(em execução)",
       "targetProfiles": "Perfis de destino ({{count}})",
-      "noOtherTargets": "Nenhum outro perfil Wayfern selecionado",
+      "noOtherTargets": "Nenhum outro perfil Chromium selecionado",
       "selectSourceFirst": "Selecione primeiro um perfil de origem",
       "selectionStatus": "({{selected}} de {{total}} selecionados)",
       "searchPlaceholder": "Buscar domínios ou cookies...",
@@ -941,7 +941,7 @@
     "serverError": "Erro do servidor. Por favor, tente novamente mais tarde.",
     "unknownError": "Ocorreu um erro desconhecido. Por favor, tente novamente.",
     "noProfilesForUrl": "Sem perfis disponíveis. Crie um perfil primeiro antes de abrir URLs.",
-    "updateWayfernConfigFailed": "Falha ao atualizar a configuração do wayfern: {{error}}",
+    "updateBrowserConfigFailed": "Falha ao atualizar a configuração do navegador: {{error}}",
     "createProfileFailed": "Falha ao criar o perfil: {{error}}",
     "launchBrowserFailed": "Falha ao iniciar o navegador: {{error}}",
     "cannotDeleteRunningProfile": "Não é possível excluir o perfil enquanto o navegador estiver em execução. Pare o navegador primeiro.",
@@ -949,7 +949,7 @@
     "renameProfileFailed": "Falha ao renomear o perfil: {{error}}",
     "killBrowserFailed": "Falha ao encerrar o navegador: {{error}}",
     "deleteSelectedProfilesFailed": "Falha ao excluir os perfis selecionados: {{error}}",
-    "cookieCopyUnsupportedBrowser": "A cópia de cookies só funciona com perfis Wayfern",
+    "cookieCopyUnsupportedBrowser": "A cópia de cookies só funciona com perfis Chromium",
     "updateSyncSettingsFailed": "Falha ao atualizar as configurações de sincronização",
     "cloneProfileFailed": "Falha ao clonar o perfil: {{error}}",
     "loadSupportedBrowsersFailed": "Falha ao carregar os navegadores suportados",
@@ -966,7 +966,7 @@
     "setProfilePasswordFailed": "Falha ao definir a senha do perfil: {{error}}"
   },
   "browser": {
-    "wayfern": "Wayfern"
+    "chromium": "Chromium"
   },
   "fingerprint": {
     "crossOsWarning": "A falsificação de impressão digital para um sistema operacional diferente é menos confiável porque é impossível imitar perfeitamente todos os componentes subjacentes. Use com cautela.",
@@ -1206,7 +1206,7 @@
       "cannotWhileRunning": "Pare o perfil antes de alterar a senha."
     },
     "fingerprint": {
-      "notSupported": "A edição de impressão digital só está disponível para perfis Wayfern.",
+      "notSupported": "A edição de impressão digital só está disponível para perfis Chromium.",
       "lockedTitle": "Visualizar e editar a impressão digital é um recurso Pro",
       "lockedDescription": "As informações do seu dispositivo estão protegidas em todos os perfis. Visualizar e editar a impressão digital de um perfil requer um plano pago ativo."
     },
@@ -1542,15 +1542,17 @@
     "badgeUnavailable": "Indisponível",
     "openButton": "Abrir"
   },
-  "wayfernTerms": {
-    "title": "Termos e condições da Wayfern",
-    "description": "Antes de usar o Duckling Browser, você deve ler e concordar com os Termos e Condições da Wayfern.",
+  "browserTerms": {
+    "title": "Navegador",
+    "description": "O Chromium é um software de código aberto licenciado sob BSD.",
     "reviewLabel": "Por favor, revise os Termos e Condições em:",
     "agreeNotice": "Ao clicar em \"Aceito\", você concorda em ficar vinculado a esses termos.",
     "acceptButton": "Aceito",
     "acceptSuccess": "Termos aceitos com sucesso",
     "acceptFailed": "Falha ao aceitar os termos",
-    "tryAgain": "Tente novamente"
+    "tryAgain": "Tente novamente",
+    "body": "O Duckling Browser usa o mecanismo do navegador web Chromium. O Chromium é distribuído sob a licença BSD, que permite uso, modificação e redistribuição gratuitos.",
+    "acknowledgeButton": "Acknowledge"
   },
   "commercialTrial": {
     "title": "Período de teste comercial expirado",
@@ -1812,11 +1814,10 @@
     "proxyNotWorking": "O proxy selecionado não está funcionando, então o perfil não foi criado.",
     "proxyPaymentRequired": "O proxy selecionado exige pagamento (402) — sua assinatura pode ter expirado — então o perfil não foi criado.",
     "vpnNotWorking": "A VPN selecionada não está funcionando, então o perfil não foi criado.",
-    "camoufoxImportDeprecated": "A importação deste tipo de perfil não é mais suportada. Use o Wayfern em vez disso.",
+    "camoufoxImportDeprecated": "A importação deste tipo de perfil não é mais suportada. Use o Chromium em vez disso.",
     "updateChecksumsUnavailable": "Não foi possível verificar a atualização {{version}} porque o arquivo de somas de verificação não pôde ser obtido. A atualização não foi instalada; será tentada novamente mais tarde.",
     "updateChecksumMismatch": "O arquivo de atualização baixado {{file}} falhou na verificação de soma de verificação e foi descartado. Tente novamente.",
     "nameCannotBeEmpty": "O nome não pode estar vazio",
-    "wayfernVersionNotAvailable": "A versão {{requested}} do Wayfern não está disponível para download. A versão atual é {{current}}.",
     "profileNameExists": "Já existe um perfil chamado \"{{name}}\"",
     "importSourceNotFound": "O caminho de origem não existe",
     "importNoItems": "Nada selecionado para importar",
@@ -1833,7 +1834,7 @@
     "proxySidecarVersionMismatch": "Alguns arquivos do Duckling Browser são de versões diferentes. Reinstale a atualização mais recente; seus perfis permanecerão seguros.",
     "updateProfilesRunning": "Pare todos os perfis em execução antes de instalar a atualização.",
     "updatePreparationFailed": "O Duckling Browser não conseguiu encerrar com segurança um processo de rede em segundo plano. Reinicie o computador e tente atualizar novamente.",
-    "wayfernTermsRequired": "Aceite os Termos e Condições da Wayfern antes de iniciar o servidor MCP.",
+    "browserTermsRequired": "Aceite os termos do navegador antes de iniciar o servidor MCP.",
     "apiPortUnavailable": "O servidor da API não encontrou uma porta disponível.",
     "mcpServerAlreadyRunning": "O servidor MCP já está em execução.",
     "mcpServerNotRunning": "O servidor MCP não está em execução.",
@@ -1841,7 +1842,8 @@
     "mcpConfigurationUnavailable": "A configuração do servidor MCP não está disponível. Reinicie o servidor e tente novamente.",
     "mcpAgentUnknown": "Este cliente MCP não é compatível.",
     "mcpAgentInstallFailed": "Não foi possível adicionar o Duckling Browser ao cliente MCP: {{detail}}",
-    "mcpAgentRemoveFailed": "Não foi possível remover o Duckling Browser do cliente MCP: {{detail}}"
+    "mcpAgentRemoveFailed": "Não foi possível remover o Duckling Browser do cliente MCP: {{detail}}",
+    "chromiumVersionNotAvailable": "A versão {{requested}} do Chromium não está disponível para download. A versão atual é {{current}}."
   },
   "rail": {
     "profiles": "Perfis",
@@ -1976,7 +1978,7 @@
     "steps": {
       "createProfile": {
         "title": "Crie seu primeiro perfil",
-        "content": "Clique aqui para criar seu primeiro perfil. Escolha o Wayfern como navegador: o Chromium recomendado e protegido contra fingerprint."
+        "content": "Clique aqui para criar seu primeiro perfil. Escolha o Chromium como navegador: o Chromium recomendado e protegido contra fingerprint."
       },
       "dnsBlocking": {
         "title": "Bloqueio de DNS",
@@ -2009,7 +2011,7 @@
     },
     "ready": {
       "title": "Preparando tudo",
-      "descDownloading": "Baixando seu primeiro navegador (Wayfern). Esta configuração única é executada em segundo plano — aguarde um momento.",
+      "descDownloading": "Baixando seu primeiro navegador (Chromium). Esta configuração única é executada em segundo plano — aguarde um momento.",
       "descReady": "Seu navegador está pronto. Vamos criar seu primeiro perfil.",
       "cta": "Criar meu primeiro perfil",
       "downloading": "Baixando…",
@@ -2049,11 +2051,7 @@
       "commercialDesc": "Gratuito durante uma avaliação de 2 semanas. Depois, um plano pago mantém o projeto ativo e próspero."
     }
   },
-  "wayfernBlocked": {
-    "title": "Automação do navegador pausada",
-    "description": "Sua conta foi temporariamente restringida dos recursos Pro do navegador, geralmente por entrar em vários dispositivos ao mesmo tempo. Saia dos outros dispositivos e reinicie o perfil para restaurá-la."
-  },
-  "wayfernConfigDialog": {
+  "browserConfigDialog": {
     "titleView": "Ver configurações de impressão digital - {{name}} ({{browser}})",
     "titleConfigure": "Configurar impressão digital - {{name}} ({{browser}})",
     "invalidFingerprint": "Configuração de impressão digital inválida",
@@ -2062,7 +2060,7 @@
     "unknownError": "Ocorreu um erro desconhecido"
   },
   "cookieCopy": {
-    "noOtherTargets": "Nenhum outro perfil Wayfern selecionado"
+    "noOtherTargets": "Nenhum outro perfil Chromium selecionado"
   },
   "about": {
     "title": "Sobre",

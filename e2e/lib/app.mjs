@@ -69,7 +69,7 @@ export class AppSession {
     args = [],
     seedVersionCache = true,
     onboardingCompleted = true,
-    wayfernTermsAccepted = true,
+    chromiumTermsAccepted = true,
   }) {
     this.name = name;
     this.root = root;
@@ -81,7 +81,7 @@ export class AppSession {
     this.args = args;
     this.seedVersionCache = seedVersionCache;
     this.onboardingCompleted = onboardingCompleted;
-    this.wayfernTermsAccepted = wayfernTermsAccepted;
+    this.chromiumTermsAccepted = chromiumTermsAccepted;
     this.session = null;
   }
 
@@ -123,7 +123,7 @@ export class AppSession {
         }
       });
     }
-    if (this.wayfernTermsAccepted) {
+    if (this.chromiumTermsAccepted) {
       const termsFile =
         process.platform === "darwin"
           ? path.join(
@@ -131,7 +131,7 @@ export class AppSession {
               "home",
               "Library",
               "Application Support",
-              "Wayfern",
+              "Chromium",
               "license-accepted",
             )
           : process.platform === "win32"
@@ -139,14 +139,14 @@ export class AppSession {
                 this.root,
                 "windows",
                 "roaming",
-                "Wayfern",
+                "Chromium",
                 "license-accepted",
               )
             : path.join(
                 this.root,
                 "xdg",
                 "config",
-                "Wayfern",
+                "Chromium",
                 "license-accepted",
               );
       await mkdir(path.dirname(termsFile), { recursive: true });
@@ -164,7 +164,7 @@ export class AppSession {
         "duckling",
         "cache",
         "version_cache",
-        "wayfern_versions.json",
+        "chromium_versions.json",
       );
       await mkdir(path.dirname(versionCache), { recursive: true });
       await writeFile(
@@ -192,7 +192,7 @@ export class AppSession {
               : {}),
           }
         : {}),
-      ...(this.token ? { WAYFERN_TEST_TOKEN: this.token } : {}),
+      ...(this.token ? { CHROMIUM_TEST_TOKEN: this.token } : {}),
       ...this.extraEnv,
     });
     this.session = await this.driver.createSession({
@@ -492,12 +492,12 @@ export function appFromEnvironment(name, options = {}) {
     application: process.env.DUCKLING_E2E_APP,
     driverUrl: process.env.DUCKLING_E2E_DRIVER_URL,
     cwd: process.env.DUCKLING_E2E_PROJECT_ROOT,
-    token: process.env.WAYFERN_TEST_TOKEN,
+    token: process.env.CHROMIUM_TEST_TOKEN,
     extraEnv: options.extraEnv,
     args: options.args,
     seedVersionCache: options.seedVersionCache,
     onboardingCompleted: options.onboardingCompleted,
-    wayfernTermsAccepted: options.wayfernTermsAccepted,
+    chromiumTermsAccepted: options.chromiumTermsAccepted,
   });
 }
 

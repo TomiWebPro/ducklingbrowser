@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { allCoveredCommands, commandCoverage } from "../coverage-map.mjs";
-import { seedWayfern } from "../lib/fixtures.mjs";
+import { seedChromium } from "../lib/fixtures.mjs";
 import { WebDriverClient } from "../lib/webdriver.mjs";
 
 function registeredCommands(source) {
@@ -102,34 +102,41 @@ test("WebDriver client preserves application values that contain an error field"
   }
 });
 
-test("Wayfern fixtures are copied into the isolated data root, never linked", async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "duckling-wayfern-copy-"));
+test("Chromium fixtures are copied into the isolated data root, never linked", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "duckling-chromium-copy-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const source =
     process.platform === "darwin"
-      ? path.join(root, "source", "Wayfern.app", "Contents", "MacOS", "Wayfern")
+      ? path.join(
+          root,
+          "source",
+          "Chromium.app",
+          "Contents",
+          "MacOS",
+          "Chromium",
+        )
       : path.join(
           root,
           "source",
-          process.platform === "win32" ? "Wayfern.exe" : "wayfern",
+          process.platform === "win32" ? "Chromium.exe" : "chromium",
         );
   await mkdir(path.dirname(source), { recursive: true });
   await writeFile(source, "source-fixture");
   const bundlePath =
     process.platform === "darwin"
-      ? path.join(root, "source", "Wayfern.app")
+      ? path.join(root, "source", "Chromium.app")
       : source;
-  const installDir = await seedWayfern(path.join(root, "isolated"), {
+  const installDir = await seedChromium(path.join(root, "isolated"), {
     bundlePath,
     executable: source,
     version: "1.2.3.4",
   });
   const destination =
     process.platform === "darwin"
-      ? path.join(installDir, "Wayfern.app", "Contents", "MacOS", "Wayfern")
+      ? path.join(installDir, "Chromium.app", "Contents", "MacOS", "Chromium")
       : path.join(
           installDir,
-          process.platform === "win32" ? "wayfern.exe" : "wayfern",
+          process.platform === "win32" ? "chromium.exe" : "chromium",
         );
 
   await writeFile(destination, "isolated-mutation");

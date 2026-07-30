@@ -9,6 +9,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AboutDialog } from "@/components/about-dialog";
 import { AccountPage } from "@/components/account-page";
+import { BrowserConfigDialog } from "@/components/browser-config-dialog";
+import { BrowserTermsDialog } from "@/components/browser-terms-dialog";
 import { CloneProfileDialog } from "@/components/clone-profile-dialog";
 import { CloseConfirmDialog } from "@/components/close-confirm-dialog";
 import { CommandPalette } from "@/components/command-palette";
@@ -47,11 +49,10 @@ import { SyncAllDialog } from "@/components/sync-all-dialog";
 import { SyncConfigDialog } from "@/components/sync-config-dialog";
 import { SyncFollowerDialog } from "@/components/sync-follower-dialog";
 import { ThankYouDialog } from "@/components/thank-you-dialog";
-import { WayfernConfigDialog } from "@/components/wayfern-config-dialog";
-import { WayfernTermsDialog } from "@/components/wayfern-terms-dialog";
 import { WelcomeDialog } from "@/components/welcome-dialog";
 import { WindowResizeWarningDialog } from "@/components/window-resize-warning-dialog";
 import { useAppUpdateNotifications } from "@/hooks/use-app-update-notifications";
+import { useBrowserTerms } from "@/hooks/use-browser-terms";
 import { useCloudAuth } from "@/hooks/use-cloud-auth";
 import { useGroupEvents } from "@/hooks/use-group-events";
 import type { PermissionType } from "@/hooks/use-permissions";
@@ -62,7 +63,6 @@ import { useSyncSessions } from "@/hooks/use-sync-session";
 import { useUpdateNotifications } from "@/hooks/use-update-notifications";
 import { useVersionUpdater } from "@/hooks/use-version-updater";
 import { useVpnEvents } from "@/hooks/use-vpn-events";
-import { useWayfernTerms } from "@/hooks/use-wayfern-terms";
 import { translateBackendError } from "@/lib/backend-errors";
 import { getEntitlements } from "@/lib/entitlements";
 import { MOTION_EASE_OUT } from "@/lib/motion";
@@ -84,9 +84,9 @@ import {
   showSyncProgressToast,
   showToast,
 } from "@/lib/toast-utils";
-import type { BrowserProfile, SyncSettings, WayfernConfig } from "@/types";
+import type { BrowserConfig, BrowserProfile, SyncSettings } from "@/types";
 
-type BrowserTypeString = "wayfern";
+type BrowserTypeString = "chromium";
 
 interface PendingUrl {
   id: string;
@@ -232,12 +232,8 @@ export default function Home() {
   const [syncLeaderProfile, setSyncLeaderProfile] =
     useState<BrowserProfile | null>(null);
 
-  // Wayfern terms hook
-  const {
-    termsAccepted,
-    isLoading: termsLoading,
-    checkTerms,
-  } = useWayfernTerms();
+  // Browser terms hook
+  const { termsAccepted, isLoading: termsLoading } = useBrowserTerms();
 
   // Cloud auth for cross-OS unlock
   const { user: cloudUser } = useCloudAuth();
@@ -282,7 +278,7 @@ export default function Home() {
   const [importProfileDialogOpen, setImportProfileDialogOpen] = useState(false);
   const [proxyManagementDialogOpen, setProxyManagementDialogOpen] =
     useState(false);
-  const [wayfernConfigDialogOpen, setWayfernConfigDialogOpen] = useState(false);
+  const [browserConfigDialogOpen, setBrowserConfigDialogOpen] = useState(false);
   const [groupManagementDialogOpen, setGroupManagementDialogOpen] =
     useState(false);
   const [extensionManagementDialogOpen, setExtensionManagementDialogOpen] =
@@ -319,7 +315,7 @@ export default function Home() {
   const [selectedProfiles, setSelectedProfiles] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [pendingUrls, setPendingUrls] = useState<PendingUrl[]>([]);
-  const [currentProfileForWayfernConfig, setCurrentProfileForWayfernConfig] =
+  const [currentProfileForBrowserConfig, setCurrentProfileForBrowserConfig] =
     useState<BrowserProfile | null>(null);
   const [cloneProfile, setCloneProfile] = useState<BrowserProfile | null>(null);
   const [passwordDialogProfile, setPasswordDialogProfile] =
@@ -792,24 +788,24 @@ export default function Home() {
     }
   }, [handleUrlOpen, t]);
 
-  const handleConfigureWayfern = useCallback((profile: BrowserProfile) => {
-    setCurrentProfileForWayfernConfig(profile);
-    setWayfernConfigDialogOpen(true);
+  const handleConfigureBrowser = useCallback((profile: BrowserProfile) => {
+    setCurrentProfileForBrowserConfig(profile);
+    setBrowserConfigDialogOpen(true);
   }, []);
 
-  const handleSaveWayfernConfig = useCallback(
-    async (profile: BrowserProfile, config: WayfernConfig) => {
+  const handleSaveBrowserConfig = useCallback(
+    async (profile: BrowserProfile, config: BrowserConfig) => {
       try {
-        await invoke("update_wayfern_config", {
+        await invoke("update_chromium_config", {
           profileId: profile.id,
           config,
         });
         // No need to manually reload - useProfileEvents will handle the update
-        setWayfernConfigDialogOpen(false);
+        setBrowserConfigDialogOpen(false);
       } catch (err: unknown) {
-        console.error("Failed to update wayfern config:", err);
+        console.error("Failed to update browser config:", err);
         showErrorToast(
-          t("errors.updateWayfernConfigFailed", { error: JSON.stringify(err) }),
+          t("errors.updateBrowserConfigFailed", { error: JSON.stringify(err) }),
         );
         throw err;
       }
@@ -825,7 +821,7 @@ export default function Home() {
       releaseType: string;
       proxyId?: string;
       vpnId?: string;
-      wayfernConfig?: WayfernConfig;
+      browserConfig?: BrowserConfig;
       groupId?: string;
       extensionGroupId?: string;
       ephemeral?: boolean;
@@ -843,7 +839,7 @@ export default function Home() {
             releaseType: profileData.releaseType,
             proxyId: profileData.proxyId,
             vpnId: profileData.vpnId,
-            wayfernConfig: profileData.wayfernConfig,
+            browserConfig: profileData.browserConfig,
             groupId:
               profileData.groupId ??
               (selectedGroupId && selectedGroupId !== "__all__"
@@ -918,7 +914,7 @@ export default function Home() {
       }
 
       // Show one-time warning about window resizing for fingerprinted browsers
-      if (profile.browser === "wayfern") {
+      if (profile.browser === "chromium") {
         try {
           const dismissed = await invoke<boolean>(
             "get_window_resize_warning_dismissed",
@@ -1147,7 +1143,7 @@ export default function Home() {
   const handleBulkCopyCookies = useCallback(() => {
     if (selectedProfiles.length === 0) return;
     const eligibleProfiles = profiles.filter(
-      (p) => selectedProfiles.includes(p.id) && p.browser === "wayfern",
+      (p) => selectedProfiles.includes(p.id) && p.browser === "chromium",
     );
     if (eligibleProfiles.length === 0) {
       showErrorToast(t("errors.cookieCopyUnsupportedBrowser"));
@@ -1407,7 +1403,7 @@ export default function Home() {
       void checkMissingBinaries();
     }
 
-    // Proactively download Wayfern if not already available
+    // Proactively download Chromium if not already available
     if (!profilesLoading) {
       void invoke("ensure_active_browsers_downloaded").catch((err: unknown) => {
         console.error("Failed to auto-download browsers:", err);
@@ -1436,7 +1432,7 @@ export default function Home() {
     let unlistenStarted: (() => void) | undefined;
     let unlistenProgress: (() => void) | undefined;
     let unlistenCompleted: (() => void) | undefined;
-    let unlistenWayfernBlocked: (() => void) | undefined;
+    // Removed: unlistenBrowserBlocked
 
     void (async () => {
       unlistenRequired = await listen(
@@ -1499,15 +1495,7 @@ export default function Home() {
         });
       });
 
-      unlistenWayfernBlocked = await listen("wayfern-paid-blocked", () => {
-        showToast({
-          id: "wayfern-paid-blocked",
-          type: "error",
-          title: t("wayfernBlocked.title"),
-          description: t("wayfernBlocked.description"),
-          duration: 15000,
-        });
-      });
+      // Removed: paid-blocked listener (no longer needed)
 
       // If the effect was torn down mid-setup, the cleanup below already ran
       // before these handles existed — unlisten them now so nothing leaks.
@@ -1516,7 +1504,6 @@ export default function Home() {
         unlistenStarted?.();
         unlistenProgress?.();
         unlistenCompleted?.();
-        unlistenWayfernBlocked?.();
       }
     })();
 
@@ -1526,28 +1513,8 @@ export default function Home() {
       unlistenStarted?.();
       unlistenProgress?.();
       unlistenCompleted?.();
-      unlistenWayfernBlocked?.();
     };
   }, [t]);
-
-  // Re-check Wayfern terms when a browser download completes
-  useEffect(() => {
-    let unlisten: (() => void) | null = null;
-    const setup = async () => {
-      unlisten = await listen<{ stage: string }>(
-        "download-progress",
-        (event) => {
-          if (event.payload.stage === "completed") {
-            void checkTerms();
-          }
-        },
-      );
-    };
-    void setup();
-    return () => {
-      if (unlisten) unlisten();
-    };
-  }, [checkTerms]);
 
   // Check permissions when they are initialized. During first-run onboarding
   // the welcome flow requests permissions, so the standalone dialog is deferred
@@ -1652,7 +1619,7 @@ export default function Home() {
                 onRemovePassword={handleRemovePassword}
                 onDeleteProfile={handleDeleteProfile}
                 onRenameProfile={handleRenameProfile}
-                onConfigureWayfern={handleConfigureWayfern}
+                onConfigureBrowser={handleConfigureBrowser}
                 onCopyCookiesToProfile={handleCopyCookiesToProfile}
                 onOpenCookieManagement={handleOpenCookieManagement}
                 runningProfiles={runningProfiles}
@@ -1933,16 +1900,16 @@ export default function Home() {
         }}
       />
 
-      <WayfernConfigDialog
-        isOpen={wayfernConfigDialogOpen}
+      <BrowserConfigDialog
+        isOpen={browserConfigDialogOpen}
         onClose={() => {
-          setWayfernConfigDialogOpen(false);
+          setBrowserConfigDialogOpen(false);
         }}
-        profile={currentProfileForWayfernConfig}
-        onSave={handleSaveWayfernConfig}
+        profile={currentProfileForBrowserConfig}
+        onSave={handleSaveBrowserConfig}
         isRunning={
-          currentProfileForWayfernConfig
-            ? runningProfiles.has(currentProfileForWayfernConfig.id)
+          currentProfileForBrowserConfig
+            ? runningProfiles.has(currentProfileForBrowserConfig.id)
             : false
         }
         crossOsUnlocked={crossOsUnlocked}
@@ -2115,10 +2082,10 @@ export default function Home() {
         }}
       />
 
-      {/* Wayfern Terms and Conditions Dialog - shown if terms not accepted */}
-      <WayfernTermsDialog
+      {/* Browser Terms Dialog */}
+      <BrowserTermsDialog
         isOpen={!termsLoading && termsAccepted === false}
-        onAccepted={checkTerms}
+        onAccepted={() => {}}
       />
 
       <WindowResizeWarningDialog

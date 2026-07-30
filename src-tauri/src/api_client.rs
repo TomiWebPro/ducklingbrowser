@@ -90,11 +90,10 @@ pub struct BrowserRelease {
   pub date: String,
 }
 
-/// Wayfern version info from https://ducklingbrowser.com/wayfern.json
+/// Chromium version info from Chrome for Testing
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct WayfernVersionInfo {
+pub struct ChromiumVersionInfo {
   pub version: String,
-  pub downloads: std::collections::HashMap<String, Option<String>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -104,8 +103,8 @@ struct CachedVersionData {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct CachedWayfernData {
-  version_info: WayfernVersionInfo,
+struct CachedChromiumData {
+  version_info: ChromiumVersionInfo,
   timestamp: u64,
 }
 
@@ -218,55 +217,71 @@ impl ApiClient {
     Ok(())
   }
 
-  fn load_cached_wayfern_version(&self) -> Option<WayfernVersionInfo> {
+  fn load_cached_chromium_version(&self) -> Option<ChromiumVersionInfo> {
     let cache_dir = Self::get_cache_dir().ok()?;
-    let cache_file = cache_dir.join("wayfern_version.json");
+    let cache_file = cache_dir.join("chromium_version.json");
 
     if !cache_file.exists() {
       return None;
     }
 
     let content = fs::read_to_string(&cache_file).ok()?;
-    let cached_data: CachedWayfernData = serde_json::from_str(&content).ok()?;
+    let cached_data: CachedChromiumData = serde_json::from_str(&content).ok()?;
 
     Some(cached_data.version_info)
   }
 
-  fn save_cached_wayfern_version(
+  fn save_cached_chromium_version(
     &self,
-    version_info: &WayfernVersionInfo,
+    version_info: &ChromiumVersionInfo,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let cache_dir = Self::get_cache_dir()?;
-    let cache_file = cache_dir.join("wayfern_version.json");
+    let cache_file = cache_dir.join("chromium_version.json");
 
-    let cached_data = CachedWayfernData {
+    let cached_data = CachedChromiumData {
       version_info: version_info.clone(),
       timestamp: Self::get_current_timestamp(),
     };
 
     let content = serde_json::to_string_pretty(&cached_data)?;
     fs::write(&cache_file, content)?;
-    log::info!("Cached Wayfern version: {}", version_info.version);
+    log::info!("Cached Chromium version: {}", version_info.version);
     Ok(())
   }
 
-  /// Fetch Wayfern version info from https://ducklingbrowser.com/wayfern.json
-  pub async fn fetch_wayfern_version_with_caching(
+  /// Fetch Chromium version info from Chrome for Testing
+  pub async fn fetch_chromium_version_with_caching(
     &self,
     no_caching: bool,
-  ) -> Result<WayfernVersionInfo, Box<dyn std::error::Error + Send + Sync>> {
+  ) -> Result<ChromiumVersionInfo, Box<dyn std::error::Error + Send + Sync>> {
     if !no_caching {
-      if let Some(cached_version) = self.load_cached_wayfern_version() {
-        log::info!("Using cached Wayfern version: {}", cached_version.version);
+      if let Some(cached_version) = self.load_cached_chromium_version() {
+        log::info!("Using cached Chromium version: {}", cached_version.version);
         return Ok(cached_version);
       }
     }
 
-    log::info!("Fetching Wayfern version from https://ducklingbrowser.com/wayfern.json");
-    let url = "https://ducklingbrowser.com/wayfern.json";
+    log::info!("Fetching Chromium version info");
+    let url = "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions.json";
 
     let mut last_err = None;
-    let mut version_info: Option<WayfernVersionInfo> = None;
+    let mut version_info: Option<ChromiumVersionInfo> = None;
+
+    #[derive(serde::Deserialize)]
+    struct ChromeForTestingResponse {
+      channels: Channels,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct Channels {
+      #[serde(rename = "Stable")]
+      stable: StableChannel,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct StableChannel {
+      version: String,
+    }
 
     for attempt in 1..=3 {
       match self
@@ -280,9 +295,11 @@ impl ApiClient {
           if !response.status().is_success() {
             last_err = Some(format!("HTTP {}", response.status().as_u16()));
           } else {
-            match response.json::<WayfernVersionInfo>().await {
-              Ok(info) => {
-                version_info = Some(info);
+            match response.json::<ChromeForTestingResponse>().await {
+              Ok(resp) => {
+                version_info = Some(ChromiumVersionInfo {
+                  version: resp.channels.stable.version,
+                });
                 break;
               }
               Err(e) => last_err = Some(format!("Failed to parse response: {e}")),
@@ -290,7 +307,7 @@ impl ApiClient {
           }
         }
         Err(e) => {
-          log::warn!("Wayfern fetch attempt {attempt}/3 failed: {e}");
+          log::warn!("Chromium fetch attempt {attempt}/3 failed: {e}");
           last_err = Some(e.to_string());
         }
       }
@@ -302,35 +319,41 @@ impl ApiClient {
 
     let version_info = version_info.ok_or_else(|| {
       format!(
-        "Failed to fetch Wayfern version after 3 attempts: {}",
+        "Failed to fetch Chromium version after 3 attempts: {}",
         last_err.unwrap_or_default()
       )
     })?;
-    log::info!("Fetched Wayfern version: {}", version_info.version);
+    log::info!("Fetched Chromium version: {}", version_info.version);
 
     if !no_caching {
-      if let Err(e) = self.save_cached_wayfern_version(&version_info) {
-        log::error!("Failed to cache Wayfern version: {e}");
+      if let Err(e) = self.save_cached_chromium_version(&version_info) {
+        log::error!("Failed to cache Chromium version: {e}");
       }
     }
 
     Ok(version_info)
   }
 
-  /// Get the download URL for Wayfern based on current platform
-  pub fn get_wayfern_download_url(&self, version_info: &WayfernVersionInfo) -> Option<String> {
+  /// Get the download URL for Chromium based on current platform
+  pub fn get_chromium_download_url(&self, version_info: &ChromiumVersionInfo) -> Option<String> {
     let (os, arch) = Self::get_platform_info();
-    let platform_key = format!("{os}-{arch}");
-
-    version_info
-      .downloads
-      .get(&platform_key)
-      .and_then(|url| url.clone())
+    let (subpath, exe_name) = match (os.as_str(), arch.as_str()) {
+      ("linux", "x64") => ("linux64", "chrome-linux64"),
+      ("macos", "arm64") => ("mac-arm64", "chrome-mac-arm64"),
+      ("macos", "x64") => ("mac-x64", "chrome-mac-x64"),
+      ("windows", "x64") => ("win64", "chrome-win64"),
+      ("windows", "arm64") => ("win64-arm64", "chrome-win64-arm64"),
+      _ => return None,
+    };
+    Some(format!(
+      "https://cdn.playwright.dev/builds/cft/{}/{}/{}.zip",
+      version_info.version, subpath, exe_name
+    ))
   }
 
-  /// Check if Wayfern has a compatible download for current platform
-  pub fn has_wayfern_compatible_download(&self, version_info: &WayfernVersionInfo) -> bool {
-    self.get_wayfern_download_url(version_info).is_some()
+  /// Check if Chromium has a compatible download for current platform
+  pub fn has_chromium_compatible_download(&self, version_info: &ChromiumVersionInfo) -> bool {
+    self.get_chromium_download_url(version_info).is_some()
   }
 
   fn get_platform_info() -> (String, String) {

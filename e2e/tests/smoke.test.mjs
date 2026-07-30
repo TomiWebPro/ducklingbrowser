@@ -81,7 +81,9 @@ test("two isolated sessions run concurrently and do not share frontend or backen
 
     await first.execute("localStorage.setItem('duckling-e2e-only-a', 'yes');");
     assert.equal(
-      await second.execute("return localStorage.getItem('duckling-e2e-only-a');"),
+      await second.execute(
+        "return localStorage.getItem('duckling-e2e-only-a');",
+      ),
       null,
       "native WebView data leaked across sessions",
     );

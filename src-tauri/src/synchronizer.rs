@@ -10,9 +10,9 @@ use crate::profile::types::BrowserProfile;
 
 /// Maximum number of profiles to launch concurrently
 const MAX_CONCURRENT_LAUNCHES: usize = 5;
+/// Event captured from the leader browser via CDP input capture events.
 
-/// Event captured from the leader browser via Wayfern.inputCaptured CDP events.
-/// Fields match the Wayfern.inputCaptured event schema directly.
+/// Fields match the CDP input capture event schema directly.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CapturedEvent {
   #[serde(rename = "type")]
@@ -45,7 +45,7 @@ pub struct CapturedEvent {
   pub timestamp: Option<f64>,
 }
 
-// No JavaScript injection needed — Wayfern.enableInputCapture handles everything natively.
+    // Input capture via JS event listeners + Runtime.bindingCalled (stock Chromium CDP).
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncFollowerState {
@@ -99,7 +99,7 @@ impl SynchronizerManager {
     leader_profile_id: String,
     follower_profile_ids: Vec<String>,
   ) -> Result<SyncSessionInfo, String> {
-    // Validate: leader must be wayfern
+    // Validate: leader must be Chromium
     let profiles = ProfileManager::instance()
       .list_profiles()
       .map_err(|e| format!("Failed to list profiles: {e}"))?;
@@ -110,8 +110,8 @@ impl SynchronizerManager {
       .ok_or("Leader profile not found")?
       .clone();
 
-    if leader.browser != "wayfern" {
-      return Err("Synchronizer only supports Wayfern profiles.".to_string());
+    if leader.browser != "chromium" {
+      return Err("Synchronizer only supports Chromium profiles.".to_string());
     }
 
     // Check leader is not already running
@@ -133,9 +133,9 @@ impl SynchronizerManager {
         .find(|p| p.id.to_string() == *fid)
         .ok_or(format!("Follower profile '{fid}' not found"))?
         .clone();
-      if fp.browser != "wayfern" {
+      if fp.browser != "chromium" {
         return Err(format!(
-          "Profile '{}' is not a Wayfern profile. Only Wayfern profiles can be synchronized.",
+          "Profile '{}' is not a Chromium profile. Only Chromium profiles can be synchronized.",
           fp.name
         ));
       }
@@ -413,32 +413,115 @@ impl SynchronizerManager {
       }
     }
 
-    // Use Wayfern's native input capture — no JS injection needed.
-    // Captures all real user input at the browser process level.
-    let setup_commands: Vec<(&str, serde_json::Value)> = vec![
-      ("Page.enable", serde_json::json!({})),
-      ("Wayfern.enableInputCapture", serde_json::json!({})),
-    ];
-
-    for (method, params) in setup_commands {
-      match send_cmd(
-        &mut ws_stream,
-        &mut cmd_id,
-        &mut pending_events,
-        method,
-        params,
-      )
-      .await
-      {
-        Ok(_) => log::info!("Synchronizer: {method} OK"),
-        Err(e) => {
-          log::error!("Synchronizer: {method} FAILED: {e}");
-          return Err(format!("{method} failed: {e}"));
-        }
+    // Enable Page domain for frame navigation events
+    match send_cmd(
+      &mut ws_stream,
+      &mut cmd_id,
+      &mut pending_events,
+      "Page.enable",
+      serde_json::json!({}),
+    )
+    .await
+    {
+      Ok(_) => log::info!("Synchronizer: Page.enable OK"),
+      Err(e) => {
+        log::error!("Synchronizer: Page.enable FAILED: {e}");
+        return Err(format!("Page.enable failed: {e}"));
       }
     }
 
-    log::info!("Synchronizer: input capture enabled");
+    // Use Runtime.addBinding + JS injection to capture DOM events.
+    // Standard Chromium CDP doesn't have native input capture, so we inject
+    // event listeners that relay captured events via Runtime.bindingCalled.
+    let binding_name = "__ducklingInputCapture";
+    match send_cmd(
+      &mut ws_stream,
+      &mut cmd_id,
+      &mut pending_events,
+      "Runtime.addBinding",
+      serde_json::json!({ "name": binding_name }),
+    )
+    .await
+    {
+      Ok(_) => log::info!("Synchronizer: Runtime.addBinding OK"),
+      Err(e) => {
+        log::error!("Synchronizer: Runtime.addBinding FAILED: {e}");
+        return Err(format!("Runtime.addBinding failed: {e}"));
+      }
+    }
+
+    let capture_script = format!(
+      r#"
+      (() => {{
+        if (window.__ducklingCaptureInstalled) return;
+        window.__ducklingCaptureInstalled = true;
+        const send = (data) => {{
+          try {{ {binding_name}(JSON.stringify(data)); }} catch(e) {{}}
+        }};
+        const mods = (e) => (e.ctrlKey?1:0) | (e.altKey?2:0) | (e.shiftKey?4:0) | (e.metaKey?8:0);
+        window.addEventListener('mousedown', (e) => send({{
+          type: 'mousedown', x: e.clientX, y: e.clientY,
+          button: ['left','middle','right'][e.button] || 'left',
+          clickCount: e.detail, modifiers: mods(e), timestamp: Date.now()
+        }}), true);
+        window.addEventListener('mouseup', (e) => send({{
+          type: 'mouseup', x: e.clientX, y: e.clientY,
+          button: ['left','middle','right'][e.button] || 'left',
+          clickCount: e.detail, modifiers: mods(e), timestamp: Date.now()
+        }}), true);
+        window.addEventListener('keydown', (e) => send({{
+          type: 'keydown', key: e.key, code: e.code,
+          windowsVirtualKeyCode: e.keyCode || 0,
+          modifiers: mods(e), timestamp: Date.now()
+        }}), true);
+        window.addEventListener('keyup', (e) => send({{
+          type: 'keyup', key: e.key, code: e.code,
+          windowsVirtualKeyCode: e.keyCode || 0,
+          modifiers: mods(e), timestamp: Date.now()
+        }}), true);
+        window.addEventListener('keypress', (e) => {{
+          if (e.key && e.key.length === 1) send({{
+            type: 'char', key: e.key, code: e.code, text: e.key,
+            modifiers: mods(e), timestamp: Date.now()
+          }});
+        }}, true);
+        window.addEventListener('wheel', (e) => send({{
+          type: 'wheel', x: e.clientX, y: e.clientY,
+          button: 'left', clickCount: 0,
+          deltaX: e.deltaX, deltaY: e.deltaY,
+          modifiers: mods(e), timestamp: Date.now()
+        }}), {{ passive: true, capture: true }});
+      }})();
+      "#
+    );
+
+    match send_cmd(
+      &mut ws_stream,
+      &mut cmd_id,
+      &mut pending_events,
+      "Page.addScriptToEvaluateOnNewDocument",
+      serde_json::json!({ "source": capture_script }),
+    )
+    .await
+    {
+      Ok(_) => log::info!("Synchronizer: input capture script injected"),
+      Err(e) => {
+        log::error!("Synchronizer: script injection FAILED: {e}");
+        return Err(format!("Script injection failed: {e}"));
+      }
+    }
+
+    // Also evaluate on the current page immediately
+    let _ = send_cmd(
+      &mut ws_stream,
+      &mut cmd_id,
+      &mut pending_events,
+      "Runtime.evaluate",
+      serde_json::json!({ "expression": capture_script, "userGesture": true }),
+    )
+    .await;
+
+    log::info!("Synchronizer: input capture enabled (JS-based)");
 
     // Get leader window size and resize all followers to match
     let leader_bounds = send_cmd(
@@ -562,7 +645,7 @@ impl SynchronizerManager {
       .await;
     }
 
-    // Main event loop — listen for Wayfern.inputCaptured events
+    // Main event loop — listen for CDP input capture events
     loop {
       tokio::select! {
           _ = cancel_rx.changed() => {
@@ -589,7 +672,7 @@ impl SynchronizerManager {
                       }
 
                       // Track user interaction timing
-                      if method == "Wayfern.inputCaptured" {
+                      if method == "Runtime.bindingCalled" {
                           last_user_event_time = std::time::Instant::now();
                       }
 
@@ -649,18 +732,22 @@ impl SynchronizerManager {
   ) {
     let method = value.get("method").and_then(|m| m.as_str()).unwrap_or("");
 
-    // Handle Wayfern.inputCaptured — native input events from the browser process
-    if method == "Wayfern.inputCaptured" {
+    // Handle JS-based input capture events via Runtime.bindingCalled
+    if method == "Runtime.bindingCalled" {
       if let Some(params) = value.get("params") {
-        let event_type = params.get("type").and_then(|v| v.as_str()).unwrap_or("");
-        // Skip mousemove — too noisy and not useful for synchronization
-        if event_type == "mousemove" {
-          return;
-        }
-        if let Ok(event) = serde_json::from_value::<CapturedEvent>(params.clone()) {
-          log::info!("Synchronizer: captured {event_type}");
-          for tx in follower_senders.values() {
-            let _ = tx.send(event.clone());
+        let payload_str = params.get("payload").and_then(|v| v.as_str()).unwrap_or("");
+        if let Ok(payload) = serde_json::from_str::<serde_json::Value>(payload_str) {
+          if let Some(event_type) = payload.get("type").and_then(|v| v.as_str()) {
+            // Skip mousemove — too noisy and not useful for synchronization
+            if event_type == "mousemove" {
+              return;
+            }
+          }
+          if let Ok(event) = serde_json::from_value::<CapturedEvent>(payload) {
+            log::info!("Synchronizer: captured input event");
+            for tx in follower_senders.values() {
+              let _ = tx.send(event.clone());
+            }
           }
         }
       }
@@ -923,7 +1010,7 @@ impl SynchronizerManager {
       if attempt > 0 {
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
       }
-      let port = crate::wayfern_manager::WayfernManager::instance()
+      let port = crate::chromium_manager::ChromiumManager::instance()
         .get_cdp_port(&profile_path_str)
         .await;
       if let Some(p) = port {

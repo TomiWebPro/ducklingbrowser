@@ -33,10 +33,10 @@ async function seedTerms(app) {
   const home = path.join(app.root, "home");
   const directory =
     process.platform === "darwin"
-      ? path.join(home, "Library", "Application Support", "Wayfern")
+      ? path.join(home, "Library", "Application Support", "Chromium")
       : process.platform === "win32"
-        ? path.join(app.root, "windows", "roaming", "Wayfern")
-        : path.join(app.root, "xdg", "config", "Wayfern");
+        ? path.join(app.root, "windows", "roaming", "Chromium")
+        : path.join(app.root, "xdg", "config", "Chromium");
   await mkdir(directory, { recursive: true });
   await writeFile(
     path.join(directory, "license-accepted"),
@@ -422,7 +422,7 @@ test("REST and MCP share the browser automation rate limit", async () => {
     {
       extraEnv: {
         DUCKLING_E2E_REQUESTS_PER_HOUR: "2",
-        WAYFERN_TEST_TOKEN: "duckling-e2e-rate-limit",
+        CHROMIUM_TEST_TOKEN: "duckling-e2e-rate-limit",
       },
     },
   );
@@ -432,14 +432,9 @@ test("offline cloud, update, team-lock, trial, and synchronizer contracts are de
   await withApp(
     "integrations-contracts",
     async (app) => {
-      await assertCommandErrorCode(
-        app,
-        "start_mcp_server",
-        "WAYFERN_TERMS_REQUIRED",
-      );
+      await assertCommandErrorCode(app, "start_mcp_server", "TERMS_REQUIRED");
       assert.equal(await app.invoke("cloud_get_user"), null);
       assert.equal(await app.invoke("cloud_get_proxy_usage"), null);
-      assert.ok(await app.invoke("cloud_get_wayfern_token"));
       assert.deepEqual(await app.invoke("get_team_locks"), []);
       assert.equal(
         await app.invoke("get_team_lock_status", {
@@ -481,8 +476,6 @@ test("offline cloud, update, team-lock, trial, and synchronizer contracts are de
           isp: null,
         }),
       );
-      assert.ok(await invokeContract(app, "cloud_refresh_wayfern_token"));
-
       assert.ok(await invokeContract(app, "trigger_manual_version_update"));
       assert.ok(
         await invokeContract(app, "clear_all_version_cache_and_refetch"),
@@ -493,7 +486,7 @@ test("offline cloud, update, team-lock, trial, and synchronizer contracts are de
       });
       assert.deepEqual(
         await app.invoke("complete_browser_update_with_auto_update", {
-          browser: "wayfern",
+          browser: "chromium",
           newVersion: "150.0.7871.100",
         }),
         [],
@@ -528,6 +521,6 @@ test("offline cloud, update, team-lock, trial, and synchronizer contracts are de
       await app.invoke("cloud_logout");
       assert.equal(await app.invoke("cloud_get_user"), null);
     },
-    { wayfernTermsAccepted: false },
+    { chromiumTermsAccepted: false },
   );
 });

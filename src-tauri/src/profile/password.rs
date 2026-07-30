@@ -711,7 +711,7 @@ mod tests {
     BrowserProfile {
       id: uuid::Uuid::new_v4(),
       name: name.to_string(),
-      browser: "wayfern".to_string(),
+      browser: "chromium".to_string(),
       version: "1.0".to_string(),
       release_type: "stable".to_string(),
       ..Default::default()

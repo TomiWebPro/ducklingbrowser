@@ -19,8 +19,9 @@ use crate::proxy_manager::PROXY_MANAGER;
 use crate::settings_manager::SettingsManager;
 use crate::sync;
 
-pub const CLOUD_API_URL: &str = "https://api.ducklingbrowser.com";
-pub const CLOUD_SYNC_URL: &str = "https://sync.ducklingbrowser.com";
+// Cloud backend not available in this standalone fork
+pub const CLOUD_API_URL: &str = "";
+pub const CLOUD_SYNC_URL: &str = "";
 
 /// Default per-hour cap on local automation API / MCP requests. Mirrors the
 /// backend's DEFAULT_REQUESTS_PER_HOUR.
@@ -185,14 +186,6 @@ struct SyncTokenResponse {
   sync_token: String,
 }
 
-#[derive(Debug, Deserialize)]
-struct WayfernTokenResponse {
-  token: String,
-  #[serde(rename = "expiresIn")]
-  #[allow(dead_code)]
-  expires_in: u64,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LocationItem {
   pub code: String,
@@ -217,7 +210,6 @@ pub struct CloudAuthManager {
   client: Client,
   state: Mutex<Option<CloudAuthState>>,
   refresh_lock: tokio::sync::Mutex<()>,
-  wayfern_token: Mutex<Option<String>>,
 }
 
 lazy_static! {
@@ -228,8 +220,7 @@ impl CloudAuthManager {
   fn new() -> Self {
     let state = Self::load_auth_state_from_disk();
     // Bound every cloud API call so no single slow / hung request can stall
-    // the startup chain (sync-token → proxy-config → wayfern-token), which
-    // otherwise gates Wayfern launch behind whichever endpoint is slowest.
+    // the startup chain (sync-token → proxy-config).
     let client = Client::builder()
       .timeout(std::time::Duration::from_secs(15))
       .connect_timeout(std::time::Duration::from_secs(5))
@@ -239,7 +230,6 @@ impl CloudAuthManager {
       client,
       state: Mutex::new(state),
       refresh_lock: tokio::sync::Mutex::new(()),
-      wayfern_token: Mutex::new(None),
     }
   }
 
@@ -717,9 +707,6 @@ impl CloudAuthManager {
   }
 
   pub async fn logout(&self) -> Result<(), String> {
-    // Clear wayfern token
-    self.clear_wayfern_token().await;
-
     // Disconnect profile lock manager
     crate::team_lock::PROFILE_LOCK.disconnect().await;
 
@@ -759,7 +746,7 @@ impl CloudAuthManager {
   }
 
   /// Account is in a paid/active state. Used for the "any active plan" gates
-  /// (sync token, wayfern token); per-feature access uses the capability helpers.
+  /// (sync token); per-feature access uses the capability helpers.
   pub async fn has_active_paid_subscription(&self) -> bool {
     true
   }
@@ -997,104 +984,23 @@ impl CloudAuthManager {
       .await
   }
 
-  /// Request a wayfern token from the cloud API. Only succeeds for paid users.
-  pub async fn request_wayfern_token(&self) -> Result<(), String> {
-    if !self.has_active_paid_subscription().await {
-      self.clear_wayfern_token().await;
-      return Ok(());
-    }
-
-    let result = self
-      .api_call_with_retry(|access_token| {
-        let url = format!("{CLOUD_API_URL}/api/auth/wayfern-start");
-        // Bound the request: without a timeout, an unreachable
-        // api.ducklingbrowser.com hangs the background fetch indefinitely,
-        // which in turn forces wayfern_manager's launch-time wait to
-        // exhaust its full polling budget every time.
-        let client = reqwest::Client::builder()
-          .timeout(std::time::Duration::from_secs(8))
-          .connect_timeout(std::time::Duration::from_secs(4))
-          .build()
-          .unwrap_or_else(|_| reqwest::Client::new());
-        async move {
-          let response = client
-            .post(&url)
-            .header("Authorization", format!("Bearer {access_token}"))
-            .send()
-            .await
-            .map_err(|e| format!("Failed to request wayfern token: {e}"))?;
-
-          if !response.status().is_success() {
-            let status = response.status();
-            return Err(format!("Wayfern token request failed ({status})"));
-          }
-
-          let result: WayfernTokenResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse wayfern token response: {e}"))?;
-
-          Ok(result.token)
-        }
-      })
-      .await;
-
-    let token = match result {
-      Ok(token) => token,
-      Err(e) => {
-        // A 403 rejects the entitlement without invalidating the login session.
-        // Clear the browser token and refresh account state before notifying UI.
-        if e.contains("(403") || e.contains("Forbidden") {
-          log::warn!("Wayfern token blocked by backend (403)");
-          self.clear_wayfern_token().await;
-          if let Err(fetch_err) = self.fetch_profile().await {
-            log::warn!("Profile re-fetch after wayfern block failed: {fetch_err}");
-          }
-          let _ = crate::events::emit_empty("wayfern-paid-blocked");
-        }
-        return Err(e);
-      }
-    };
-
-    let mut wt = self.wayfern_token.lock().await;
-    *wt = Some(token);
-    log::info!("Wayfern token acquired");
-    Ok(())
+  /// Get the current Chromium token, if any. Always returns None in this fork.
+  pub async fn get_chromium_token(&self) -> Option<String> {
+    None
   }
 
-  /// Get the current wayfern token, if any.
-  pub async fn get_wayfern_token(&self) -> Option<String> {
-    #[cfg(feature = "e2e")]
-    if crate::e2e_automation_enabled() {
-      if let Some(token) = std::env::var_os("WAYFERN_TEST_TOKEN")
-        .filter(|token| !token.is_empty())
-        .and_then(|token| token.into_string().ok())
-      {
-        return Some(token);
-      }
-    }
-
-    let wt = self.wayfern_token.lock().await;
-    wt.clone()
-  }
-
-  /// Clear the cached wayfern token.
-  pub async fn clear_wayfern_token(&self) {
-    let mut wt = self.wayfern_token.lock().await;
-    *wt = None;
+  /// Clear the cached Chromium token. No-op in this fork.
+  pub async fn clear_chromium_token(&self) {
   }
 
   /// Background loop that refreshes the sync token periodically
   pub async fn start_sync_token_refresh_loop(app_handle: tauri::AppHandle) {
-    let mut wayfern_refresh_counter: u32 = 0;
     loop {
       tokio::time::sleep(std::time::Duration::from_secs(600)).await; // 10 minutes
 
       if !CLOUD_AUTH.is_logged_in().await {
         continue;
       }
-
-      wayfern_refresh_counter += 1;
 
       // Proactively refresh the access token if it's expired or expiring soon.
       // This runs first so subsequent API calls use a fresh token.
@@ -1136,18 +1042,6 @@ impl CloudAuthManager {
 
       // Sync cloud proxy credentials
       CLOUD_AUTH.sync_cloud_proxy().await;
-
-      // Refresh wayfern token every 10 hours (60 iterations of 10-minute loop)
-      if wayfern_refresh_counter >= 60 {
-        wayfern_refresh_counter = 0;
-        if CLOUD_AUTH.has_active_paid_subscription().await {
-          if let Err(e) = CLOUD_AUTH.request_wayfern_token().await {
-            log::warn!("Failed to refresh wayfern token: {e}");
-          }
-        } else {
-          CLOUD_AUTH.clear_wayfern_token().await;
-        }
-      }
 
       let _ = &app_handle; // keep app_handle alive
     }
@@ -1207,20 +1101,15 @@ pub async fn cloud_exchange_device_code(
     has_subscription
   );
 
-  // Pre-fetch sync token so sync can start immediately
-  if has_subscription {
-    log::info!("Pre-fetching sync token...");
-    match CLOUD_AUTH.get_or_refresh_sync_token().await {
-      Ok(Some(_)) => log::info!("Sync token pre-fetched successfully"),
-      Ok(None) => log::warn!("Sync token not available despite active subscription"),
-      Err(e) => log::error!("Failed to pre-fetch sync token after login: {e}"),
+    // Pre-fetch sync token so sync can start immediately
+    if has_subscription {
+      log::info!("Pre-fetching sync token...");
+      match CLOUD_AUTH.get_or_refresh_sync_token().await {
+        Ok(Some(_)) => log::info!("Sync token pre-fetched successfully"),
+        Ok(None) => log::warn!("Sync token not available despite active subscription"),
+        Err(e) => log::error!("Failed to pre-fetch sync token after login: {e}"),
+      }
     }
-
-    // Request wayfern token for paid users
-    if let Err(e) = CLOUD_AUTH.request_wayfern_token().await {
-      log::warn!("Failed to request wayfern token after login: {e}");
-    }
-  }
 
   // Sync cloud proxy after login
   CLOUD_AUTH.sync_cloud_proxy().await;
@@ -1278,17 +1167,6 @@ pub async fn cloud_logout(app_handle: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub async fn cloud_has_active_subscription() -> Result<bool, String> {
   Ok(CLOUD_AUTH.has_active_paid_subscription().await)
-}
-
-#[tauri::command]
-pub async fn cloud_get_wayfern_token() -> Result<Option<String>, String> {
-  Ok(CLOUD_AUTH.get_wayfern_token().await)
-}
-
-#[tauri::command]
-pub async fn cloud_refresh_wayfern_token() -> Result<Option<String>, String> {
-  CLOUD_AUTH.request_wayfern_token().await?;
-  Ok(CLOUD_AUTH.get_wayfern_token().await)
 }
 
 #[tauri::command]

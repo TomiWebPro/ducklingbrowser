@@ -15,7 +15,8 @@ export function isOnboardingActive(): boolean {
 // Dispatched on `window` when the product tour reaches its end and the user
 // clicks "Finish" (not when they skip early). The page listens for it to show
 // the celebratory thank-you dialog.
-export const ONBOARDING_TOUR_FINISHED_EVENT = "duckling:onboarding-tour-finished";
+export const ONBOARDING_TOUR_FINISHED_EVENT =
+  "duckling:onboarding-tour-finished";
 
 // Dispatched when the product tour is either finished or explicitly skipped.
 // This is separate from the finished event because both outcomes complete the

@@ -50,7 +50,7 @@ impl BrowserVersionManager {
     let (os, arch) = Self::get_platform_info();
 
     match browser {
-      "wayfern" => {
+      "chromium" => {
         let platform_key = format!("{os}-{arch}");
         Ok(matches!(
           platform_key.as_str(),
@@ -68,7 +68,7 @@ impl BrowserVersionManager {
 
   /// Get list of browsers supported on the current platform
   pub fn get_supported_browsers(&self) -> Vec<String> {
-    let all_browsers = vec!["wayfern"];
+    let all_browsers = vec!["chromium"];
 
     all_browsers
       .into_iter()
@@ -109,12 +109,12 @@ impl BrowserVersionManager {
     self.api_client.is_cache_expired(browser)
   }
 
-  /// Get the latest Wayfern version (fresh cache first)
+  /// Get the latest Chromium version (fresh cache first)
   pub async fn get_browser_release_types(
     &self,
     browser: &str,
   ) -> Result<BrowserReleaseTypes, Box<dyn std::error::Error + Send + Sync>> {
-    if browser != "wayfern" {
+    if browser != "chromium" {
       return Err(format!("Unsupported browser: {browser}").into());
     }
 
@@ -171,7 +171,7 @@ impl BrowserVersionManager {
 
     // Fetch fresh versions from API
     let fresh_versions = match browser {
-      "wayfern" => self.fetch_wayfern_versions(true).await?,
+      "chromium" => self.fetch_chromium_versions(true).await?,
       _ => return Err(format!("Unsupported browser: {browser}").into()),
     };
 
@@ -234,7 +234,7 @@ impl BrowserVersionManager {
     // Since we don't have detailed date/prerelease info for cached versions,
     // we'll fetch fresh detailed info and map it to our merged versions
     let detailed_info: Vec<BrowserVersionInfo> = match browser {
-      "wayfern" => merged_versions
+      "chromium" => merged_versions
         .into_iter()
         .map(|version| BrowserVersionInfo {
           version: version.clone(),
@@ -297,27 +297,26 @@ impl BrowserVersionManager {
     let (os, arch) = Self::get_platform_info();
 
     match browser {
-      "wayfern" => {
-        // Wayfern downloads from https://download.wayfern.com/
-        // File naming: wayfern-{chromium_version}-{platform}-{arch}.{ext}
-        // Platform/arch format: linux-x64, macos-arm64, etc.
+      "chromium" => {
+        // Chromium (Chrome for Testing) downloads from Playwright CDN
+        // File naming: chrome-{platform}.zip
         let platform_key = format!("{os}-{arch}");
         let (filename, is_archive) = match platform_key.as_str() {
-          "macos-arm64" | "macos-x64" => (format!("wayfern-{version}-{platform_key}.dmg"), true),
-          "linux-x64" | "linux-arm64" => (format!("wayfern-{version}-{platform_key}.tar.xz"), true),
-          "windows-x64" | "windows-arm64" => {
-            (format!("wayfern-{version}-{platform_key}.zip"), true)
-          }
+          "linux-x64" => (format!("chrome-linux64.zip"), true),
+          "macos-arm64" => (format!("chrome-mac-arm64.zip"), true),
+          "macos-x64" => (format!("chrome-mac-x64.zip"), true),
+          "windows-x64" => (format!("chrome-win64.zip"), true),
+          "windows-arm64" => (format!("chrome-win64-arm64.zip"), true),
           _ => {
             return Err(
-              format!("Unsupported platform/architecture for Wayfern: {os}/{arch}").into(),
+              format!("Unsupported platform/architecture for Chromium: {os}/{arch}").into(),
             )
           }
         };
 
         // Note: The actual URL will be resolved dynamically from version.json in downloader.rs
         Ok(DownloadInfo {
-          url: format!("https://download.wayfern.com/{filename}"),
+          url: format!("https://cdn.playwright.dev/builds/cft/{version}/{filename}"),
           filename,
           is_archive,
         })
@@ -349,19 +348,19 @@ impl BrowserVersionManager {
     (os.to_string(), arch.to_string())
   }
 
-  async fn fetch_wayfern_versions(
+  async fn fetch_chromium_versions(
     &self,
     no_caching: bool,
   ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
     let version_info = self
       .api_client
-      .fetch_wayfern_version_with_caching(no_caching)
+      .fetch_chromium_version_with_caching(no_caching)
       .await?;
 
     // Check if current platform has a download available
     if self
       .api_client
-      .has_wayfern_compatible_download(&version_info)
+      .has_chromium_compatible_download(&version_info)
     {
       Ok(vec![version_info.version])
     } else {
@@ -413,45 +412,47 @@ mod tests {
   fn test_get_download_info() {
     let service = BrowserVersionManager::instance();
 
-    let wayfern_info = service.get_download_info("wayfern", "1.0.0").unwrap();
+    let chromium_info = service.get_download_info("chromium", "1.0.0").unwrap();
 
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     {
-      assert_eq!(wayfern_info.filename, "wayfern-1.0.0-macos-arm64.dmg");
-      assert!(wayfern_info.is_archive);
+      assert_eq!(chromium_info.filename, "chrome-mac-arm64.zip");
+      assert!(chromium_info.is_archive);
     }
 
     #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
     {
-      assert_eq!(wayfern_info.filename, "wayfern-1.0.0-macos-x64.dmg");
-      assert!(wayfern_info.is_archive);
+      assert_eq!(chromium_info.filename, "chrome-mac-x64.zip");
+      assert!(chromium_info.is_archive);
     }
 
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     {
-      assert_eq!(wayfern_info.filename, "wayfern-1.0.0-linux-x64.tar.xz");
-      assert!(wayfern_info.is_archive);
+      assert_eq!(chromium_info.filename, "chrome-linux64.zip");
+      assert!(chromium_info.is_archive);
     }
 
     #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
     {
-      assert_eq!(wayfern_info.filename, "wayfern-1.0.0-linux-arm64.tar.xz");
-      assert!(wayfern_info.is_archive);
+      // Chrome for Testing does not support Linux ARM64
+      let result = service.get_download_info("chromium", "1.0.0");
+      assert!(result.is_err());
+      return;
     }
 
     #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
     {
-      assert_eq!(wayfern_info.filename, "wayfern-1.0.0-windows-x64.zip");
-      assert!(wayfern_info.is_archive);
+      assert_eq!(chromium_info.filename, "chrome-win64.zip");
+      assert!(chromium_info.is_archive);
     }
 
     #[cfg(all(target_os = "windows", target_arch = "aarch64"))]
     {
-      assert_eq!(wayfern_info.filename, "wayfern-1.0.0-windows-arm64.zip");
-      assert!(wayfern_info.is_archive);
+      assert_eq!(chromium_info.filename, "chrome-win64-arm64.zip");
+      assert!(chromium_info.is_archive);
     }
 
-    assert!(wayfern_info.url.contains("download.wayfern.com"));
+    assert!(chromium_info.url.contains("cdn.playwright.dev"));
 
     let unsupported_result = service.get_download_info("testbrowser", "1.0.0");
     assert!(unsupported_result.is_err());

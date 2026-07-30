@@ -19,14 +19,14 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import type {
-  WayfernConfig,
-  WayfernFingerprintConfig,
-  WayfernOS,
+  BrowserConfig,
+  BrowserFingerprintConfig,
+  TargetOS,
 } from "@/types";
 
-interface WayfernConfigFormProps {
-  config: WayfernConfig;
-  onConfigChange: (key: keyof WayfernConfig, value: unknown) => void;
+interface BrowserConfigFormProps {
+  config: BrowserConfig;
+  onConfigChange: (key: keyof BrowserConfig, value: unknown) => void;
   className?: string;
   isCreating?: boolean;
   forceAdvanced?: boolean;
@@ -37,11 +37,11 @@ interface WayfernConfigFormProps {
   profileBrowser?: string;
 }
 
-const isFingerprintEditingDisabled = (config: WayfernConfig): boolean => {
+const isFingerprintEditingDisabled = (config: BrowserConfig): boolean => {
   return config.randomize_fingerprint_on_launch === true;
 };
 
-const getCurrentOS = (): WayfernOS => {
+const getCurrentOS = (): TargetOS => {
   if (typeof navigator === "undefined") return "linux";
   const platform = navigator.platform.toLowerCase();
   if (platform.includes("win")) return "windows";
@@ -49,7 +49,7 @@ const getCurrentOS = (): WayfernOS => {
   return "linux";
 };
 
-const osLabels: Record<WayfernOS, string> = {
+const osLabels: Record<TargetOS, string> = {
   windows: "Windows",
   macos: "macOS",
   linux: "Linux",
@@ -57,7 +57,7 @@ const osLabels: Record<WayfernOS, string> = {
   ios: "iOS",
 };
 
-export function WayfernConfigForm({
+export function BrowserConfigForm({
   config,
   onConfigChange,
   className = "",
@@ -68,14 +68,14 @@ export function WayfernConfigForm({
   limitedMode = false,
   profileVersion,
   profileBrowser,
-}: WayfernConfigFormProps) {
+}: BrowserConfigFormProps) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState(
     forceAdvanced ? "manual" : "automatic",
   );
   const [fingerprintConfig, setFingerprintConfig] =
-    useState<WayfernFingerprintConfig>({});
-  const [currentOS] = useState<WayfernOS>(getCurrentOS);
+    useState<BrowserFingerprintConfig>({});
+  const [currentOS] = useState<TargetOS>(getCurrentOS);
   const [isGeneratingFingerprint, setIsGeneratingFingerprint] = useState(false);
 
   const handleGenerateFingerprint = async () => {
@@ -84,7 +84,7 @@ export function WayfernConfigForm({
     try {
       const configJson = JSON.stringify(config);
       const result = await invoke<string>("generate_sample_fingerprint", {
-        browser: profileBrowser ?? "wayfern",
+        browser: profileBrowser ?? "chromium",
         version: profileVersion,
         configJson,
       });
@@ -122,7 +122,7 @@ export function WayfernConfigForm({
       try {
         const parsed = JSON.parse(
           config.fingerprint,
-        ) as WayfernFingerprintConfig;
+        ) as BrowserFingerprintConfig;
         setFingerprintConfig(parsed);
       } catch (error) {
         console.error("Failed to parse fingerprint config:", error);
@@ -134,7 +134,7 @@ export function WayfernConfigForm({
   }, [config.fingerprint]);
 
   const updateFingerprintConfig = (
-    key: keyof WayfernFingerprintConfig,
+    key: keyof BrowserFingerprintConfig,
     value: unknown,
   ) => {
     const newConfig = { ...fingerprintConfig };
@@ -193,7 +193,7 @@ export function WayfernConfigForm({
         </div>
         <Select
           value={selectedOS}
-          onValueChange={(value: WayfernOS) => {
+          onValueChange={(value: TargetOS) => {
             onConfigChange("os", value);
           }}
           disabled={readOnly}
@@ -203,7 +203,7 @@ export function WayfernConfigForm({
           </SelectTrigger>
           <SelectContent>
             {(
-              ["windows", "macos", "linux", "android", "ios"] as WayfernOS[]
+              ["windows", "macos", "linux", "android", "ios"] as TargetOS[]
             ).map((os) => {
               const isDisabled = os !== currentOS && !crossOsUnlocked;
               return (
@@ -319,7 +319,7 @@ export function WayfernConfigForm({
                     );
                   }}
                   placeholder={t(
-                    "config.wayfern.fingerprint.platformPlaceholder",
+                    "config.browser.fingerprint.platformPlaceholder",
                   )}
                 />
               </div>
@@ -790,7 +790,7 @@ export function WayfernConfigForm({
                     );
                   }}
                   placeholder={t(
-                    "config.wayfern.fingerprint.timezoneOffsetPlaceholder",
+                    "config.browser.fingerprint.timezoneOffsetPlaceholder",
                   )}
                 />
               </div>
@@ -886,7 +886,7 @@ export function WayfernConfigForm({
                     );
                   }}
                   placeholder={t(
-                    "config.wayfern.fingerprint.webglRendererPlaceholder",
+                    "config.browser.fingerprint.webglRendererPlaceholder",
                   )}
                 />
               </div>
@@ -1138,7 +1138,7 @@ export function WayfernConfigForm({
               <Label>{t("fingerprint.osLabel")}</Label>
               <Select
                 value={selectedOS}
-                onValueChange={(value: WayfernOS) => {
+                onValueChange={(value: TargetOS) => {
                   onConfigChange("os", value);
                 }}
                 disabled={readOnly}
@@ -1156,7 +1156,7 @@ export function WayfernConfigForm({
                       "linux",
                       "android",
                       "ios",
-                    ] as WayfernOS[]
+                    ] as TargetOS[]
                   ).map((os) => {
                     const isDisabled = os !== currentOS && !crossOsUnlocked;
                     return (

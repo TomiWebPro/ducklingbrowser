@@ -284,9 +284,9 @@
       "stopFollower": "正在跟随 {{leaderName}} 的操作",
       "desyncedTooltip": "在 {{url}} 同步失败",
       "paidFeature": "同步器是付费功能",
-      "wayfernOnly": "只有 Wayfern 配置文件可以同步",
+      "chromiumOnly": "只有 Chromium 配置文件可以同步",
       "selectFollowers": "选择跟随者配置文件",
-      "selectFollowersDesc": "选择将复制领导者配置文件操作的配置文件。只能选择已停止的 Wayfern 配置文件。",
+      "selectFollowersDesc": "选择将复制领导者配置文件操作的配置文件。只能选择已停止的 Chromium 配置文件。",
       "leader": "领导者",
       "follower": "跟随者",
       "startSession": "开始同步会话",
@@ -352,7 +352,7 @@
     "antiDetect": {
       "title": "防检测浏览器",
       "description": "选择具有防检测功能的浏览器",
-      "chromium": "Wayfern",
+      "chromium": "Chromium",
       "badge": "防检测浏览器"
     },
     "regular": {
@@ -387,7 +387,7 @@
       "upgradeAvailable": "{{browser}} 有新版本（{{version}}）可用。"
     },
     "chromiumLabel": "Chromium",
-    "chromiumSubtitle": "由 Wayfern 驱动",
+    "chromiumSubtitle": "由 Chromium 驱动",
     "platformUnavailable": "{{browser}} 在您的平台上尚不可用。",
     "passwordProtect": {
       "label": "为此配置文件设置密码保护",
@@ -739,7 +739,7 @@
     "tokenCopied": "令牌已复制",
     "mcpEnableLabel": "启用 MCP 服务器 (Model Context Protocol)",
     "mcpEnableDescription": "允许 Claude Desktop 等 AI 助手控制浏览器。",
-    "mcpAcceptTermsFirst": "(请先在设置中接受 Wayfern 条款)",
+    "mcpAcceptTermsFirst": "(请先在设置中接受浏览器条款)",
     "mcpStarted": "MCP 服务器已在端口 {{port}} 上启动",
     "mcpStopped": "MCP 服务器已停止",
     "mcpToggleFailed": "切换 MCP 服务器失败",
@@ -758,8 +758,8 @@
     "error": "导入配置文件失败"
   },
   "config": {
-    "wayfern": {
-      "title": "Wayfern 配置",
+    "chromium": {
+      "title": "Chromium 配置",
       "fingerprint": {
         "title": "指纹",
         "randomize": "启动时随机化",
@@ -812,7 +812,7 @@
       "sourcePlaceholder": "选择要复制 Cookie 的配置文件",
       "running": "(运行中)",
       "targetProfiles": "目标配置文件 ({{count}})",
-      "noOtherTargets": "未选择其他 Wayfern 配置文件",
+      "noOtherTargets": "未选择其他 Chromium 配置文件",
       "selectSourceFirst": "请先选择源配置文件",
       "selectionStatus": "(已选择 {{selected}} / {{total}})",
       "searchPlaceholder": "搜索域名或 Cookie...",
@@ -941,7 +941,7 @@
     "serverError": "服务器错误。请稍后重试。",
     "unknownError": "发生未知错误。请重试。",
     "noProfilesForUrl": "没有可用的配置文件。请先创建配置文件再打开 URL。",
-    "updateWayfernConfigFailed": "更新 wayfern 配置失败: {{error}}",
+    "updateBrowserConfigFailed": "更新浏览器配置失败: {{error}}",
     "createProfileFailed": "创建配置文件失败: {{error}}",
     "launchBrowserFailed": "启动浏览器失败: {{error}}",
     "cannotDeleteRunningProfile": "浏览器运行时无法删除配置文件。请先停止浏览器。",
@@ -949,7 +949,7 @@
     "renameProfileFailed": "重命名配置文件失败: {{error}}",
     "killBrowserFailed": "终止浏览器失败: {{error}}",
     "deleteSelectedProfilesFailed": "删除所选配置文件失败: {{error}}",
-    "cookieCopyUnsupportedBrowser": "Cookie 复制仅适用于 Wayfern 配置文件",
+    "cookieCopyUnsupportedBrowser": "Cookie 复制仅适用于 Chromium 配置文件",
     "updateSyncSettingsFailed": "更新同步设置失败",
     "cloneProfileFailed": "克隆配置文件失败: {{error}}",
     "loadSupportedBrowsersFailed": "加载受支持的浏览器失败",
@@ -966,7 +966,7 @@
     "setProfilePasswordFailed": "设置配置文件密码失败: {{error}}"
   },
   "browser": {
-    "wayfern": "Wayfern"
+    "chromium": "Chromium"
   },
   "fingerprint": {
     "crossOsWarning": "伪装不同操作系统的指纹不太可靠，因为不可能完美模拟所有底层组件。请谨慎使用。",
@@ -1206,7 +1206,7 @@
       "cannotWhileRunning": "更改密码前请先停止此配置文件。"
     },
     "fingerprint": {
-      "notSupported": "指纹编辑仅适用于 Wayfern 配置文件。",
+      "notSupported": "指纹编辑仅适用于 Chromium 配置文件。",
       "lockedTitle": "查看和编辑指纹是 Pro 功能",
       "lockedDescription": "每个配置文件中都会保护你的设备信息。查看和编辑配置文件的指纹需要有效的付费方案。"
     },
@@ -1542,15 +1542,17 @@
     "badgeUnavailable": "不可用",
     "openButton": "打开"
   },
-  "wayfernTerms": {
-    "title": "Wayfern 条款和条件",
-    "description": "在使用 Duckling Browser 之前,你必须阅读并同意 Wayfern 的条款和条件。",
+  "browserTerms": {
+    "title": "浏览器",
+    "description": "Chromium 是根据 BSD 许可证发行的开源软件。",
     "reviewLabel": "请查看以下条款和条件:",
     "agreeNotice": "点击「我接受」即表示你同意受这些条款约束。",
     "acceptButton": "我接受",
     "acceptSuccess": "已成功接受条款",
     "acceptFailed": "接受条款失败",
-    "tryAgain": "请重试"
+    "tryAgain": "请重试",
+    "body": "Duckling Browser 使用 Chromium 网页浏览器引擎。Chromium 根据 BSD 许可证分发，允许自由使用、修改和重新分发。",
+    "acknowledgeButton": "Acknowledge"
   },
   "commercialTrial": {
     "title": "商业试用期已过期",
@@ -1812,11 +1814,10 @@
     "proxyNotWorking": "所选代理无法使用，因此未创建配置文件。",
     "proxyPaymentRequired": "所选代理需要付费（402），其订阅可能已过期，因此未创建配置文件。",
     "vpnNotWorking": "所选 VPN 无法使用，因此未创建配置文件。",
-    "camoufoxImportDeprecated": "不再支持导入此类型的配置文件。请改用 Wayfern。",
+    "camoufoxImportDeprecated": "不再支持导入此类型的配置文件。请改用 Chromium。",
     "updateChecksumsUnavailable": "无法验证更新 {{version}}：无法获取其校验和文件。更新未安装，稍后将重试。",
     "updateChecksumMismatch": "下载的更新文件 {{file}} 未通过校验和验证，已被丢弃。请重试。",
     "nameCannotBeEmpty": "名称不能为空",
-    "wayfernVersionNotAvailable": "Wayfern 版本 {{requested}} 无法下载。当前版本为 {{current}}。",
     "profileNameExists": "名为“{{name}}”的配置文件已存在",
     "importSourceNotFound": "源路径不存在",
     "importNoItems": "未选择要导入的内容",
@@ -1833,7 +1834,7 @@
     "proxySidecarVersionMismatch": "部分 Duckling Browser 文件来自不同版本。请重新安装最新更新；你的配置文件将保持安全。",
     "updateProfilesRunning": "安装更新前，请停止所有正在运行的配置文件。",
     "updatePreparationFailed": "Duckling Browser 无法安全停止后台网络进程。请重启电脑，然后再次尝试更新。",
-    "wayfernTermsRequired": "请先接受 Wayfern 条款与条件，再启动 MCP 服务器。",
+    "browserTermsRequired": "请先接受浏览器条款与条件，再启动 MCP 服务器。",
     "apiPortUnavailable": "API 服务器找不到可用端口。",
     "mcpServerAlreadyRunning": "MCP 服务器已在运行。",
     "mcpServerNotRunning": "MCP 服务器未运行。",
@@ -1841,7 +1842,8 @@
     "mcpConfigurationUnavailable": "MCP 服务器配置不可用。请重启服务器后重试。",
     "mcpAgentUnknown": "不支持此 MCP 客户端。",
     "mcpAgentInstallFailed": "无法将 Duckling Browser 添加到 MCP 客户端：{{detail}}",
-    "mcpAgentRemoveFailed": "无法从 MCP 客户端移除 Duckling Browser：{{detail}}"
+    "mcpAgentRemoveFailed": "无法从 MCP 客户端移除 Duckling Browser：{{detail}}",
+    "chromiumVersionNotAvailable": "Chromium 版本 {{requested}} 无法下载。当前版本为 {{current}}。"
   },
   "rail": {
     "profiles": "配置文件",
@@ -1976,7 +1978,7 @@
     "steps": {
       "createProfile": {
         "title": "创建你的第一个配置文件",
-        "content": "点击这里创建您的第一个配置文件。浏览器请选择 Wayfern——推荐的、具备指纹保护的 Chromium。"
+        "content": "点击这里创建您的第一个配置文件。浏览器请选择 Chromium——推荐的、具备指纹保护的 Chromium。"
       },
       "dnsBlocking": {
         "title": "DNS 拦截",
@@ -2009,7 +2011,7 @@
     },
     "ready": {
       "title": "正在准备",
-      "descDownloading": "正在下载你的第一个浏览器（Wayfern）。此一次性设置在后台运行——请稍候。",
+      "descDownloading": "正在下载你的第一个浏览器（Chromium）。此一次性设置在后台运行——请稍候。",
       "descReady": "你的浏览器已就绪。来创建你的第一个配置文件吧。",
       "cta": "创建我的第一个配置文件",
       "downloading": "正在下载…",
@@ -2049,11 +2051,7 @@
       "commercialDesc": "在 2 周评估期内免费。之后需要付费方案，这有助于本项目的持续维护与发展。"
     }
   },
-  "wayfernBlocked": {
-    "title": "浏览器自动化已暂停",
-    "description": "您的账户暂时被限制使用 Pro 浏览器功能，通常是因为同时在多台设备上登录。请退出其他设备的登录，然后重新启动配置文件即可恢复。"
-  },
-  "wayfernConfigDialog": {
+  "browserConfigDialog": {
     "titleView": "查看指纹设置 - {{name}} ({{browser}})",
     "titleConfigure": "配置指纹设置 - {{name}} ({{browser}})",
     "invalidFingerprint": "无效的指纹配置",
@@ -2062,7 +2060,7 @@
     "unknownError": "发生未知错误"
   },
   "cookieCopy": {
-    "noOtherTargets": "未选择其他 Wayfern 配置文件"
+    "noOtherTargets": "未选择其他 Chromium 配置文件"
   },
   "about": {
     "title": "关于",

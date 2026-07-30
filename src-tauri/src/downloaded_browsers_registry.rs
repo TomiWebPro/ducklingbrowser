@@ -921,9 +921,9 @@ impl DownloadedBrowsersRegistry {
       }
     }
 
-    // Check if GeoIP database is missing for Wayfern profiles
+    // Check if GeoIP database is missing for profiles
     if self.geoip_downloader.check_missing_geoip_database()? {
-      log::info!("GeoIP database is missing for Wayfern profiles, downloading...");
+      log::info!("GeoIP database is missing for profiles, downloading...");
 
       match self
         .geoip_downloader
@@ -1273,7 +1273,7 @@ pub async fn ensure_active_browsers_downloaded(
   let version_manager = crate::browser_version_manager::BrowserVersionManager::instance();
   let mut downloaded = Vec::new();
 
-  for browser in &["wayfern"] {
+  for browser in &["chromium"] {
     // Check if any version is already downloaded
     let existing = registry.get_downloaded_versions(browser);
     if !existing.is_empty() {
@@ -1285,13 +1285,13 @@ pub async fn ensure_active_browsers_downloaded(
     }
     log::info!("ensure_active: No {browser} versions found, will download");
 
-    // Resolve the version to download. For wayfern, only the currently
+    // Resolve the version to download. For chromium, only the currently
     // published version is downloadable, so ask the API fresh — the release-type
     // cache can be stale right after a new version is published, and the
     // downloader rejects requests for versions that are no longer available.
-    let version = if *browser == "wayfern" {
+    let version = if *browser == "chromium" {
       match crate::api_client::ApiClient::instance()
-        .fetch_wayfern_version_with_caching(true)
+        .fetch_chromium_version_with_caching(true)
         .await
       {
         Ok(info) => info.version,
@@ -1325,7 +1325,7 @@ pub async fn ensure_active_browsers_downloaded(
     // Retry transient failures a few times. Each attempt is wrapped in an overall
     // timeout so that a hang anywhere in the download pipeline (version resolution,
     // a stalled stream, extraction) cannot block the next browser forever. This is
-    // the core of the bug fix: Wayfern downloads proceed independently.
+    // the core of the bug fix: browser downloads proceed independently.
     const MAX_ATTEMPTS: u32 = 3;
     const ATTEMPT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(600);
     let mut succeeded = false;

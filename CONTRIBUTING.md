@@ -92,7 +92,7 @@ codeql database analyze /tmp/codeql-rust --format=sarifv2.1.0 --output=/tmp/rust
 - **Backend**: Tauri (Rust), `src-tauri/src/`
 - **Proxy Worker**: Detached process for proxy tunneling, `src-tauri/src/bin/proxy_server.rs`
 - **Sync**: Cloud sync via S3-compatible storage, `src-tauri/src/sync/`, `duckling-sync/`
-- **Browsers**: Wayfern (Chromium-based anti-detect)
+- **Browsers**: Chromium (anti-detect)
 
 ## Getting Help
 

@@ -284,9 +284,9 @@
       "stopFollower": "Đang đi theo hành động của {{leaderName}}",
       "desyncedTooltip": "Đồng bộ thất bại tại {{url}}",
       "paidFeature": "Trình đồng bộ là tính năng trả phí",
-      "wayfernOnly": "Chỉ hồ sơ Wayfern mới có thể đồng bộ",
+      "chromiumOnly": "Chỉ hồ sơ Chromium mới có thể đồng bộ",
       "selectFollowers": "Chọn hồ sơ đi theo",
-      "selectFollowersDesc": "Chọn các hồ sơ sẽ phản chiếu hành động của hồ sơ dẫn đầu. Chỉ hồ sơ Wayfern đã dừng mới có thể chọn.",
+      "selectFollowersDesc": "Chọn các hồ sơ sẽ phản chiếu hành động của hồ sơ dẫn đầu. Chỉ hồ sơ Chromium đã dừng mới có thể chọn.",
       "leader": "Dẫn đầu",
       "follower": "Đi theo",
       "startSession": "Bắt đầu phiên đồng bộ",
@@ -352,7 +352,7 @@
     "antiDetect": {
       "title": "Trình duyệt chống phát hiện",
       "description": "Chọn trình duyệt có khả năng chống phát hiện",
-      "chromium": "Wayfern",
+      "chromium": "Chromium",
       "badge": "Trình duyệt chống phát hiện"
     },
     "regular": {
@@ -387,7 +387,7 @@
       "upgradeAvailable": "Đã có phiên bản mới hơn ({{version}}) của {{browser}}."
     },
     "chromiumLabel": "Chromium",
-    "chromiumSubtitle": "Dựa trên Wayfern",
+    "chromiumSubtitle": "Dựa trên Chromium",
     "platformUnavailable": "{{browser}} chưa khả dụng trên nền tảng của bạn.",
     "passwordProtect": {
       "label": "Bảo vệ hồ sơ bằng mật khẩu",
@@ -739,7 +739,7 @@
     "tokenCopied": "Đã sao chép token",
     "mcpEnableLabel": "Bật máy chủ MCP (Model Context Protocol)",
     "mcpEnableDescription": "Cho phép trợ lý AI như Claude Desktop điều khiển trình duyệt.",
-    "mcpAcceptTermsFirst": "(Chấp nhận điều khoản Wayfern trong Cài đặt trước)",
+    "mcpAcceptTermsFirst": "(Chấp nhận điều khoản trình duyệt trong Cài đặt trước)",
     "mcpStarted": "Máy chủ MCP đã khởi động trên cổng {{port}}",
     "mcpStopped": "Máy chủ MCP đã dừng",
     "mcpToggleFailed": "Bật/tắt máy chủ MCP thất bại",
@@ -758,8 +758,8 @@
     "error": "Nhập profile thất bại"
   },
   "config": {
-    "wayfern": {
-      "title": "Cấu hình Wayfern",
+    "chromium": {
+      "title": "Cấu hình Chromium",
       "fingerprint": {
         "title": "Vân tay",
         "randomize": "Tạo ngẫu nhiên khi khởi chạy",
@@ -812,7 +812,7 @@
       "sourcePlaceholder": "Chọn profile để sao chép cookie từ",
       "running": "(đang chạy)",
       "targetProfiles": "Profile đích ({{count}})",
-      "noOtherTargets": "Chưa chọn profile Wayfern nào khác",
+      "noOtherTargets": "Chưa chọn profile Chromium nào khác",
       "selectSourceFirst": "Hãy chọn profile nguồn trước",
       "selectionStatus": "(đã chọn {{selected}}/{{total}})",
       "searchPlaceholder": "Tìm kiếm tên miền hoặc cookie...",
@@ -941,7 +941,7 @@
     "serverError": "Lỗi máy chủ. Vui lòng thử lại sau.",
     "unknownError": "Đã xảy ra lỗi không xác định. Vui lòng thử lại.",
     "noProfilesForUrl": "Không có profile nào. Vui lòng tạo profile trước khi mở URL.",
-    "updateWayfernConfigFailed": "Cập nhật cấu hình wayfern thất bại: {{error}}",
+    "updateBrowserConfigFailed": "Cập nhật cấu hình trình duyệt thất bại: {{error}}",
     "createProfileFailed": "Tạo profile thất bại: {{error}}",
     "launchBrowserFailed": "Khởi chạy trình duyệt thất bại: {{error}}",
     "cannotDeleteRunningProfile": "Không thể xóa profile khi trình duyệt đang chạy. Vui lòng dừng trình duyệt trước.",
@@ -949,7 +949,7 @@
     "renameProfileFailed": "Đổi tên profile thất bại: {{error}}",
     "killBrowserFailed": "Dừng trình duyệt thất bại: {{error}}",
     "deleteSelectedProfilesFailed": "Xóa các profile đã chọn thất bại: {{error}}",
-    "cookieCopyUnsupportedBrowser": "Sao chép cookie chỉ hoạt động với profile Wayfern",
+    "cookieCopyUnsupportedBrowser": "Sao chép cookie chỉ hoạt động với profile Chromium",
     "updateSyncSettingsFailed": "Cập nhật cài đặt đồng bộ thất bại",
     "cloneProfileFailed": "Nhân bản profile thất bại: {{error}}",
     "loadSupportedBrowsersFailed": "Tải danh sách trình duyệt hỗ trợ thất bại",
@@ -966,7 +966,7 @@
     "setProfilePasswordFailed": "Đặt mật khẩu profile thất bại: {{error}}"
   },
   "browser": {
-    "wayfern": "Wayfern"
+    "chromium": "Chromium"
   },
   "fingerprint": {
     "crossOsWarning": "Giả mạo vân tay cho hệ điều hành khác kém tin cậy hơn vì không thể mô phỏng hoàn hảo tất cả thành phần nền tảng. Hãy sử dụng thận trọng.",
@@ -1206,7 +1206,7 @@
       "cannotWhileRunning": "Dừng profile trước khi thay đổi mật khẩu."
     },
     "fingerprint": {
-      "notSupported": "Chỉnh sửa vân tay chỉ khả dụng cho profile Wayfern.",
+      "notSupported": "Chỉnh sửa vân tay chỉ khả dụng cho profile Chromium.",
       "lockedTitle": "Xem và chỉnh sửa vân tay là tính năng Pro",
       "lockedDescription": "Thông tin thiết bị của bạn được bảo vệ trong mọi profile. Việc xem và chỉnh sửa vân tay của profile yêu cầu gói trả phí đang hoạt động."
     },
@@ -1542,15 +1542,17 @@
     "badgeUnavailable": "Không khả dụng",
     "openButton": "Mở"
   },
-  "wayfernTerms": {
-    "title": "Điều khoản và điều kiện Wayfern",
-    "description": "Trước khi sử dụng Duckling Browser, bạn phải đọc và đồng ý với Điều khoản và Điều kiện của Wayfern.",
+  "browserTerms": {
+    "title": "Trình duyệt",
+    "description": "Chromium là phần mềm mã nguồn mở được cấp phép theo BSD.",
     "reviewLabel": "Vui lòng xem lại Điều khoản và Điều kiện tại:",
     "agreeNotice": "Bằng cách nhấn \"Tôi chấp nhận\", bạn đồng ý bị ràng buộc bởi các điều khoản này.",
     "acceptButton": "Tôi chấp nhận",
     "acceptSuccess": "Chấp nhận điều khoản thành công",
     "acceptFailed": "Chấp nhận điều khoản thất bại",
-    "tryAgain": "Vui lòng thử lại"
+    "tryAgain": "Vui lòng thử lại",
+    "body": "Duckling Browser sử dụng công cụ trình duyệt web Chromium. Chromium được phân phối theo giấy phép BSD, cho phép sử dụng, sửa đổi và phân phối lại miễn phí.",
+    "acknowledgeButton": "Acknowledge"
   },
   "commercialTrial": {
     "title": "Thời gian dùng thử thương mại đã hết",
@@ -1812,11 +1814,10 @@
     "proxyNotWorking": "Proxy đã chọn không hoạt động, nên profile chưa được tạo.",
     "proxyPaymentRequired": "Proxy đã chọn yêu cầu thanh toán (402) — gói đăng ký của nó có thể đã hết hạn — nên profile chưa được tạo.",
     "vpnNotWorking": "VPN đã chọn không hoạt động, nên profile chưa được tạo.",
-    "camoufoxImportDeprecated": "Việc nhập loại hồ sơ này không còn được hỗ trợ. Vui lòng sử dụng Wayfern thay thế.",
+    "camoufoxImportDeprecated": "Việc nhập loại hồ sơ này không còn được hỗ trợ. Vui lòng sử dụng Chromium thay thế.",
     "updateChecksumsUnavailable": "Không thể xác minh bản cập nhật {{version}} vì không thể tải tệp checksum. Bản cập nhật chưa được cài đặt; sẽ thử lại sau.",
     "updateChecksumMismatch": "Tệp cập nhật đã tải xuống {{file}} không vượt qua kiểm tra checksum và đã bị loại bỏ. Vui lòng thử lại.",
     "nameCannotBeEmpty": "Tên không được để trống",
-    "wayfernVersionNotAvailable": "Phiên bản Wayfern {{requested}} không có sẵn để tải xuống. Phiên bản hiện tại là {{current}}.",
     "profileNameExists": "Hồ sơ có tên \"{{name}}\" đã tồn tại",
     "importSourceNotFound": "Đường dẫn nguồn không tồn tại",
     "importNoItems": "Chưa chọn mục nào để nhập",
@@ -1833,7 +1834,7 @@
     "proxySidecarVersionMismatch": "Một số tệp Duckling Browser thuộc các phiên bản khác nhau. Hãy cài đặt lại bản cập nhật mới nhất; hồ sơ của bạn vẫn được giữ an toàn.",
     "updateProfilesRunning": "Hãy dừng tất cả hồ sơ đang chạy trước khi cài đặt bản cập nhật.",
     "updatePreparationFailed": "Duckling Browser không thể dừng an toàn một tiến trình mạng chạy nền. Hãy khởi động lại máy tính rồi thử cập nhật lại.",
-    "wayfernTermsRequired": "Hãy chấp nhận Điều khoản và Điều kiện của Wayfern trước khi khởi động máy chủ MCP.",
+    "browserTermsRequired": "Hãy chấp nhận điều khoản trình duyệt trước khi khởi động máy chủ MCP.",
     "apiPortUnavailable": "Máy chủ API không tìm thấy cổng khả dụng.",
     "mcpServerAlreadyRunning": "Máy chủ MCP đang chạy.",
     "mcpServerNotRunning": "Máy chủ MCP chưa chạy.",
@@ -1841,7 +1842,8 @@
     "mcpConfigurationUnavailable": "Cấu hình máy chủ MCP không khả dụng. Hãy khởi động lại máy chủ rồi thử lại.",
     "mcpAgentUnknown": "Ứng dụng MCP này không được hỗ trợ.",
     "mcpAgentInstallFailed": "Không thể thêm Duckling Browser vào ứng dụng MCP: {{detail}}",
-    "mcpAgentRemoveFailed": "Không thể xóa Duckling Browser khỏi ứng dụng MCP: {{detail}}"
+    "mcpAgentRemoveFailed": "Không thể xóa Duckling Browser khỏi ứng dụng MCP: {{detail}}",
+    "chromiumVersionNotAvailable": "Phiên bản Chromium {{requested}} không có sẵn để tải xuống. Phiên bản hiện tại là {{current}}."
   },
   "rail": {
     "profiles": "Profile",
@@ -1976,7 +1978,7 @@
     "steps": {
       "createProfile": {
         "title": "Tạo hồ sơ đầu tiên của bạn",
-        "content": "Nhấn vào đây để tạo hồ sơ đầu tiên của bạn. Chọn Wayfern làm trình duyệt — Chromium được khuyến nghị, có bảo vệ vân tay."
+        "content": "Nhấn vào đây để tạo hồ sơ đầu tiên của bạn. Chọn Chromium làm trình duyệt — Chromium được khuyến nghị, có bảo vệ vân tay."
       },
       "dnsBlocking": {
         "title": "Chặn DNS",
@@ -2009,7 +2011,7 @@
     },
     "ready": {
       "title": "Đang thiết lập",
-      "descDownloading": "Đang tải trình duyệt đầu tiên của bạn (Wayfern). Quá trình thiết lập một lần này chạy ngầm — vui lòng chờ.",
+      "descDownloading": "Đang tải trình duyệt đầu tiên của bạn (Chromium). Quá trình thiết lập một lần này chạy ngầm — vui lòng chờ.",
       "descReady": "Trình duyệt của bạn đã sẵn sàng. Hãy tạo hồ sơ đầu tiên của bạn.",
       "cta": "Tạo hồ sơ đầu tiên của tôi",
       "downloading": "Đang tải xuống…",
@@ -2049,11 +2051,7 @@
       "commercialDesc": "Miễn phí dùng thử 2 tuần. Sau đó, gói trả phí giúp dự án được duy trì và phát triển."
     }
   },
-  "wayfernBlocked": {
-    "title": "Tự động hóa trình duyệt đã tạm dừng",
-    "description": "Tài khoản của bạn tạm thời bị hạn chế các tính năng Pro của trình duyệt, thường do đăng nhập trên nhiều thiết bị cùng lúc. Hãy đăng xuất khỏi các thiết bị khác rồi khởi chạy lại profile để khôi phục."
-  },
-  "wayfernConfigDialog": {
+  "browserConfigDialog": {
     "titleView": "Xem cài đặt vân tay - {{name}} ({{browser}})",
     "titleConfigure": "Cấu hình cài đặt vân tay - {{name}} ({{browser}})",
     "invalidFingerprint": "Cấu hình vân tay không hợp lệ",
@@ -2062,7 +2060,7 @@
     "unknownError": "Đã xảy ra lỗi không xác định"
   },
   "cookieCopy": {
-    "noOtherTargets": "Chưa chọn profile Wayfern nào khác"
+    "noOtherTargets": "Chưa chọn profile Chromium nào khác"
   },
   "about": {
     "title": "Giới thiệu",

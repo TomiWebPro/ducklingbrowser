@@ -14,7 +14,7 @@ use tokio::sync::Mutex as AsyncMutex;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct WayfernConfig {
+pub struct ChromiumConfig {
   #[serde(default)]
   pub fingerprint: Option<String>,
   #[serde(default)]
@@ -49,7 +49,7 @@ pub struct WayfernConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(non_snake_case)]
-pub struct WayfernLaunchResult {
+pub struct ChromiumLaunchResult {
   pub id: String,
   #[serde(alias = "process_id")]
   pub processId: Option<u32>,
@@ -57,15 +57,15 @@ pub struct WayfernLaunchResult {
   pub profilePath: Option<String>,
   pub url: Option<String>,
   pub cdp_port: Option<u16>,
-  /// The fingerprint Wayfern actually applied, echoed back by
-  /// Wayfern.setFingerprint. It may be UPGRADED from the stored fingerprint
+  /// The fingerprint actually applied, echoed back by
+  /// the CDP fingerprint response. It may be UPGRADED from the stored fingerprint
   /// (e.g. when the stored one targets an older browser version). Internal
   /// only — the caller persists it to the profile; never sent to the frontend.
   #[serde(default, skip_serializing)]
   pub used_fingerprint: Option<String>,
 }
 
-struct WayfernInstance {
+struct ChromiumInstance {
   id: String,
   process_id: Option<u32>,
   profile_path: Option<String>,
@@ -73,12 +73,12 @@ struct WayfernInstance {
   cdp_port: Option<u16>,
 }
 
-struct WayfernManagerInner {
-  instances: HashMap<String, WayfernInstance>,
+struct ChromiumManagerInner {
+  instances: HashMap<String, ChromiumInstance>,
 }
 
-pub struct WayfernManager {
-  inner: Arc<AsyncMutex<WayfernManagerInner>>,
+pub struct ChromiumManager {
+  inner: Arc<AsyncMutex<ChromiumManagerInner>>,
   http_client: Client,
 }
 
@@ -90,10 +90,10 @@ struct CdpTarget {
   websocket_debugger_url: Option<String>,
 }
 
-impl WayfernManager {
+impl ChromiumManager {
   fn new() -> Self {
     Self {
-      inner: Arc::new(AsyncMutex::new(WayfernManagerInner {
+      inner: Arc::new(AsyncMutex::new(ChromiumManagerInner {
         instances: HashMap::new(),
       })),
       // CDP is always on loopback. Disable env/system proxies so a Windows
@@ -103,22 +103,17 @@ impl WayfernManager {
         .timeout(Duration::from_secs(2))
         .no_proxy()
         .build()
-        .expect("Failed to build reqwest client for wayfern_manager"),
+        .expect("Failed to build reqwest client"),
     }
   }
 
-  pub fn instance() -> &'static WayfernManager {
-    &WAYFERN_MANAGER
+  pub fn instance() -> &'static ChromiumManager {
+    &CHROMIUM_MANAGER
   }
 
   #[allow(dead_code)]
   pub fn get_profiles_dir(&self) -> PathBuf {
     crate::app_dirs::profiles_dir()
-  }
-
-  #[allow(dead_code)]
-  fn get_binaries_dir(&self) -> PathBuf {
-    crate::app_dirs::binaries_dir()
   }
 
   async fn find_free_port() -> Result<u16, Box<dyn std::error::Error + Send + Sync>> {
@@ -128,36 +123,16 @@ impl WayfernManager {
     Ok(port)
   }
 
-  /// Normalize fingerprint data from Wayfern CDP format to our storage format.
-  /// Wayfern returns fields like fonts, webglParameters as JSON strings which we keep as-is.
-  fn normalize_fingerprint(fingerprint: serde_json::Value) -> serde_json::Value {
-    // Our storage format matches what Wayfern returns:
-    // - fonts, plugins, mimeTypes, voices are JSON strings
-    // - webglParameters, webgl2Parameters, etc. are JSON strings
-    // The form displays them as JSON text areas, so no conversion needed.
-    fingerprint
-  }
-
-  /// Denormalize fingerprint data from our storage format to Wayfern CDP format.
-  /// Wayfern expects certain fields as JSON strings.
-  fn denormalize_fingerprint(fingerprint: serde_json::Value) -> serde_json::Value {
-    // Our storage format matches what Wayfern expects:
-    // - fonts, plugins, mimeTypes, voices are JSON strings
-    // - webglParameters, webgl2Parameters, etc. are JSON strings
-    // So no conversion is needed
-    fingerprint
-  }
-
   /// Derive the on-screen window size Chromium should open at, from the stored
-  /// fingerprint. `Wayfern.setFingerprint` only spoofs what the page *reports*
+  /// fingerprint. The CDP fingerprint only spoofs what the page *reports*
   /// for `windowOuterWidth`/`screenWidth`/etc.; it does not move or resize the
   /// real top-level window. Without `--window-size` the OS window keeps
   /// Chromium's default, so the visible window contradicts the reported
   /// dimensions — a detectable mismatch. We pass `--window-size` so the actual
   /// window matches the fingerprint.
   ///
-  /// Keys are the camelCase fields Wayfern uses in its fingerprint
-  /// (`windowOuterWidth`, `screenAvailWidth`, …) — NOT the dotted
+  /// Keys are the camelCase fields used in the fingerprint
+  /// (`windowOuterWidth`, `screenAvailWidth`, …).
   /// Preference order, matching how the fingerprint
   /// describes the window:
   /// 1. `windowOuterWidth` / `windowOuterHeight` — the real window size.
@@ -172,7 +147,7 @@ impl WayfernManager {
     let fp = parsed.get("fingerprint").unwrap_or(&parsed);
     let obj = fp.as_object()?;
 
-    // Accept both numeric and stringified numbers (Wayfern emits numbers, but a
+    // Accept both numeric and stringified numbers (CDP emits numbers, but a
     // CDP echo or older saved fingerprint may stringify them).
     let read = |key: &str| -> Option<u32> {
       let v = obj.get(key)?;
@@ -361,7 +336,7 @@ impl WayfernManager {
           );
         }
         log::info!(
-          "Applied geolocation to Wayfern fingerprint: {} ({})",
+          "Applied geolocation to fingerprint: {} ({})",
           geo.locale.as_string(),
           geo.timezone
         );
@@ -429,129 +404,13 @@ impl WayfernManager {
 
   /// Generate a fingerprint for `config`, returning the fingerprint JSON and
   /// whether fresh geolocation was applied to it. Callers must only stamp
-  /// `geo_proxy_signature` when geolocation succeeded: the base fingerprint
-  /// comes from a headless Wayfern launched without a proxy, so on failure it
-  /// silently carries the HOST timezone/locale — stamping the signature then
-  /// would tell the launch-time refresh the location is already correct for
-  /// this proxy and permanently disable the one path that can repair it.
+  /// `geo_proxy_signature` when geolocation succeeded.
   pub async fn generate_fingerprint_config(
     &self,
     _app_handle: &AppHandle,
-    profile: &BrowserProfile,
-    config: &WayfernConfig,
+    _profile: &BrowserProfile,
+    config: &ChromiumConfig,
   ) -> Result<(String, bool), Box<dyn std::error::Error + Send + Sync>> {
-    let executable_path = BrowserRunner::instance()
-      .get_browser_executable_path(profile)
-      .map_err(|e| format!("Failed to get Wayfern executable path: {e}"))?;
-
-    let port = Self::find_free_port().await?;
-    log::info!("Launching headless Wayfern on port {port} for fingerprint generation");
-
-    let temp_profile_dir =
-      std::env::temp_dir().join(format!("wayfern_fingerprint_{}", uuid::Uuid::new_v4()));
-    std::fs::create_dir_all(&temp_profile_dir)?;
-
-    let mut cmd = TokioCommand::new(&executable_path);
-    cmd
-      .arg("--headless=new")
-      .arg(format!("--remote-debugging-port={port}"))
-      .arg("--remote-debugging-address=127.0.0.1")
-      .arg(format!("--user-data-dir={}", temp_profile_dir.display()))
-      .arg("--no-first-run")
-      .arg("--no-default-browser-check")
-      .arg("--disable-background-mode")
-      .arg("--use-mock-keychain")
-      .arg("--password-store=basic")
-      .arg("--disable-features=DialMediaRouteProvider");
-
-    #[cfg(target_os = "linux")]
-    cmd
-      .arg("--no-sandbox")
-      .arg("--disable-setuid-sandbox")
-      .arg("--disable-dev-shm-usage");
-
-    cmd.stdout(Stdio::null()).stderr(Stdio::piped());
-
-    let child = cmd.spawn().map_err(|e| {
-      // OS error 14001 = SxS / missing Visual C++ Redistributable
-      let hint = if e.raw_os_error() == Some(14001) {
-        ". This usually means the Visual C++ Redistributable is not installed. \
-         Download it from https://aka.ms/vs/17/release/vc_redist.x64.exe"
-      } else {
-        ""
-      };
-      format!("Failed to spawn headless Wayfern: {e}{hint}")
-    })?;
-    let child_id = child.id();
-
-    let cleanup = || async {
-      if let Some(id) = child_id {
-        #[cfg(unix)]
-        {
-          use nix::sys::signal::{kill, Signal};
-          use nix::unistd::Pid;
-          let _ = kill(Pid::from_raw(id as i32), Signal::SIGTERM);
-        }
-        #[cfg(windows)]
-        {
-          use std::os::windows::process::CommandExt;
-          const CREATE_NO_WINDOW: u32 = 0x08000000;
-          let _ = std::process::Command::new("taskkill")
-            .args(["/PID", &id.to_string(), "/F"])
-            .creation_flags(CREATE_NO_WINDOW)
-            .output();
-        }
-      }
-      let _ = std::fs::remove_dir_all(&temp_profile_dir);
-    };
-
-    if let Err(e) = self.wait_for_cdp_ready(port).await {
-      // Try to capture stderr from the failed process for diagnostics
-      let stderr_output = if let Some(id) = child_id {
-        // Check if process is still running
-        let is_running = sysinfo::System::new_with_specifics(
-          sysinfo::RefreshKind::nothing().with_processes(sysinfo::ProcessRefreshKind::nothing()),
-        )
-        .process(sysinfo::Pid::from(id as usize))
-        .is_some();
-
-        if !is_running {
-          // Process exited — try to read its stderr
-          String::from("(process exited before CDP became ready)")
-        } else {
-          String::from("(process still running but not responding on CDP)")
-        }
-      } else {
-        String::new()
-      };
-
-      log::error!(
-        "Fingerprint-generation Wayfern (headless, pid={child_id:?}) never became CDP-ready: {e}. {stderr_output}"
-      );
-      cleanup().await;
-      return Err(e);
-    }
-
-    let targets = match self.get_cdp_targets(port).await {
-      Ok(t) => t,
-      Err(e) => {
-        cleanup().await;
-        return Err(e);
-      }
-    };
-
-    let page_target = targets
-      .iter()
-      .find(|t| t.target_type == "page" && t.websocket_debugger_url.is_some());
-
-    let ws_url = match page_target {
-      Some(target) => target.websocket_debugger_url.as_ref().unwrap().clone(),
-      None => {
-        cleanup().await;
-        return Err("No page target found for CDP".into());
-      }
-    };
-
     let os = config
       .os
       .as_deref()
@@ -563,109 +422,69 @@ impl WayfernManager {
         "windows"
       });
 
-    // Include wayfern token if available (enables cross-OS fingerprinting for paid users)
-    let wayfern_token = crate::cloud_auth::CLOUD_AUTH.get_wayfern_token().await;
-    let mut refresh_params = json!({ "operatingSystem": os });
-    if let Some(ref token) = wayfern_token {
-      refresh_params
-        .as_object_mut()
-        .unwrap()
-        .insert("wayfernToken".to_string(), json!(token));
-    }
+    // Generate fingerprint entirely client-side — no need for a headless browser
+    let mut fingerprint: serde_json::Value =
+      serde_json::from_str(&crate::fingerprint_injector::FingerprintInjector::generate_fingerprint(os))
+        .map_err(|e| format!("Failed to parse generated fingerprint: {e}"))?;
 
-    let refresh_result = self
-      .send_cdp_command(&ws_url, "Wayfern.refreshFingerprint", refresh_params)
-      .await;
-
-    if let Err(e) = refresh_result {
-      cleanup().await;
-      return Err(format!("Failed to refresh fingerprint: {e}").into());
-    }
-
-    let get_result = self
-      .send_cdp_command(&ws_url, "Wayfern.getFingerprint", json!({}))
-      .await;
-
-    let (fingerprint, geolocation_applied) = match get_result {
-      Ok(result) => {
-        // Wayfern.getFingerprint returns { fingerprint: {...} }
-        // We need to extract just the fingerprint object
-        let fp = result.get("fingerprint").cloned().unwrap_or(result);
-        // Normalize the fingerprint: convert JSON string fields to proper types
-        let mut normalized = Self::normalize_fingerprint(fp);
-
-        // reqwest's SOCKS connector (hyper-util) corrupts its parse buffer
-        // when a proxy splits a handshake reply across TCP segments, so a
-        // socks upstream here can fail even though the proxy is healthy.
-        // Route the geolocation lookup through a temporary local duckling-proxy
-        // worker — the same path the browser itself uses — and fall back to
-        // the upstream URL only if the worker can't start. Two exclusions:
-        // no worker when geolocation won't fetch through the proxy at all
-        // (disabled, or a fixed geoip IP), and none for loopback socks URLs —
-        // launch-time callers pass the already-running local worker's
-        // socks5://127.0.0.1 URL, whose single-segment replies don't trigger
-        // the bug, so chaining a second worker would only add latency.
-        let needs_proxied_geo_fetch = !matches!(
-          config.geoip.as_ref(),
-          Some(serde_json::Value::Bool(false)) | Some(serde_json::Value::String(_))
-        );
-        let remote_socks_upstream = config
-          .proxy
-          .as_deref()
-          .filter(|url| Self::is_remote_socks_url(url));
-        let (geo_proxy, temp_worker_id) = match remote_socks_upstream {
-          Some(url) if needs_proxied_geo_fetch => {
-            match crate::proxy_runner::start_proxy_process(Some(url.to_string()), None)
-              .await
-              .map_err(|e| e.to_string())
-            {
-              Ok(worker) => {
-                let local_url = format!("http://127.0.0.1:{}", worker.local_port.unwrap_or(0));
-                (Some(local_url), Some(worker.id))
-              }
-              Err(e) => {
-                log::warn!(
-                  "Could not start local proxy worker for geolocation ({e}); using the socks upstream directly"
-                );
-                (config.proxy.clone(), None)
-              }
-            }
+    // reqwest's SOCKS connector (hyper-util) corrupts its parse buffer
+    // when a proxy splits a handshake reply across TCP segments, so a
+    // socks upstream here can fail even though the proxy is healthy.
+    // Route the geolocation lookup through a temporary local duckling-proxy
+    // worker — the same path the browser itself uses — and fall back to
+    // the upstream URL only if the worker can't start. Two exclusions:
+    // no worker when geolocation won't fetch through the proxy at all
+    // (disabled, or a fixed geoip IP), and none for loopback socks URLs.
+    let needs_proxied_geo_fetch = !matches!(
+      config.geoip.as_ref(),
+      Some(serde_json::Value::Bool(false)) | Some(serde_json::Value::String(_))
+    );
+    let remote_socks_upstream = config
+      .proxy
+      .as_deref()
+      .filter(|url| Self::is_remote_socks_url(url));
+    let (geo_proxy, temp_worker_id) = match remote_socks_upstream {
+      Some(url) if needs_proxied_geo_fetch => {
+        match crate::proxy_runner::start_proxy_process(Some(url.to_string()), None)
+          .await
+          .map_err(|e| e.to_string())
+        {
+          Ok(worker) => {
+            let local_url = format!("http://127.0.0.1:{}", worker.local_port.unwrap_or(0));
+            (Some(local_url), Some(worker.id))
           }
-          _ => (config.proxy.clone(), None),
-        };
-
-        // Apply timezone/geolocation for the proxy this fingerprint is being
-        // generated against. Shared with the launch-time location refresh.
-        let geolocation_applied =
-          Self::apply_geolocation(&mut normalized, geo_proxy.as_deref(), config.geoip.as_ref())
-            .await;
-
-        if let Some(worker_id) = temp_worker_id {
-          let _ = crate::proxy_runner::stop_proxy_process(&worker_id).await;
+          Err(e) => {
+            log::warn!(
+              "Could not start local proxy worker for geolocation ({e}); using the socks upstream directly"
+            );
+            (config.proxy.clone(), None)
+          }
         }
-
-        (normalized, geolocation_applied)
       }
-      Err(e) => {
-        cleanup().await;
-        return Err(format!("Failed to get fingerprint: {e}").into());
-      }
+      _ => (config.proxy.clone(), None),
     };
 
-    cleanup().await;
+    // Apply timezone/geolocation for the proxy this fingerprint is being
+    // generated against. Shared with the launch-time location refresh.
+    let geolocation_applied =
+      Self::apply_geolocation(&mut fingerprint, geo_proxy.as_deref(), config.geoip.as_ref())
+        .await;
+
+    if let Some(worker_id) = temp_worker_id {
+      let _ = crate::proxy_runner::stop_proxy_process(&worker_id).await;
+    }
 
     let fingerprint_json = serde_json::to_string(&fingerprint)
       .map_err(|e| format!("Failed to serialize fingerprint: {e}"))?;
 
     log::info!(
-      "Generated Wayfern fingerprint for OS: {}, fields: {:?}",
+      "Generated fingerprint for OS: {}, fields: {:?}",
       os,
       fingerprint
         .as_object()
         .map(|o| o.keys().collect::<Vec<_>>())
     );
 
-    // Log timezone/geolocation fields specifically for debugging
     if let Some(obj) = fingerprint.as_object() {
       log::info!(
         "Generated fingerprint - timezone: {:?}, timezoneOffset: {:?}, latitude: {:?}, longitude: {:?}, language: {:?}",
@@ -681,28 +500,28 @@ impl WayfernManager {
   }
 
   #[allow(clippy::too_many_arguments)]
-  pub async fn launch_wayfern(
+  pub async fn launch_chromium(
     &self,
     _app_handle: &AppHandle,
     profile: &BrowserProfile,
     profile_path: &str,
-    config: &WayfernConfig,
+    config: &ChromiumConfig,
     url: Option<&str>,
     proxy_url: Option<&str>,
     ephemeral: bool,
     extension_paths: &[String],
     remote_debugging_port: Option<u16>,
     headless: bool,
-  ) -> Result<WayfernLaunchResult, Box<dyn std::error::Error + Send + Sync>> {
+  ) -> Result<ChromiumLaunchResult, Box<dyn std::error::Error + Send + Sync>> {
     let executable_path = BrowserRunner::instance()
       .get_browser_executable_path(profile)
-      .map_err(|e| format!("Failed to get Wayfern executable path: {e}"))?;
+      .map_err(|e| format!("Failed to get browser executable path: {e}"))?;
 
     let port = match remote_debugging_port {
       Some(p) => p,
       None => Self::find_free_port().await?,
     };
-    log::info!("Launching Wayfern on CDP port {port} (detached)");
+    log::info!("Launching browser on CDP port {port} (detached)");
 
     // Diagnostic: verify critical profile files and test cookie decryption
     {
@@ -827,7 +646,7 @@ impl WayfernManager {
       // agrees with the reported windowOuterWidth/screen dimensions. Anchor at
       // 0,0 so the window also fits within the spoofed screen origin. Skipped in
       // headless mode, where there is no on-screen window.
-      log::info!("Sizing Wayfern window to fingerprint dimensions: {w}x{h}");
+      log::info!("Sizing browser window to fingerprint dimensions: {w}x{h}");
       args.push(format!("--window-size={w},{h}"));
       args.push("--window-position=0,0".to_string());
     }
@@ -851,18 +670,10 @@ impl WayfernManager {
       args.push(format!("--load-extension={}", extension_paths.join(",")));
     }
 
-    // Per-profile window label + distinct frame color so concurrent profile
-    // windows are easy to tell apart. Wayfern reads these in
-    // BrowserView::GetWindowTitle() (label) and BrowserFrameView::GetFrameColor()
-    // (color). The label is the profile name; the color is the user's
-    // window_color when set, otherwise deterministically derived from the
-    // profile id so every profile still gets a stable, distinct color.
+    // Per-profile window label / distinct color
     if !profile.name.is_empty() {
-      args.push(format!("--wayfern-profile-label={}", profile.name));
+      args.push(format!("--profile-label={}", profile.name));
     }
-    // Profiles created before this feature have no stored color; persist the
-    // id-derived one so the info dialog shows the same frame color the window
-    // uses. It's deterministic per id, so no updated_at bump/sync is needed.
     if profile
       .window_color
       .as_deref()
@@ -879,41 +690,10 @@ impl WayfernManager {
       .clone()
       .filter(|c| !c.trim().is_empty())
       .unwrap_or_else(|| derive_profile_color(&profile.id));
-    // Wayfern expects the frame color as bare RRGGBB hex, with no leading '#'
-    // (the stored/user value may include one).
     let profile_color = profile_color.trim().trim_start_matches('#');
-    args.push(format!("--wayfern-profile-color={profile_color}"));
+    args.push(format!("--profile-color={profile_color}"));
 
-    let mut wayfern_token = crate::cloud_auth::CLOUD_AUTH.get_wayfern_token().await;
-    if wayfern_token.is_none()
-      && crate::cloud_auth::CLOUD_AUTH
-        .has_active_paid_subscription()
-        .await
-    {
-      // Brief wait for the background token fetch — when the API is healthy
-      // the token usually lands in well under a second. If api.ducklingbrowser.com
-      // is unreachable we don't want to gate the whole launch on it; the
-      // browser still works without the token (cross-OS fingerprinting just
-      // won't be enabled for this session, and the next launch will pick it
-      // up once the token arrives).
-      log::info!("Wayfern token not ready for paid user, waiting briefly...");
-      for _ in 0..3 {
-        tokio::time::sleep(Duration::from_secs(1)).await;
-        wayfern_token = crate::cloud_auth::CLOUD_AUTH.get_wayfern_token().await;
-        if wayfern_token.is_some() {
-          break;
-        }
-      }
-      if wayfern_token.is_none() {
-        log::warn!(
-          "Wayfern token still unavailable after wait; launching without it (api.ducklingbrowser.com may be unreachable)"
-        );
-      }
-    }
     if let Some(proxy) = proxy_url {
-      // Map the local proxy scheme to the matching PAC directive. SOCKS5 lets
-      // Chromium route UDP (QUIC/WebRTC) and resolve DNS through the proxy;
-      // PROXY is HTTP CONNECT (TCP only). The host:port is the same either way.
       let (pac_directive, host_port) = if let Some(rest) = proxy.strip_prefix("socks5://") {
         ("SOCKS5", rest)
       } else {
@@ -937,10 +717,6 @@ impl WayfernManager {
       .stdin(Stdio::null())
       .stdout(Stdio::null())
       .stderr(Stdio::null());
-    if let Some(ref token) = wayfern_token {
-      command.env("WAYFERN_TOKEN", token);
-      log::info!("Wayfern authorization configured for browser process");
-    }
 
     let child = command
       .spawn()
@@ -951,7 +727,7 @@ impl WayfernManager {
         } else {
           ""
         };
-        format!("Failed to spawn Wayfern: {e}{hint}").into()
+        format!("Failed to spawn browser: {e}{hint}").into()
       })?;
     let process_id = child.id();
     drop(child);
@@ -964,116 +740,64 @@ impl WayfernManager {
     let page_targets: Vec<_> = targets.iter().filter(|t| t.target_type == "page").collect();
     log::info!("Found {} page targets", page_targets.len());
 
-    // Apply fingerprint if configured
+    // Apply fingerprint via CDP commands + JS injection
     let mut used_fingerprint: Option<String> = None;
     if let Some(fingerprint_json) = &config.fingerprint {
       log::info!(
-        "Applying fingerprint to Wayfern browser, fingerprint length: {} chars",
+        "Applying fingerprint via CDP/JS injection, fingerprint length: {} chars",
         fingerprint_json.len()
       );
 
-      let stored_value: serde_json::Value = serde_json::from_str(fingerprint_json)
-        .map_err(|e| format!("Failed to parse stored fingerprint JSON: {e}"))?;
-
-      // The stored fingerprint should be the fingerprint object directly (after our fix in generate_fingerprint_config)
-      // But for backwards compatibility, also handle the wrapped format
-      let mut fingerprint = if stored_value.get("fingerprint").is_some() {
-        // Old format: {"fingerprint": {...}} - extract the inner fingerprint
-        stored_value.get("fingerprint").cloned().unwrap()
-      } else {
-        // New format: fingerprint object directly {...}
-        stored_value.clone()
-      };
-
-      // Add default timezone if not present (for profiles created before timezone was added)
-      if let Some(obj) = fingerprint.as_object_mut() {
-        if !obj.contains_key("timezone") {
-          obj.insert("timezone".to_string(), json!("America/New_York"));
-          log::info!("Added default timezone to fingerprint");
-        }
-        if !obj.contains_key("timezoneOffset") {
-          obj.insert("timezoneOffset".to_string(), json!(300));
-          log::info!("Added default timezoneOffset to fingerprint");
-        }
-      }
-
-      // Denormalize fingerprint for Wayfern CDP (convert arrays/objects to JSON strings)
-      let mut fingerprint_for_cdp = Self::denormalize_fingerprint(fingerprint);
-
-      // Normalize languages: if it's a comma-separated string, convert to array
-      if let Some(obj) = fingerprint_for_cdp.as_object_mut() {
-        if let Some(serde_json::Value::String(s)) = obj.get("languages").cloned() {
-          let arr: Vec<&str> = s.split(',').map(|l| l.trim()).collect();
-          obj.insert("languages".to_string(), json!(arr));
-        }
-      }
-
-      log::info!(
-        "Fingerprint prepared for CDP command, fields: {:?}",
-        fingerprint_for_cdp
-          .as_object()
-          .map(|o| o.keys().collect::<Vec<_>>())
-      );
-
-      // Log timezone and geolocation fields specifically for debugging
-      if let Some(obj) = fingerprint_for_cdp.as_object() {
-        log::info!(
-          "Timezone/Geolocation fields - timezone: {:?}, timezoneOffset: {:?}, latitude: {:?}, longitude: {:?}, language: {:?}, languages: {:?}",
-          obj.get("timezone"),
-          obj.get("timezoneOffset"),
-          obj.get("latitude"),
-          obj.get("longitude"),
-          obj.get("language"),
-          obj.get("languages")
+      // Build and execute CDP commands (Network.setUserAgentOverride, Emulation.*)
+      let cdp_commands =
+        crate::fingerprint_injector::FingerprintInjector::build_cdp_commands(
+          fingerprint_json,
+          config.proxy.as_deref(),
         );
-      }
 
-      // Include wayfern token if available (enables cross-OS fingerprinting for paid users)
-      let wayfern_token = crate::cloud_auth::CLOUD_AUTH.get_wayfern_token().await;
-      let mut fingerprint_params = fingerprint_for_cdp.clone();
-      if let Some(ref token) = wayfern_token {
-        if let Some(obj) = fingerprint_params.as_object_mut() {
-          obj.insert("wayfernToken".to_string(), json!(token));
+      for cmd in &cdp_commands {
+        log::info!("Executing CDP command: {}", cmd.method);
+        // Execute on all available page targets
+        for target in &page_targets {
+          if let Some(ws_url) = &target.websocket_debugger_url {
+            if let Err(e) = self
+              .send_cdp_command(ws_url, &cmd.method, cmd.params.clone())
+              .await
+            {
+              log::warn!("CDP command {} failed: {e}", cmd.method);
+            }
+          }
         }
       }
+
+      // Generate and inject the JS fingerprint override script
+      let injection_script =
+        crate::fingerprint_injector::FingerprintInjector::generate_injection_script(
+          fingerprint_json,
+        );
 
       for target in &page_targets {
         if let Some(ws_url) = &target.websocket_debugger_url {
-          log::info!("Applying fingerprint to page target");
+          log::info!("Injecting fingerprint JS into page target");
           match self
-            .send_cdp_command(ws_url, "Wayfern.setFingerprint", fingerprint_params.clone())
+            .send_cdp_command(
+              ws_url,
+              "Page.addScriptToEvaluateOnNewDocument",
+              json!({ "source": injection_script }),
+            )
             .await
           {
-            Ok(result) => {
-              log::info!("Successfully applied fingerprint to page target");
-              // Wayfern.setFingerprint echoes back the fingerprint it actually
-              // used, which may be UPGRADED from what we sent (e.g. when the
-              // stored fingerprint targets an older browser version). Capture
-              // it once, from the first target that succeeds, so the caller can
-              // persist the upgraded value to the profile.
-              if used_fingerprint.is_none() {
-                // getFingerprint/setFingerprint wrap the object as
-                // { fingerprint: {...} }; tolerate a bare object too.
-                let fp = result.get("fingerprint").cloned().unwrap_or(result);
-                if fp.is_object() {
-                  match serde_json::to_string(&Self::normalize_fingerprint(fp)) {
-                    Ok(s) => used_fingerprint = Some(s),
-                    Err(e) => {
-                      log::warn!("Failed to serialize used fingerprint: {e}")
-                    }
-                  }
-                }
-              }
+            Ok(_result) => {
+              log::info!("Successfully injected fingerprint JS");
+              used_fingerprint = Some(fingerprint_json.clone());
             }
-            Err(e) => log::error!("Failed to apply fingerprint to target: {e}"),
+            Err(e) => log::error!("Failed to inject fingerprint JS: {e}"),
           }
         }
       }
     } else {
       log::warn!("No fingerprint found in config, browser will use default fingerprint");
     }
-
-    // Geolocation is handled internally by the browser binary.
 
     if let Some(url) = url {
       log::info!("Navigating to URL via CDP");
@@ -1089,30 +813,8 @@ impl WayfernManager {
       }
     }
 
-    for target in &page_targets {
-      if let Some(ws_url) = &target.websocket_debugger_url {
-        let _ = self
-          .send_cdp_command(ws_url, "Emulation.clearDeviceMetricsOverride", json!({}))
-          .await;
-        let _ = self
-          .send_cdp_command(
-            ws_url,
-            "Emulation.setFocusEmulationEnabled",
-            json!({ "enabled": false }),
-          )
-          .await;
-        let _ = self
-          .send_cdp_command(
-            ws_url,
-            "Emulation.setEmulatedMedia",
-            json!({ "media": "", "features": [] }),
-          )
-          .await;
-      }
-    }
-
     let id = uuid::Uuid::new_v4().to_string();
-    let instance = WayfernInstance {
+    let instance = ChromiumInstance {
       id: id.clone(),
       process_id,
       profile_path: Some(profile_path.to_string()),
@@ -1123,7 +825,7 @@ impl WayfernManager {
     let mut inner = self.inner.lock().await;
     inner.instances.insert(id.clone(), instance);
 
-    Ok(WayfernLaunchResult {
+    Ok(ChromiumLaunchResult {
       id,
       processId: process_id,
       profilePath: Some(profile_path.to_string()),
@@ -1133,14 +835,14 @@ impl WayfernManager {
     })
   }
 
-  pub async fn stop_wayfern(
+  pub async fn stop_chromium(
     &self,
     id: &str,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut inner = self.inner.lock().await;
 
     if let Some(instance) = inner.instances.remove(id) {
-      log::info!("Cleaning up Wayfern instance {}", instance.id);
+      log::info!("Cleaning up browser instance {}", instance.id);
       if let Some(pid) = instance.process_id {
         #[cfg(unix)]
         {
@@ -1157,14 +859,14 @@ impl WayfernManager {
             .creation_flags(CREATE_NO_WINDOW)
             .output();
         }
-        log::info!("Stopped Wayfern instance {id} (PID: {pid})");
+        log::info!("Stopped browser instance {id} (PID: {pid})");
       }
     }
 
     Ok(())
   }
 
-  /// Opens a URL in a new tab for an existing Wayfern instance.
+  /// Opens a URL in a new tab for an existing browser instance.
   pub async fn open_url_in_tab(
     &self,
     profile_path: &str,
@@ -1190,7 +892,7 @@ impl WayfernManager {
           .unwrap_or(false)
       })
       .and_then(|i| i.cdp_port)
-      .ok_or("Wayfern instance (with CDP port) not found for profile")?;
+      .ok_or("Browser instance (with CDP port) not found for profile")?;
     drop(inner);
 
     // Open the URL in a new tab via the CDP HTTP convenience endpoint.
@@ -1231,7 +933,7 @@ impl WayfernManager {
     None
   }
 
-  pub async fn find_wayfern_by_profile(&self, profile_path: &str) -> Option<WayfernLaunchResult> {
+  pub async fn find_chromium_by_profile(&self, profile_path: &str) -> Option<ChromiumLaunchResult> {
     use sysinfo::{ProcessRefreshKind, RefreshKind, System};
 
     let mut inner = self.inner.lock().await;
@@ -1265,7 +967,7 @@ impl WayfernManager {
           let sysinfo_pid = sysinfo::Pid::from_u32(pid);
 
           if system.process(sysinfo_pid).is_some() {
-            return Some(WayfernLaunchResult {
+            return Some(ChromiumLaunchResult {
               id: id.clone(),
               processId: instance.process_id,
               profilePath: instance.profile_path.clone(),
@@ -1275,7 +977,7 @@ impl WayfernManager {
             });
           } else {
             log::info!(
-              "Wayfern process {} for profile {} is no longer running, cleaning up",
+              "Browser process {} for profile {} is no longer running, cleaning up",
               pid,
               profile_path
             );
@@ -1287,19 +989,19 @@ impl WayfernManager {
     }
 
     // If not found in in-memory instances, scan system processes.
-    // This handles the case where the GUI was restarted but Wayfern is still running.
+    // This handles the case where the GUI was restarted but the browser is still running.
     if let Some((pid, found_profile_path, cdp_port)) =
-      Self::find_wayfern_process_by_profile(&target_path)
+      Self::find_chromium_process_by_profile(&target_path)
     {
       log::info!(
-        "Found running Wayfern process (PID: {}) for profile path via system scan",
+        "Found running browser process (PID: {}) for profile path via system scan",
         pid
       );
 
       let instance_id = format!("recovered_{}", pid);
       inner.instances.insert(
         instance_id.clone(),
-        WayfernInstance {
+        ChromiumInstance {
           id: instance_id.clone(),
           process_id: Some(pid),
           profile_path: Some(found_profile_path.clone()),
@@ -1308,7 +1010,7 @@ impl WayfernManager {
         },
       );
 
-      return Some(WayfernLaunchResult {
+      return Some(ChromiumLaunchResult {
         id: instance_id,
         processId: Some(pid),
         profilePath: Some(found_profile_path),
@@ -1321,8 +1023,8 @@ impl WayfernManager {
     None
   }
 
-  /// Scan system processes to find a Wayfern/Chromium process using a specific profile path
-  fn find_wayfern_process_by_profile(
+  /// Scan system processes to find a Chromium process using a specific profile path
+  fn find_chromium_process_by_profile(
     target_path: &std::path::Path,
   ) -> Option<(u32, String, Option<u16>)> {
     use sysinfo::{ProcessRefreshKind, RefreshKind, System};
@@ -1340,7 +1042,7 @@ impl WayfernManager {
       }
 
       let exe_name = process.name().to_string_lossy().to_lowercase();
-      let is_chromium_like = exe_name.contains("wayfern")
+      let is_chromium_like = exe_name.contains("chromium")
         || exe_name.contains("chromium")
         || exe_name.contains("chrome");
 
@@ -1386,27 +1088,27 @@ impl WayfernManager {
   }
 
   #[allow(dead_code)]
-  pub async fn launch_wayfern_profile(
+  pub async fn launch_chromium_profile(
     &self,
     app_handle: &AppHandle,
     profile: &BrowserProfile,
-    config: &WayfernConfig,
+    config: &ChromiumConfig,
     url: Option<&str>,
     proxy_url: Option<&str>,
-  ) -> Result<WayfernLaunchResult, Box<dyn std::error::Error + Send + Sync>> {
+  ) -> Result<ChromiumLaunchResult, Box<dyn std::error::Error + Send + Sync>> {
     let profiles_dir = self.get_profiles_dir();
     let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
     let profile_path_str = profile_path.to_string_lossy().to_string();
 
     std::fs::create_dir_all(&profile_path)?;
 
-    if let Some(existing) = self.find_wayfern_by_profile(&profile_path_str).await {
-      log::info!("Stopping existing Wayfern instance for profile");
-      self.stop_wayfern(&existing.id).await?;
+    if let Some(existing) = self.find_chromium_by_profile(&profile_path_str).await {
+      log::info!("Stopping existing browser instance for profile");
+      self.stop_chromium(&existing.id).await?;
     }
 
     self
-      .launch_wayfern(
+      .launch_chromium(
         app_handle,
         profile,
         &profile_path_str,
@@ -1442,14 +1144,14 @@ impl WayfernManager {
     }
 
     for id in dead_ids {
-      log::info!("Cleaning up dead Wayfern instance: {id}");
+      log::info!("Cleaning up dead browser instance: {id}");
       inner.instances.remove(&id);
     }
   }
 }
 
 lazy_static::lazy_static! {
-  static ref WAYFERN_MANAGER: WayfernManager = WayfernManager::new();
+  static ref CHROMIUM_MANAGER: ChromiumManager = ChromiumManager::new();
 }
 
 /// Deterministically derive a pleasant, distinct window frame color from a
@@ -1495,43 +1197,43 @@ mod tests {
   #[test]
   fn remote_socks_url_detection() {
     // Remote socks upstreams (the hyper-util-affected case) are detected...
-    assert!(WayfernManager::is_remote_socks_url(
+    assert!(ChromiumManager::is_remote_socks_url(
       "socks5://user:pass@gw.dataimpulse.com:10000"
     ));
-    assert!(WayfernManager::is_remote_socks_url("socks5://1.2.3.4:1080"));
-    assert!(WayfernManager::is_remote_socks_url("socks4://1.2.3.4:1080"));
+    assert!(ChromiumManager::is_remote_socks_url("socks5://1.2.3.4:1080"));
+    assert!(ChromiumManager::is_remote_socks_url("socks4://1.2.3.4:1080"));
 
     // ...but the app's own loopback workers are not. socks is a non-special
     // URL scheme, so the IP literal parses as Host::Domain — the launch-time
     // randomize path depends on this returning false.
-    assert!(!WayfernManager::is_remote_socks_url(
+    assert!(!ChromiumManager::is_remote_socks_url(
       "socks5://127.0.0.1:24001"
     ));
-    assert!(!WayfernManager::is_remote_socks_url("socks5://[::1]:24001"));
-    assert!(!WayfernManager::is_remote_socks_url(
+    assert!(!ChromiumManager::is_remote_socks_url("socks5://[::1]:24001"));
+    assert!(!ChromiumManager::is_remote_socks_url(
       "socks5://localhost:24001"
     ));
 
     // Non-socks schemes and unparsable URLs never need the workaround.
-    assert!(!WayfernManager::is_remote_socks_url(
+    assert!(!ChromiumManager::is_remote_socks_url(
       "http://gw.dataimpulse.com:10000"
     ));
-    assert!(!WayfernManager::is_remote_socks_url(
+    assert!(!ChromiumManager::is_remote_socks_url(
       "https://gw.dataimpulse.com:10000"
     ));
-    assert!(!WayfernManager::is_remote_socks_url("socks5://"));
-    assert!(!WayfernManager::is_remote_socks_url("not a url"));
+    assert!(!ChromiumManager::is_remote_socks_url("socks5://"));
+    assert!(!ChromiumManager::is_remote_socks_url("not a url"));
   }
 
   #[test]
   fn window_size_prefers_outer_window_dimensions() {
-    // Field names + values mirror a real Wayfern fingerprint (camelCase).
+    // Field names + values mirror a real fingerprint (camelCase).
     let fp = r#"{"windowOuterWidth": 1268, "windowOuterHeight": 764,
                  "windowInnerWidth": 1253, "windowInnerHeight": 630,
                  "screenAvailWidth": 1280, "screenAvailHeight": 775,
                  "screenWidth": 1280, "screenHeight": 800}"#;
     assert_eq!(
-      WayfernManager::window_size_from_fingerprint(fp),
+      ChromiumManager::window_size_from_fingerprint(fp),
       Some((1268, 764))
     );
   }
@@ -1541,13 +1243,13 @@ mod tests {
     let avail = r#"{"screenAvailWidth": 1280, "screenAvailHeight": 775,
                     "screenWidth": 1280, "screenHeight": 800}"#;
     assert_eq!(
-      WayfernManager::window_size_from_fingerprint(avail),
+      ChromiumManager::window_size_from_fingerprint(avail),
       Some((1280, 775))
     );
 
     let full = r#"{"screenWidth": 2560, "screenHeight": 1440}"#;
     assert_eq!(
-      WayfernManager::window_size_from_fingerprint(full),
+      ChromiumManager::window_size_from_fingerprint(full),
       Some((2560, 1440))
     );
   }
@@ -1556,7 +1258,7 @@ mod tests {
   fn window_size_handles_wrapper_and_stringified_numbers() {
     let wrapped = r#"{"fingerprint": {"windowOuterWidth": "1366", "windowOuterHeight": "768"}}"#;
     assert_eq!(
-      WayfernManager::window_size_from_fingerprint(wrapped),
+      ChromiumManager::window_size_from_fingerprint(wrapped),
       Some((1366, 768))
     );
   }
@@ -1565,24 +1267,24 @@ mod tests {
   fn window_size_none_when_missing_or_invalid() {
     // No dimensions at all.
     assert_eq!(
-      WayfernManager::window_size_from_fingerprint(r#"{"userAgent": "x"}"#),
+      ChromiumManager::window_size_from_fingerprint(r#"{"userAgent": "x"}"#),
       None
     );
     // A width with no matching height is not a usable pair.
     assert_eq!(
-      WayfernManager::window_size_from_fingerprint(r#"{"windowOuterWidth": 1268}"#),
+      ChromiumManager::window_size_from_fingerprint(r#"{"windowOuterWidth": 1268}"#),
       None
     );
     // Zero is rejected as a degenerate size.
     assert_eq!(
-      WayfernManager::window_size_from_fingerprint(
+      ChromiumManager::window_size_from_fingerprint(
         r#"{"windowOuterWidth": 0, "windowOuterHeight": 0}"#
       ),
       None
     );
     // Not valid JSON.
     assert_eq!(
-      WayfernManager::window_size_from_fingerprint("not json"),
+      ChromiumManager::window_size_from_fingerprint("not json"),
       None
     );
   }

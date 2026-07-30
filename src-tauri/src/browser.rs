@@ -13,19 +13,19 @@ pub struct ProxySettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum BrowserType {
-  Wayfern,
+  Chromium,
 }
 
 impl BrowserType {
   pub fn as_str(&self) -> &'static str {
     match self {
-      BrowserType::Wayfern => "wayfern",
+      BrowserType::Chromium => "chromium",
     }
   }
 
   pub fn from_str(s: &str) -> Result<Self, String> {
     match s {
-      "wayfern" => Ok(BrowserType::Wayfern),
+      "chromium" => Ok(BrowserType::Chromium),
       _ => Err(format!("Unknown browser type: {s}")),
     }
   }
@@ -51,39 +51,32 @@ pub trait Browser: Send + Sync {
 mod macos {
   use super::*;
 
-  pub fn get_wayfern_executable_path(
+  pub fn get_chromium_executable_path(
     install_dir: &Path,
   ) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    // Newer builds ship as Wayfern.app; older ones as Chromium.app. Either way,
-    // find the .app bundle in the version directory.
+    // Chrome for Testing on macOS ships as .app bundle
     let app_path = std::fs::read_dir(install_dir)?
       .filter_map(Result::ok)
       .find(|entry| entry.path().extension().is_some_and(|ext| ext == "app"))
-      .ok_or("Wayfern app not found")?;
+      .ok_or("Chromium app not found")?;
 
-    // Construct the browser executable path
     let mut executable_dir = app_path.path();
     executable_dir.push("Contents");
     executable_dir.push("MacOS");
 
-    // Find the main executable inside Contents/MacOS. The renamed builds name it
-    // `Wayfern`; older Chromium-named builds name it `Chromium`. Helper binaries
-    // such as `chrome_crashpad_handler` contain neither token and are skipped.
     let executable_path = std::fs::read_dir(&executable_dir)?
       .filter_map(Result::ok)
       .find(|entry| {
-        let binding = entry.file_name();
-        let name = binding.to_string_lossy();
-        name.contains("Wayfern") || name.contains("Chromium")
+        let name = entry.file_name().to_string_lossy();
+        name.contains("Chromium") || name.contains("Chrome")
       })
       .map(|entry| entry.path())
-      .ok_or("No Wayfern executable found in MacOS directory")?;
+      .ok_or("No Chromium executable found in MacOS directory")?;
 
     Ok(executable_path)
   }
 
-  pub fn is_wayfern_version_downloaded(install_dir: &Path) -> bool {
-    // On macOS, check for the .app bundle (Wayfern.app or legacy Chromium.app)
+  pub fn is_chromium_version_downloaded(install_dir: &Path) -> bool {
     if let Ok(entries) = std::fs::read_dir(install_dir) {
       for entry in entries.flatten() {
         if entry.path().extension().is_some_and(|ext| ext == "app") {
@@ -96,7 +89,6 @@ mod macos {
 
   #[allow(dead_code)]
   pub fn prepare_executable(_executable_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    // On macOS, no special preparation needed
     Ok(())
   }
 }
@@ -106,18 +98,13 @@ mod linux {
   use super::*;
   use std::os::unix::fs::PermissionsExt;
 
-  /// Candidate paths for the Wayfern executable on Linux, in priority order.
-  /// Newer builds ship the binary named `wayfern`; the `chromium`/`chrome` names
-  /// are retained as fallbacks so versions extracted before the rename still
-  /// launch. Each name is probed at the version root and in the subdirectory
-  /// layouts the archive may unpack into.
-  fn wayfern_executable_candidates(install_dir: &Path) -> Vec<PathBuf> {
-    const NAMES: [&str; 3] = ["wayfern", "chromium", "chrome"];
+  fn chromium_executable_candidates(install_dir: &Path) -> Vec<PathBuf> {
+    const NAMES: [&str; 2] = ["chrome", "chromium"];
     let dirs = [
       install_dir.to_path_buf(),
-      install_dir.join("wayfern"),
-      install_dir.join("wayfern-linux"),
+      install_dir.join("chrome-linux64"),
       install_dir.join("chrome-linux"),
+      install_dir.join("chromium-linux"),
     ];
     dirs
       .iter()
@@ -125,33 +112,31 @@ mod linux {
       .collect()
   }
 
-  pub fn get_wayfern_executable_path(
+  pub fn get_chromium_executable_path(
     install_dir: &Path,
   ) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    for executable_path in wayfern_executable_candidates(install_dir) {
+    for executable_path in chromium_executable_candidates(install_dir) {
       if executable_path.exists() && executable_path.is_file() {
         return Ok(executable_path);
       }
     }
 
-    Err(format!("Wayfern executable not found in {}", install_dir.display()).into())
+    Err(format!("Chromium executable not found in {}", install_dir.display()).into())
   }
 
-  pub fn is_wayfern_version_downloaded(install_dir: &Path) -> bool {
-    wayfern_executable_candidates(install_dir)
+  pub fn is_chromium_version_downloaded(install_dir: &Path) -> bool {
+    chromium_executable_candidates(install_dir)
       .iter()
       .any(|exe_path| exe_path.exists() && exe_path.is_file())
   }
 
   #[allow(dead_code)]
   pub fn prepare_executable(executable_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    // On Linux, ensure the executable has proper permissions
     log::info!("Setting execute permissions for: {:?}", executable_path);
 
     let metadata = std::fs::metadata(executable_path)?;
     let mut permissions = metadata.permissions();
 
-    // Add execute permissions for owner, group, and others
     let mode = permissions.mode();
     permissions.set_mode(mode | 0o755);
 
@@ -169,19 +154,14 @@ mod linux {
 mod windows {
   use super::*;
 
-  /// Candidate paths for the Wayfern executable on Windows, in priority order.
-  /// Newer builds ship `wayfern.exe`; the `chromium.exe`/`chrome.exe` names are
-  /// retained as fallbacks so versions extracted before the rename still launch.
-  /// Each name is probed at the version root and in the subdirectory layouts the
-  /// archive may unpack into.
-  fn wayfern_executable_candidates(install_dir: &Path) -> Vec<PathBuf> {
-    const NAMES: [&str; 3] = ["wayfern.exe", "chromium.exe", "chrome.exe"];
+  fn chromium_executable_candidates(install_dir: &Path) -> Vec<PathBuf> {
+    const NAMES: [&str; 2] = ["chrome.exe", "chromium.exe"];
     let dirs = [
       install_dir.to_path_buf(),
       install_dir.join("bin"),
-      install_dir.join("wayfern"),
-      install_dir.join("wayfern-win"),
       install_dir.join("chrome-win"),
+      install_dir.join("chrome-win64"),
+      install_dir.join("chromium-win"),
     ];
     dirs
       .iter()
@@ -189,10 +169,7 @@ mod windows {
       .collect()
   }
 
-  /// Whether `path` is an .exe whose name looks like the browser (Wayfern or a
-  /// legacy Chromium-named build). Guards against archives wrongly given a
-  /// `*.exe` name by requiring a valid PE header.
-  fn is_wayfern_exe(path: &Path) -> bool {
+  fn is_chromium_exe(path: &Path) -> bool {
     if path.extension().is_none_or(|ext| ext != "exe") || !is_pe_executable(path) {
       return false;
     }
@@ -201,43 +178,41 @@ mod windows {
       .unwrap_or_default()
       .to_string_lossy()
       .to_lowercase();
-    name.contains("wayfern") || name.contains("chromium") || name.contains("chrome")
+    name.contains("chrome") || name.contains("chromium")
   }
 
-  pub fn get_wayfern_executable_path(
+  pub fn get_chromium_executable_path(
     install_dir: &Path,
   ) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    for path in wayfern_executable_candidates(install_dir) {
+    for path in chromium_executable_candidates(install_dir) {
       if path.exists() && path.is_file() {
         return Ok(path);
       }
     }
 
-    // Look for any .exe file that might be the browser
     if let Ok(entries) = std::fs::read_dir(install_dir) {
       for entry in entries.flatten() {
         let path = entry.path();
-        if is_wayfern_exe(&path) {
+        if is_chromium_exe(&path) {
           return Ok(path);
         }
       }
     }
 
-    Err("Wayfern executable not found in Windows installation directory".into())
+    Err("Chromium executable not found in Windows installation directory".into())
   }
 
-  pub fn is_wayfern_version_downloaded(install_dir: &Path) -> bool {
-    if wayfern_executable_candidates(install_dir)
+  pub fn is_chromium_version_downloaded(install_dir: &Path) -> bool {
+    if chromium_executable_candidates(install_dir)
       .iter()
       .any(|exe_path| exe_path.exists() && exe_path.is_file())
     {
       return true;
     }
 
-    // Check for any .exe file that looks like the browser
     if let Ok(entries) = std::fs::read_dir(install_dir) {
       for entry in entries.flatten() {
-        if is_wayfern_exe(&entry.path()) {
+        if is_chromium_exe(&entry.path()) {
           return true;
         }
       }
@@ -248,30 +223,28 @@ mod windows {
 
   #[allow(dead_code)]
   pub fn prepare_executable(_executable_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    // On Windows, no special preparation needed
     Ok(())
   }
 }
 
-/// Wayfern is a Chromium-based anti-detect browser with CDP-based fingerprint injection
-pub struct WayfernBrowser;
+pub struct ChromiumBrowser;
 
-impl WayfernBrowser {
+impl ChromiumBrowser {
   pub fn new() -> Self {
     Self
   }
 }
 
-impl Browser for WayfernBrowser {
+impl Browser for ChromiumBrowser {
   fn get_executable_path(&self, install_dir: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
     #[cfg(target_os = "macos")]
-    return macos::get_wayfern_executable_path(install_dir);
+    return macos::get_chromium_executable_path(install_dir);
 
     #[cfg(target_os = "linux")]
-    return linux::get_wayfern_executable_path(install_dir);
+    return linux::get_chromium_executable_path(install_dir);
 
     #[cfg(target_os = "windows")]
-    return windows::get_wayfern_executable_path(install_dir);
+    return windows::get_chromium_executable_path(install_dir);
 
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     Err("Unsupported platform".into())
@@ -285,7 +258,6 @@ impl Browser for WayfernBrowser {
     remote_debugging_port: Option<u16>,
     headless: bool,
   ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-    // Wayfern uses Chromium-style arguments
     let mut args = vec![
       format!("--user-data-dir={}", profile_path),
       "--no-default-browser-check".to_string(),
@@ -297,27 +269,23 @@ impl Browser for WayfernBrowser {
       "--disable-session-crashed-bubble".to_string(),
       "--hide-crash-restore-bubble".to_string(),
       "--disable-infobars".to_string(),
-      // Wayfern-specific args for automation
       "--disable-features=DialMediaRouteProvider".to_string(),
       "--use-mock-keychain".to_string(),
       "--password-store=basic".to_string(),
     ];
 
-    // Add remote debugging port (required for CDP fingerprint injection)
     if let Some(port) = remote_debugging_port {
       args.push("--remote-debugging-address=127.0.0.1".to_string());
       args.push(format!("--remote-debugging-port={port}"));
     }
 
-    // Add headless mode if requested
     if headless {
       args.push("--headless=new".to_string());
     }
 
-    // Add proxy configuration if provided
     if let Some(proxy) = proxy_settings {
       args.push(format!(
-        "--proxy-server=http://{}:{}",
+        "--proxy-server=socks5://{}:{}",
         proxy.host, proxy.port
       ));
     }
@@ -330,16 +298,16 @@ impl Browser for WayfernBrowser {
   }
 
   fn is_version_downloaded(&self, version: &str, binaries_dir: &Path) -> bool {
-    let install_dir = binaries_dir.join("wayfern").join(version);
+    let install_dir = binaries_dir.join("chromium").join(version);
 
     #[cfg(target_os = "macos")]
-    return macos::is_wayfern_version_downloaded(&install_dir);
+    return macos::is_chromium_version_downloaded(&install_dir);
 
     #[cfg(target_os = "linux")]
-    return linux::is_wayfern_version_downloaded(&install_dir);
+    return linux::is_chromium_version_downloaded(&install_dir);
 
     #[cfg(target_os = "windows")]
-    return windows::is_wayfern_version_downloaded(&install_dir);
+    return windows::is_chromium_version_downloaded(&install_dir);
 
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     false
@@ -373,7 +341,7 @@ impl BrowserFactory {
 
   pub fn create_browser(&self, browser_type: BrowserType) -> Box<dyn Browser> {
     match browser_type {
-      BrowserType::Wayfern => Box::new(WayfernBrowser::new()),
+      BrowserType::Chromium => Box::new(ChromiumBrowser::new()),
     }
   }
 }
@@ -460,117 +428,51 @@ pub struct GithubAsset {
 mod tests {
   use super::*;
 
-  #[cfg(target_os = "macos")]
-  #[test]
-  fn test_wayfern_named_app_bundle_is_found() {
-    use tempfile::TempDir;
-    let temp = TempDir::new().unwrap();
-    let install_dir = temp.path();
-
-    // New release layout: Wayfern.app/Contents/MacOS/Wayfern
-    let macos_dir = install_dir
-      .join("Wayfern.app")
-      .join("Contents")
-      .join("MacOS");
-    std::fs::create_dir_all(&macos_dir).unwrap();
-    std::fs::File::create(macos_dir.join("Wayfern")).unwrap();
-    // Helper binaries in the same dir must not be picked as the main executable.
-    std::fs::File::create(macos_dir.join("chrome_crashpad_handler")).unwrap();
-
-    let exe = WayfernBrowser::new()
-      .get_executable_path(install_dir)
-      .expect("Wayfern executable should be found");
-    assert_eq!(exe.file_name().unwrap().to_str().unwrap(), "Wayfern");
-  }
-
-  #[cfg(target_os = "macos")]
-  #[test]
-  fn test_legacy_chromium_app_bundle_still_found() {
-    use tempfile::TempDir;
-    let temp = TempDir::new().unwrap();
-    let install_dir = temp.path();
-
-    // Builds extracted before the rename keep the Chromium.app layout.
-    let macos_dir = install_dir
-      .join("Chromium.app")
-      .join("Contents")
-      .join("MacOS");
-    std::fs::create_dir_all(&macos_dir).unwrap();
-    std::fs::File::create(macos_dir.join("Chromium")).unwrap();
-
-    let exe = WayfernBrowser::new()
-      .get_executable_path(install_dir)
-      .expect("legacy Chromium executable should still be found");
-    assert_eq!(exe.file_name().unwrap().to_str().unwrap(), "Chromium");
-  }
-
   #[cfg(target_os = "linux")]
   #[test]
-  fn test_wayfern_linux_executable_preferred_over_legacy() {
+  fn test_chromium_linux_executable_in_chrome_linux64() {
     use tempfile::TempDir;
     let temp = TempDir::new().unwrap();
     let install_dir = temp.path();
 
-    // Both the new `wayfern` and a legacy `chrome` are present; wayfern wins.
-    std::fs::File::create(install_dir.join("chrome")).unwrap();
-    std::fs::File::create(install_dir.join("wayfern")).unwrap();
-
-    let exe = WayfernBrowser::new()
-      .get_executable_path(install_dir)
-      .expect("Wayfern executable should be found");
-    assert_eq!(exe.file_name().unwrap().to_str().unwrap(), "wayfern");
-  }
-
-  #[cfg(target_os = "linux")]
-  #[test]
-  fn test_wayfern_linux_subdir_layout_found() {
-    use tempfile::TempDir;
-    let temp = TempDir::new().unwrap();
-    let install_dir = temp.path();
-
-    // Archive that unpacks into a wayfern-linux/ subdirectory.
-    let subdir = install_dir.join("wayfern-linux");
+    let subdir = install_dir.join("chrome-linux64");
     std::fs::create_dir_all(&subdir).unwrap();
-    std::fs::File::create(subdir.join("wayfern")).unwrap();
+    std::fs::File::create(subdir.join("chrome")).unwrap();
 
-    let exe = WayfernBrowser::new()
+    let exe = ChromiumBrowser::new()
       .get_executable_path(install_dir)
-      .expect("Wayfern executable in subdir should be found");
-    assert!(exe.ends_with(std::path::Path::new("wayfern-linux").join("wayfern")));
+      .expect("Chromium executable should be found");
+    assert!(exe.ends_with("chrome"));
+  }
+
+  #[cfg(target_os = "linux")]
+  #[test]
+  fn test_chromium_linux_direct_executable() {
+    use tempfile::TempDir;
+    let temp = TempDir::new().unwrap();
+    let install_dir = temp.path();
+
+    std::fs::File::create(install_dir.join("chrome")).unwrap();
+
+    let exe = ChromiumBrowser::new()
+      .get_executable_path(install_dir)
+      .expect("Chromium executable should be found");
+    assert_eq!(exe.file_name().unwrap().to_str().unwrap(), "chrome");
   }
 
   #[cfg(target_os = "windows")]
   #[test]
-  fn test_wayfern_windows_executable_preferred_over_legacy() {
+  fn test_chromium_windows_executable() {
     use tempfile::TempDir;
     let temp = TempDir::new().unwrap();
     let install_dir = temp.path();
 
     std::fs::File::create(install_dir.join("chrome.exe")).unwrap();
-    std::fs::File::create(install_dir.join("wayfern.exe")).unwrap();
 
-    let exe = WayfernBrowser::new()
+    let exe = ChromiumBrowser::new()
       .get_executable_path(install_dir)
-      .expect("Wayfern executable should be found");
-    assert_eq!(exe.file_name().unwrap().to_str().unwrap(), "wayfern.exe");
-  }
-
-  #[cfg(target_os = "windows")]
-  #[test]
-  fn test_wayfern_windows_subdir_layout_found() {
-    use tempfile::TempDir;
-    let temp = TempDir::new().unwrap();
-    let install_dir = temp.path();
-
-    // Archive that unpacks into a wayfern-win/ subdirectory.
-    let subdir = install_dir.join("wayfern-win");
-    std::fs::create_dir_all(&subdir).unwrap();
-    std::fs::File::create(subdir.join("wayfern.exe")).unwrap();
-
-    let exe = WayfernBrowser::new()
-      .get_executable_path(install_dir)
-      .expect("Wayfern executable in subdir should be found");
-    assert!(exe.ends_with(std::path::Path::new("wayfern-win").join("wayfern.exe")));
+      .expect("Chromium executable should be found");
+    assert_eq!(exe.file_name().unwrap().to_str().unwrap(), "chrome.exe");
   }
 
   #[test]
@@ -583,13 +485,11 @@ mod tests {
       password: None,
     };
 
-    // Test that it can be serialized (implements Serialize)
     let json = serde_json::to_string(&proxy).expect("Failed to serialize proxy settings");
     assert!(json.contains("127.0.0.1"), "JSON should contain host IP");
     assert!(json.contains("8080"), "JSON should contain port number");
     assert!(json.contains("http"), "JSON should contain proxy type");
 
-    // Test that it can be deserialized (implements Deserialize)
     let deserialized: ProxySettings =
       serde_json::from_str(&json).expect("Failed to deserialize proxy settings");
     assert_eq!(
@@ -601,24 +501,13 @@ mod tests {
   }
 
   #[test]
-  fn test_wayfern_config_has_no_executable_path() {
-    // Verify WayfernConfig does not store executable_path
-    let config = crate::wayfern_manager::WayfernConfig::default();
-    let json = serde_json::to_value(&config).unwrap();
-    assert!(
-      json.get("executable_path").is_none(),
-      "WayfernConfig should not have executable_path field"
-    );
-  }
-
-  #[test]
   fn test_profile_data_path_is_dynamic() {
     use crate::profile::BrowserProfile;
     let profiles_dir = std::path::PathBuf::from("/fake/profiles");
     let profile = BrowserProfile {
       id: uuid::Uuid::parse_str("12345678-1234-1234-1234-123456789abc").unwrap(),
       name: "test".to_string(),
-      browser: "wayfern".to_string(),
+      browser: "chromium".to_string(),
       version: "1.0.0".to_string(),
       proxy_id: None,
       vpn_id: None,
@@ -626,7 +515,7 @@ mod tests {
       process_id: None,
       last_launch: None,
       release_type: "stable".to_string(),
-      wayfern_config: None,
+      chromium_config: None,
       group_id: None,
       tags: Vec::new(),
       note: None,

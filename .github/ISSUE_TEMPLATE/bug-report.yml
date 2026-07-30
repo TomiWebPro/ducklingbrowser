@@ -47,9 +47,9 @@ body:
       required: true
 
   - type: input
-    id: wayfern_version
+    id: chromium_version
     attributes:
-      label: Wayfern version
+      label: Chromium version
       description: Settings → About, or the version shown when creating a profile. Use "unknown" if not browser-specific.
       placeholder: e.g. 138.0.7204.50 or unknown
     validations:

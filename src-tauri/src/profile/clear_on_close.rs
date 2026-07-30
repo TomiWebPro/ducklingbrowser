@@ -78,7 +78,7 @@ fn clear_chromium_profile_dir(profile_dir: &Path) -> usize {
   cleared
 }
 
-/// Clear browsing data in a Wayfern user-data directory. Handles both
+/// Clear browsing data in a Chromium user-data directory. Handles both
 /// layouts: profile content at the root (imported profiles copy a Chromium
 /// profile dir directly) and the standard `Default` / `Profile N` subdirs
 /// Chromium creates itself. Top-level cache dirs (ShaderCache, GrShaderCache,

@@ -24,7 +24,7 @@ export type BackendErrorCode =
   | "GROUP_NOT_FOUND"
   | "GROUP_ALREADY_EXISTS"
   | "NAME_CANNOT_BE_EMPTY"
-  | "WAYFERN_VERSION_NOT_AVAILABLE"
+  | "CHROMIUM_VERSION_NOT_AVAILABLE"
   | "VPN_NOT_FOUND"
   | "EXTENSION_NOT_FOUND"
   | "EXTENSION_GROUP_NOT_FOUND"
@@ -54,7 +54,6 @@ export type BackendErrorCode =
   | "UNSUPPORTED_DNS_RULES_FORMAT"
   | "DNS_RULES_SAVE_FAILED"
   | "DNS_RULES_EXPORT_FAILED"
-  | "WAYFERN_TERMS_REQUIRED"
   | "API_PORT_UNAVAILABLE"
   | "MCP_SERVER_ALREADY_RUNNING"
   | "MCP_SERVER_NOT_RUNNING"
@@ -147,8 +146,8 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.groupAlreadyExists");
     case "NAME_CANNOT_BE_EMPTY":
       return t("backendErrors.nameCannotBeEmpty");
-    case "WAYFERN_VERSION_NOT_AVAILABLE":
-      return t("backendErrors.wayfernVersionNotAvailable", {
+    case "CHROMIUM_VERSION_NOT_AVAILABLE":
+      return t("backendErrors.chromiumVersionNotAvailable", {
         requested: parsed.params?.requested ?? "",
         current: parsed.params?.current ?? "",
       });
@@ -220,8 +219,6 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.dnsRulesSaveFailed");
     case "DNS_RULES_EXPORT_FAILED":
       return t("backendErrors.dnsRulesExportFailed");
-    case "WAYFERN_TERMS_REQUIRED":
-      return t("backendErrors.wayfernTermsRequired");
     case "API_PORT_UNAVAILABLE":
       return t("backendErrors.apiPortUnavailable");
     case "MCP_SERVER_ALREADY_RUNNING":

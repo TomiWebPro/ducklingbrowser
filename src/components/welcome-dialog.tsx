@@ -170,8 +170,8 @@ export function WelcomeDialog({
 
   // Track the required browser's download + extraction the whole time the
   // dialog is open, so progress is live by the time the user reaches setup.
-  const setup = useBrowserSetup("wayfern", isOpen);
-  const browserName = getBrowserDisplayName("wayfern");
+  const setup = useBrowserSetup("chromium", isOpen);
+  const browserName = getBrowserDisplayName("chromium");
 
   const requestPermissions = useCallback(async () => {
     setRequesting(true);

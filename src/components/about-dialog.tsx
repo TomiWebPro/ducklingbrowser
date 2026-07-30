@@ -177,7 +177,9 @@ export function AboutDialog({ isOpen, onClose }: AboutDialogProps) {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => void openUrl("https://github.com/TomiWebPro/ducklingbrowser")}
+              onClick={() =>
+                void openUrl("https://github.com/TomiWebPro/ducklingbrowser")
+              }
             >
               {t("about.website")}
             </Button>

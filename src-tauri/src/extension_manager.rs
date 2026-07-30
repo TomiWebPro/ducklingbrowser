@@ -855,7 +855,7 @@ impl ExtensionManager {
   ) -> Result<(), Box<dyn std::error::Error>> {
     let group = self.get_group(group_id)?;
     let browser_type = match browser {
-      "wayfern" => "chromium",
+      "chromium" => "chromium",
       _ => return Err(format!("Extensions are not supported for browser '{browser}'").into()),
     };
 
@@ -895,7 +895,7 @@ impl ExtensionManager {
       return Ok(Vec::new());
     }
 
-    if profile.browser.as_str() != "wayfern" {
+    if profile.browser.as_str() != "chromium" {
       return Ok(Vec::new());
     }
 
@@ -1373,7 +1373,7 @@ mod tests {
       .unwrap();
 
     assert!(mgr
-      .validate_group_compatibility(&chrome_group.id, "wayfern")
+      .validate_group_compatibility(&chrome_group.id, "chromium")
       .is_ok());
   }
 

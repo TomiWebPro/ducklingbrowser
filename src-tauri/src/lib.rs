@@ -59,6 +59,7 @@ mod ephemeral_dirs;
 mod extension_manager;
 mod extraction;
 mod fingerprint_consistency;
+mod fingerprint_injector;
 mod geoip_downloader;
 mod geolocation;
 mod group_manager;
@@ -77,8 +78,8 @@ pub mod socks5_local;
 pub mod sync;
 mod synchronizer;
 pub mod traffic_stats;
-mod wayfern_manager;
-mod wayfern_terms;
+mod chromium_manager;
+mod chromium_terms;
 // mod theme_detector; // removed: theme detection handled in webview via CSS prefers-color-scheme
 pub mod cloud_auth;
 mod commercial_license;
@@ -102,7 +103,7 @@ use profile::manager::{
   list_browser_profiles, rename_profile, update_profile_clear_on_close,
   update_profile_dns_blocklist, update_profile_launch_hook, update_profile_note,
   update_profile_proxy, update_profile_proxy_bypass_rules, update_profile_tags, update_profile_vpn,
-  update_profile_window_color, update_wayfern_config,
+  update_profile_window_color, update_chromium_config,
 };
 
 use profile::password::{
@@ -472,18 +473,18 @@ async fn export_profile_cookies(profile_id: String, format: String) -> Result<St
 }
 
 #[tauri::command]
-fn check_wayfern_terms_accepted() -> bool {
-  wayfern_terms::WayfernTermsManager::instance().is_terms_accepted()
+fn check_chromium_terms_accepted() -> bool {
+  chromium_terms::ChromiumTermsManager::instance().is_terms_accepted()
 }
 
 #[tauri::command]
-fn check_wayfern_downloaded() -> bool {
-  wayfern_terms::WayfernTermsManager::instance().is_wayfern_downloaded()
+fn check_chromium_downloaded() -> bool {
+  chromium_terms::ChromiumTermsManager::instance().is_chromium_downloaded()
 }
 
 #[tauri::command]
-async fn accept_wayfern_terms() -> Result<(), String> {
-  wayfern_terms::WayfernTermsManager::instance()
+async fn accept_chromium_terms() -> Result<(), String> {
+  chromium_terms::ChromiumTermsManager::instance()
     .accept_terms()
     .await
 }
@@ -1245,7 +1246,7 @@ async fn generate_sample_fingerprint(
     launch_hook: None,
     last_launch: None,
     release_type: "stable".to_string(),
-    wayfern_config: None,
+    chromium_config: None,
     group_id: None,
     tags: Vec::new(),
     note: None,
@@ -1266,10 +1267,10 @@ async fn generate_sample_fingerprint(
     updated_at: None,
   };
 
-  if browser == "wayfern" {
-    let config: crate::wayfern_manager::WayfernConfig =
+  if browser == "chromium" {
+    let config: crate::chromium_manager::ChromiumConfig =
       serde_json::from_str(&config_json).map_err(|e| format!("Failed to parse config: {e}"))?;
-    let manager = crate::wayfern_manager::WayfernManager::instance();
+    let manager = crate::chromium_manager::ChromiumManager::instance();
     manager
       .generate_fingerprint_config(&app_handle, &temp_profile, &config)
       .await
@@ -1922,7 +1923,7 @@ pub fn run_with_builder(
           match geoip_downloader.check_missing_geoip_database() {
             Ok(true) => {
               log::info!(
-                "GeoIP database is missing for Wayfern profiles, downloading at startup..."
+                "GeoIP database is missing, downloading at startup..."
               );
               let geoip_downloader = GeoIPDownloader::instance();
               if let Err(e) = geoip_downloader
@@ -2248,14 +2249,8 @@ pub fn run_with_builder(
       // Start cloud auth background refresh loop
       let app_handle_cloud = app.handle().clone();
       tauri::async_runtime::spawn(async move {
-        // On startup, refresh sync token, proxy config, and wayfern token in
-        // PARALLEL. Previously they were awaited sequentially, so the wayfern
-        // token request didn't even start until the earlier two API calls had
-        // finished. Wayfern launch can race with this task — a few seconds of
-        // serialized API calls translates directly into a slow first launch
-        // because launch_wayfern blocks waiting for the token to land.
-        // api_call_with_retry handles 401/refresh internally — no direct
-        // refresh_access_token call needed.
+        // On startup, refresh sync token and proxy config in PARALLEL.
+        // api_call_with_retry handles 401/refresh internally.
         if cloud_auth::CLOUD_AUTH.is_logged_in().await {
           let sync_token_fut = async {
             if let Err(e) = cloud_auth::CLOUD_AUTH.get_or_refresh_sync_token().await {
@@ -2265,14 +2260,7 @@ pub fn run_with_builder(
           let proxy_fut = async {
             cloud_auth::CLOUD_AUTH.sync_cloud_proxy().await;
           };
-          let wayfern_fut = async {
-            if cloud_auth::CLOUD_AUTH.has_active_paid_subscription().await {
-              if let Err(e) = cloud_auth::CLOUD_AUTH.request_wayfern_token().await {
-                log::warn!("Failed to request wayfern token on startup: {e}");
-              }
-            }
-          };
-          tokio::join!(sync_token_fut, proxy_fut, wayfern_fut);
+          tokio::join!(sync_token_fut, proxy_fut);
         }
         cloud_auth::CloudAuthManager::start_sync_token_refresh_loop(app_handle_cloud).await;
       });
@@ -2355,7 +2343,7 @@ pub fn run_with_builder(
       import_proxies_json,
       parse_txt_proxies,
       import_proxies_from_parsed,
-      update_wayfern_config,
+      update_chromium_config,
       generate_sample_fingerprint,
       get_profile_groups,
       get_groups_with_profile_counts,
@@ -2414,9 +2402,9 @@ pub fn run_with_builder(
       copy_profile_cookies,
       import_cookies_from_file,
       export_profile_cookies,
-      check_wayfern_terms_accepted,
-      check_wayfern_downloaded,
-      accept_wayfern_terms,
+      check_chromium_terms_accepted,
+      check_chromium_downloaded,
+      accept_chromium_terms,
       get_commercial_trial_status,
       acknowledge_trial_expiration,
       has_acknowledged_trial_expiration,
@@ -2448,8 +2436,6 @@ pub fn run_with_builder(
       cloud_auth::cloud_get_countries,
       cloud_auth::create_cloud_location_proxy,
       cloud_auth::restart_sync_service,
-      cloud_auth::cloud_get_wayfern_token,
-      cloud_auth::cloud_refresh_wayfern_token,
       // Team lock commands
       team_lock::get_team_locks,
       team_lock::get_team_lock_status,
@@ -2535,8 +2521,6 @@ mod tests {
       "set_extension_group_sync_enabled",
       "get_team_lock_status",
       "generate_sample_fingerprint",
-      "cloud_get_wayfern_token",
-      "cloud_refresh_wayfern_token",
       "lock_profile",
     ];
 

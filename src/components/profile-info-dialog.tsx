@@ -21,7 +21,6 @@ import {
   LuGroup,
   LuKey,
   LuLink,
-  LuLock,
   LuLockOpen,
   LuPlus,
   LuPuzzle,
@@ -80,11 +79,11 @@ import { formatRelativeTime } from "@/lib/flag-utils";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import { cn } from "@/lib/utils";
 import type {
+  BrowserConfig,
   BrowserProfile,
   ProfileGroup,
   StoredProxy,
   VpnConfig,
-  WayfernConfig,
 } from "@/types";
 
 interface ProfileInfoDialogProps {
@@ -96,7 +95,7 @@ interface ProfileInfoDialogProps {
   onOpenTrafficDialog?: (profileId: string) => void;
   onOpenProfileSyncDialog?: (profile: BrowserProfile) => void;
   onAssignProfilesToGroup?: (profileIds: string[]) => void;
-  onConfigureWayfern?: (profile: BrowserProfile) => void;
+  onConfigureBrowser?: (profile: BrowserProfile) => void;
   onCopyCookiesToProfile?: (profile: BrowserProfile) => void;
   onOpenCookieManagement?: (profile: BrowserProfile) => void;
   onAssignExtensionGroup?: (profileIds: string[]) => void;
@@ -322,7 +321,7 @@ export function ProfileInfoDialog({
   onOpenTrafficDialog,
   onOpenProfileSyncDialog,
   onAssignProfilesToGroup,
-  onConfigureWayfern,
+  onConfigureBrowser,
   onCopyCookiesToProfile,
   onOpenCookieManagement,
   onAssignExtensionGroup,
@@ -391,7 +390,7 @@ export function ProfileInfoDialog({
   if (!profile) return null;
 
   const ProfileIcon = getProfileIcon(profile);
-  const isWayfern = profile.browser === "wayfern";
+  const isBrowser = profile.browser === "chromium";
   const isDeleteDisabled = isRunning;
 
   const proxyName = profile.proxy_id
@@ -485,11 +484,11 @@ export function ProfileInfoDialog({
       icon: <LuFingerprint className="size-4" />,
       label: t("profiles.actions.changeFingerprint"),
       onClick: () => {
-        handleAction(() => onConfigureWayfern?.(profile));
+        handleAction(() => onConfigureBrowser?.(profile));
       },
       disabled: isDisabled,
       runningBadge: isRunning,
-      hidden: !isWayfern || !onConfigureWayfern,
+      hidden: !isBrowser || !onConfigureBrowser,
     },
     {
       icon: <LuUsers className="size-4" />,
@@ -498,7 +497,9 @@ export function ProfileInfoDialog({
         handleAction(() => onLaunchWithSync?.(profile));
       },
       disabled: isDisabled || isRunning,
-      hidden: profile.browser !== "wayfern" || !onLaunchWithSync,
+      hidden:
+        (profile.browser !== "chromium" && profile.browser !== "chromium") ||
+        !onLaunchWithSync,
     },
     {
       id: "cookiesCopy",
@@ -510,7 +511,7 @@ export function ProfileInfoDialog({
       disabled: isDisabled,
       runningBadge: isRunning,
       hidden:
-        !isWayfern || profile.ephemeral === true || !onCopyCookiesToProfile,
+        !isBrowser || profile.ephemeral === true || !onCopyCookiesToProfile,
     },
     {
       id: "cookiesManage",
@@ -522,7 +523,7 @@ export function ProfileInfoDialog({
       disabled: isDisabled,
       runningBadge: isRunning,
       hidden:
-        !isWayfern || profile.ephemeral === true || !onOpenCookieManagement,
+        !isBrowser || profile.ephemeral === true || !onOpenCookieManagement,
     },
     {
       icon: <LuSettings className="size-4" />,
@@ -1834,22 +1835,22 @@ function FingerprintSectionInline({
   onSaved: () => void;
   t: (key: string, options?: Record<string, unknown>) => string;
 }) {
-  const [wayfernConfig, setWayfernConfig] = React.useState<WayfernConfig>(
-    () => profile.wayfern_config ?? {},
+  const [browserConfig, setBrowserConfig] = React.useState<BrowserConfig>(
+    () => profile.chromium_config ?? {},
   );
   const [isSaving, setIsSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [success, setSuccess] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    setWayfernConfig(profile.wayfern_config ?? {});
+    setBrowserConfig(profile.chromium_config ?? {});
     setError(null);
     setSuccess(null);
-  }, [profile.wayfern_config]);
+  }, [profile.chromium_config]);
 
-  const isWayfern = profile.browser === "wayfern";
+  const isBrowser = profile.browser === "chromium";
 
-  if (!isWayfern) {
+  if (!isBrowser) {
     return (
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-2 text-sm font-semibold">
@@ -1863,8 +1864,8 @@ function FingerprintSectionInline({
     );
   }
 
-  const onWayfernChange = (key: keyof WayfernConfig, value: unknown) => {
-    setWayfernConfig((prev) => ({ ...prev, [key]: value }));
+  const onBrowserConfigChange = (key: keyof BrowserConfig, value: unknown) => {
+    setBrowserConfig((prev) => ({ ...prev, [key]: value }));
     setSuccess(null);
   };
 
@@ -1873,9 +1874,9 @@ function FingerprintSectionInline({
     setError(null);
     setSuccess(null);
     try {
-      await invoke("update_wayfern_config", {
+      await invoke("update_chromium_config", {
         profileId: profile.id,
-        config: wayfernConfig,
+        config: browserConfig,
       });
       setSuccess(t("common.buttons.saved"));
       onSaved();
@@ -1886,8 +1887,8 @@ function FingerprintSectionInline({
     }
   };
 
-  const initial = JSON.stringify(profile.wayfern_config ?? {});
-  const current = JSON.stringify(wayfernConfig);
+  const initial = JSON.stringify(profile.chromium_config ?? {});
+  const current = JSON.stringify(browserConfig);
   const dirty = current !== initial;
 
   return (
@@ -1901,8 +1902,8 @@ function FingerprintSectionInline({
       </p>
 
       <SharedFingerprintConfigForm
-        config={wayfernConfig}
-        onConfigChange={onWayfernChange}
+        config={browserConfig}
+        onConfigChange={onBrowserConfigChange}
         forceAdvanced={true}
         readOnly={isDisabled}
         crossOsUnlocked={crossOsUnlocked}
@@ -1931,7 +1932,7 @@ function FingerprintSectionInline({
             variant="ghost"
             className="h-7 text-xs"
             onClick={() => {
-              setWayfernConfig(profile.wayfern_config ?? {});
+              setBrowserConfig(profile.chromium_config ?? {});
               setError(null);
               setSuccess(null);
             }}

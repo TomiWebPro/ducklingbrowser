@@ -10,7 +10,7 @@ use crate::events;
 use crate::profile::types::{get_host_os, BrowserProfile, SyncMode};
 use crate::profile::ProfileManager;
 use crate::proxy_manager::PROXY_MANAGER;
-use crate::wayfern_manager::WayfernConfig;
+use crate::chromium_manager::ChromiumConfig;
 
 /// Prefix for temp directories that hold extracted profile archives. Cleanup
 /// refuses to delete anything outside the system temp dir with this prefix.
@@ -90,8 +90,8 @@ struct ProfileImportProgress {
 }
 
 fn map_browser_type(_browser: &str) -> &str {
-  // Every import source maps to Wayfern — the only launchable engine.
-  "wayfern"
+  // Every import source maps to the Chromium engine.
+  "chromium"
 }
 
 /// Convert an importer error into the structured `{"code": …}` string the
@@ -147,7 +147,7 @@ pub struct ProfileImporter {
   base_dirs: BaseDirs,
   downloaded_browsers_registry: &'static DownloadedBrowsersRegistry,
   profile_manager: &'static ProfileManager,
-  wayfern_manager: &'static crate::wayfern_manager::WayfernManager,
+  chromium_manager: &'static crate::chromium_manager::ChromiumManager,
 }
 
 impl ProfileImporter {
@@ -156,7 +156,7 @@ impl ProfileImporter {
       base_dirs: BaseDirs::new().expect("Failed to get base directories"),
       downloaded_browsers_registry: DownloadedBrowsersRegistry::instance(),
       profile_manager: ProfileManager::instance(),
-      wayfern_manager: crate::wayfern_manager::WayfernManager::instance(),
+      chromium_manager: crate::chromium_manager::ChromiumManager::instance(),
     }
   }
 
@@ -169,7 +169,7 @@ impl ProfileImporter {
   ) -> Result<Vec<DetectedProfile>, Box<dyn std::error::Error>> {
     let mut detected_profiles = Vec::new();
 
-    // Only Chromium-based sources (mapping to Wayfern) are detected. Gecko-family
+    // Only Chromium-based sources are detected. Gecko-family
     // sources mapped to Camoufox, which was removed, so they can no longer be
     // imported.
     for source in self.browser_sources() {
@@ -628,7 +628,6 @@ impl ProfileImporter {
       "yandex" => "Yandex Browser",
       "zen" => "Zen Browser",
 
-      "wayfern" => "Wayfern",
       _ => "Unknown Browser",
     }
   }
@@ -641,7 +640,7 @@ impl ProfileImporter {
     items: Vec<ImportProfileItem>,
     group_id: Option<String>,
     duplicate_strategy: DuplicateStrategy,
-    wayfern_config: Option<WayfernConfig>,
+    chromium_config: Option<ChromiumConfig>,
   ) -> Result<ProfileImportBatchResult, Box<dyn std::error::Error>> {
     if items.is_empty() {
       return Err(
@@ -663,10 +662,10 @@ impl ProfileImporter {
     }
 
     // Gate the paid fingerprint-OS override here rather than at each call site.
-    // `wayfern_config` is only ever consumed by this function, so a caller that
+    // `chromium_config` is only ever consumed by this function, so a caller that
     // forgets the check (the REST and MCP surfaces each had their own copy)
     // would bypass the restriction with no compile error.
-    let fingerprint_os = wayfern_config.as_ref().and_then(|c| c.os.as_deref());
+    let fingerprint_os = chromium_config.as_ref().and_then(|c| c.os.as_deref());
     if !crate::cloud_auth::CLOUD_AUTH
       .is_fingerprint_os_allowed(fingerprint_os)
       .await
@@ -756,7 +755,7 @@ impl ProfileImporter {
           item.proxy_id.clone(),
           item.vpn_id.clone(),
           group_id.clone(),
-          wayfern_config.clone(),
+          chromium_config.clone(),
         )
         .await
       {
@@ -808,7 +807,7 @@ impl ProfileImporter {
     proxy_id: Option<String>,
     vpn_id: Option<String>,
     group_id: Option<String>,
-    wayfern_config: Option<WayfernConfig>,
+    chromium_config: Option<ChromiumConfig>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
     let source_path = Path::new(source_path);
     if !source_path.exists() {
@@ -889,8 +888,8 @@ impl ProfileImporter {
       }
     };
 
-    let final_wayfern_config = if mapped == "wayfern" {
-      let mut config = wayfern_config.unwrap_or_default();
+    let final_chromium_config = if mapped == "chromium" {
+      let mut config = chromium_config.unwrap_or_default();
 
       if let Some(ref proxy_id_val) = proxy_id {
         if let Some(proxy_settings) = PROXY_MANAGER.get_proxy_settings_by_id(proxy_id_val) {
@@ -929,7 +928,7 @@ impl ProfileImporter {
           process_id: None,
           last_launch: None,
           release_type: "stable".to_string(),
-          wayfern_config: None,
+          chromium_config: None,
           group_id: None,
           tags: Vec::new(),
           note: None,
@@ -951,7 +950,7 @@ impl ProfileImporter {
         };
 
         match self
-          .wayfern_manager
+          .chromium_manager
           .generate_fingerprint_config(app_handle, &temp_profile, &config)
           .await
         {
@@ -989,7 +988,7 @@ impl ProfileImporter {
       process_id: None,
       last_launch: None,
       release_type: "stable".to_string(),
-      wayfern_config: final_wayfern_config,
+      chromium_config: final_chromium_config,
       group_id,
       tags: Vec::new(),
       note: None,
@@ -1108,7 +1107,7 @@ pub async fn import_browser_profiles(
   items: Vec<ImportProfileItem>,
   group_id: Option<String>,
   duplicate_strategy: Option<DuplicateStrategy>,
-  wayfern_config: Option<WayfernConfig>,
+  chromium_config: Option<ChromiumConfig>,
 ) -> Result<ProfileImportBatchResult, String> {
   // The Pro gate for fingerprint OS spoofing lives inside import_profiles.
   let importer = ProfileImporter::instance();
@@ -1118,7 +1117,7 @@ pub async fn import_browser_profiles(
       items,
       group_id,
       duplicate_strategy.unwrap_or_default(),
-      wayfern_config,
+      chromium_config,
     )
     .await
     .map_err(error_to_code_string)
@@ -1164,11 +1163,10 @@ mod tests {
 
   #[test]
   fn test_map_browser_type() {
-    assert_eq!(map_browser_type("chromium"), "wayfern");
-    assert_eq!(map_browser_type("brave"), "wayfern");
-    assert_eq!(map_browser_type("camoufox"), "wayfern");
-    assert_eq!(map_browser_type("wayfern"), "wayfern");
-    assert_eq!(map_browser_type("something_else"), "wayfern");
+    assert_eq!(map_browser_type("chromium"), "chromium");
+    assert_eq!(map_browser_type("brave"), "chromium");
+    assert_eq!(map_browser_type("camoufox"), "chromium");
+    assert_eq!(map_browser_type("something_else"), "chromium");
   }
 
   #[test]
@@ -1277,7 +1275,7 @@ mod tests {
     let profiles = importer.scan_folder(&profile_dir).unwrap();
     assert_eq!(profiles.len(), 1);
     assert_eq!(profiles[0].name, "my-profile");
-    assert_eq!(profiles[0].mapped_browser, "wayfern");
+    assert_eq!(profiles[0].mapped_browser, "chromium");
   }
 
   #[test]

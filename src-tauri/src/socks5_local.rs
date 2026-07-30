@@ -1,4 +1,4 @@
-//! Local SOCKS5 server served to the browser (Wayfern/Chromium).
+//! Local SOCKS5 server served to the browser (Chromium).
 //!
 //! The HTTP front-end (`proxy_server::handle_proxy_connection`) can only tunnel
 //! TCP, so QUIC and WebRTC — which are UDP — would be forced direct and leak the

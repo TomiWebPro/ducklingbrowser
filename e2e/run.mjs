@@ -617,10 +617,13 @@ async function prepareRetainedArtifacts(
     sessions
       .filter((entry) => entry.isDirectory())
       .map((entry) =>
-        rm(path.join(sessionsRoot, entry.name, "duckling", "data", "binaries"), {
-          recursive: true,
-          force: true,
-        }),
+        rm(
+          path.join(sessionsRoot, entry.name, "duckling", "data", "binaries"),
+          {
+            recursive: true,
+            force: true,
+          },
+        ),
       ),
   );
   await createSafeDiagnostics(runRoot, { suite, failed, sensitiveValues });
@@ -718,14 +721,14 @@ async function main() {
     }
 
     const localValues = await loadLocalValues([
-      "WAYFERN_TEST_TOKEN",
+      "CHROMIUM_TEST_TOKEN",
       "RESIDENTIAL_PROXY_URL_ONE_SOCKS",
       "RESIDENTIAL_PROXY_URL_ONE_HTTP",
     ]);
     sensitiveValues.push(...Object.values(localValues));
-    const token = localValues.WAYFERN_TEST_TOKEN ?? "";
+    const token = localValues.CHROMIUM_TEST_TOKEN ?? "";
     if (needsBrowser && !token) {
-      throw new Error("WAYFERN_TEST_TOKEN is required by the browser suite");
+      throw new Error("CHROMIUM_TEST_TOKEN is required by the browser suite");
     }
     if (wireGuard) {
       sensitiveValues.push(
@@ -754,7 +757,7 @@ async function main() {
         DUCKLING_E2E_DRIVER_URL: `http://127.0.0.1:${driverPort}`,
         DUCKLING_E2E_FIXTURE_URL: `http://127.0.0.1:${fixture.port}`,
         DUCKLING_E2E_GEOIP_FIXTURE_READY: geoIpFixture ? "1" : "0",
-        WAYFERN_TEST_TOKEN: token,
+        CHROMIUM_TEST_TOKEN: token,
         RESIDENTIAL_PROXY_URL_ONE_SOCKS:
           localValues.RESIDENTIAL_PROXY_URL_ONE_SOCKS ?? "",
         RESIDENTIAL_PROXY_URL_ONE_HTTP:

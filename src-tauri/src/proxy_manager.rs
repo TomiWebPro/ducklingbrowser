@@ -1523,7 +1523,7 @@ impl ProxyManager {
     bypass_rules: Vec<String>,
     blocklist_file: Option<String>,
     dns_allowlist_mode: bool,
-    // Protocol the local worker serves the browser: "socks5" (Wayfern). Reflected in
+    // Protocol the local worker serves the browser: "socks5". Reflected in
     // the returned ProxySettings.proxy_type so the caller formats the right local proxy URL scheme.
     local_protocol: &str,
   ) -> Result<ProxySettings, String> {

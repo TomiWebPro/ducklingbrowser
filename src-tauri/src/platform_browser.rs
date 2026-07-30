@@ -7,7 +7,7 @@ use std::process::Command;
 /// profile/data-dir argument, NOT merely a substring. A bare `contains` match
 /// force-killed unrelated processes that happened to mention the path (editors,
 /// `tail`, a terminal that `cd`'d there, or another profile whose path has this
-/// one as a prefix). Mirrors the precise matching in browser_runner/wayfern_manager.
+/// one as a prefix). Mirrors the precise matching in browser_runner/chromium_manager.
 ///
 /// Only the macOS and Linux process-kill paths use this; Windows has no
 /// `find_processes_by_profile_path`, so gate it to avoid a dead-code error there.
@@ -19,7 +19,7 @@ fn cmd_matches_profile_path(cmd: &[std::ffi::OsString], profile_path: &str) -> b
     if *arg == profile_path {
       return true;
     }
-    // `--user-data-dir=<path>` (Chromium/Wayfern) or `-profile=<path>`.
+    // `--user-data-dir=<path>` (Chromium) or `-profile=<path>`.
     if let Some(val) = arg
       .strip_prefix("--user-data-dir=")
       .or_else(|| arg.strip_prefix("-profile="))

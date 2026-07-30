@@ -252,7 +252,7 @@ fn normalize_locale(locale: &str) -> Locale {
 
   for part in parts.iter().skip(1) {
     if part.len() == 4 && part.chars().all(|c| c.is_ascii_alphabetic()) {
-      // Script subtag (e.g. Hans/Hant) — ignored; Wayfern fingerprint uses language+region only.
+      // Script subtag (e.g. Hans/Hant) — ignored; fingerprint uses language+region only.
       continue;
     }
     region = Some(part.to_uppercase());

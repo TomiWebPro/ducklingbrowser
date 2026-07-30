@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "DucklingBrouser",
+  "productName": "DucklingBrowser",
   "version": "0.28.2",
-  "identifier": "com.ducklingbrouser",
+  "identifier": "com.ducklingbrowser",
   "build": {
     "beforeDevCommand": "pnpm copy-proxy-binary && pnpm dev",
     "devUrl": "http://localhost:12341",

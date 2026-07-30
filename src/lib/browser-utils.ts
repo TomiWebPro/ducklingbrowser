@@ -14,9 +14,10 @@ export { getCurrentOS } from "@/lib/platform";
  */
 export function getBrowserDisplayName(browserType: string): string {
   const browserNames: Record<string, string> = {
-    wayfern: "Wayfern",
+    chromium: "Chromium",
   };
 
+  if (browserType === "chromium") return "Chromium";
   return browserNames[browserType] || browserType;
 }
 
@@ -27,7 +28,8 @@ export function getBrowserDisplayName(browserType: string): string {
  */
 export function getBrowserIcon(browserType: string) {
   switch (browserType) {
-    case "wayfern":
+    case "chromium":
+    case "chromium":
       return FaChrome;
     default:
       return FaExclamationTriangle;
@@ -50,9 +52,9 @@ export function getProfileIcon(profile: {
 
 export function isCrossOsProfile(profile: {
   host_os?: string;
-  wayfern_config?: { os?: string };
+  chromium_config?: { os?: string };
 }): boolean {
-  const profileOs = profile.host_os || profile.wayfern_config?.os;
+  const profileOs = profile.host_os || profile.chromium_config?.os;
   if (!profileOs) return false;
   return profileOs !== getCurrentOS();
 }

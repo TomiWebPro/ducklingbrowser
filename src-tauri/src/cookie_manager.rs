@@ -195,7 +195,7 @@ impl CookieManager {
     chrome_decrypt::get_encryption_key(&profile_data_path)
   }
 
-  fn wayfern_cookie_path(profile_data_path: &Path) -> PathBuf {
+  fn chromium_cookie_path(profile_data_path: &Path) -> PathBuf {
     let default_dir = profile_data_path.join("Default");
     #[cfg(target_os = "windows")]
     {
@@ -212,8 +212,8 @@ impl CookieManager {
     let profile_data_path = profile.get_profile_data_path(profiles_dir);
 
     match profile.browser.as_str() {
-      "wayfern" => {
-        let path = Self::wayfern_cookie_path(&profile_data_path);
+      "chromium" => {
+        let path = Self::chromium_cookie_path(&profile_data_path);
         if path.exists() {
           Ok(path)
         } else {
@@ -238,8 +238,8 @@ impl CookieManager {
     let profile_data_path = profile.get_profile_data_path(profiles_dir);
 
     match profile.browser.as_str() {
-      "wayfern" => {
-        let path = Self::wayfern_cookie_path(&profile_data_path);
+      "chromium" => {
+        let path = Self::chromium_cookie_path(&profile_data_path);
         if !path.exists() {
           Self::create_empty_chrome_cookies_db(&path)?;
         }
@@ -257,7 +257,7 @@ impl CookieManager {
   /// Schema matches what recent Chromium versions write on first launch:
   /// the `cookies` table, the `meta` table with version info, and the
   /// `host_key/top_frame_site_key/name/path` unique index. Chromium's cookie
-  /// store migration code will upgrade this forward when Wayfern first
+  /// store migration code will upgrade this forward when the browser first
   /// launches the profile.
   fn create_empty_chrome_cookies_db(path: &Path) -> Result<(), String> {
     if let Some(parent) = path.parent() {
@@ -319,7 +319,7 @@ impl CookieManager {
     (unix_time + Self::WINDOWS_EPOCH_DIFF) * 1_000_000
   }
 
-  /// Read cookies from a Chrome/Wayfern profile.
+  /// Read cookies from a Chrome/Chromium profile.
   /// Handles encrypted cookies by decrypting encrypted_value using the profile's encryption key.
   fn read_chrome_cookies(
     db_path: &Path,
@@ -382,13 +382,13 @@ impl CookieManager {
     Ok(cookies)
   }
 
-  /// Write cookies to a Chrome/Wayfern profile.
+  /// Write cookies to a Chrome/Chromium profile.
   ///
   /// Always writes values as plaintext in the `value` column with an empty
   /// `encrypted_value`. Chromium reads plaintext on a per-row basis when
   /// `encrypted_value` is empty, so this mixes cleanly with any pre-existing
   /// encrypted cookies in the database. We avoid encrypting on write because
-  /// the os_crypt key derivation between Wayfern's runtime and an external
+  /// the os_crypt key derivation between the browser runtime and an external
   /// writer is not guaranteed to match, and a ciphertext Chromium can't
   /// decrypt silently produces an empty cookie value at runtime.
   fn write_chrome_cookies(
@@ -509,7 +509,7 @@ impl CookieManager {
     let db_path = Self::get_cookie_db_path(profile, &profiles_dir)?;
 
     let cookies = match profile.browser.as_str() {
-      "wayfern" => {
+      "chromium" => {
         let key = Self::get_chrome_encryption_key(profile, &profiles_dir);
         Self::read_chrome_cookies(&db_path, key.as_ref())?
       }
@@ -615,7 +615,7 @@ impl CookieManager {
     let conn = Self::open_cookie_db_readonly(&db_path)?;
 
     let (count_sql, domain_sql) = match profile.browser.as_str() {
-      "wayfern" => (
+      "chromium" => (
         "SELECT COUNT(*) FROM cookies",
         "SELECT host_key, COUNT(*) FROM cookies GROUP BY host_key ORDER BY COUNT(*) DESC, host_key ASC",
       ),
@@ -689,7 +689,7 @@ impl CookieManager {
 
     let source_db_path = Self::get_cookie_db_path(source, &profiles_dir)?;
     let all_cookies = match source.browser.as_str() {
-      "wayfern" => {
+      "chromium" => {
         let key = Self::get_chrome_encryption_key(source, &profiles_dir);
         Self::read_chrome_cookies(&source_db_path, key.as_ref())?
       }
@@ -760,7 +760,7 @@ impl CookieManager {
       };
 
       let write_result = match target.browser.as_str() {
-        "wayfern" => Self::write_chrome_cookies(&target_db_path, &cookies_to_copy),
+        "chromium" => Self::write_chrome_cookies(&target_db_path, &cookies_to_copy),
         _ => {
           results.push(CookieCopyResult {
             target_profile_id: target_id.clone(),
@@ -1025,7 +1025,7 @@ impl CookieManager {
     let db_path = Self::ensure_cookie_db_path(profile, &profiles_dir)?;
 
     let write_result = match profile.browser.as_str() {
-      "wayfern" => Self::write_chrome_cookies(&db_path, &cookies),
+      "chromium" => Self::write_chrome_cookies(&db_path, &cookies),
       _ => return Err(format!("Unsupported browser type: {}", profile.browser)),
     };
 
@@ -1545,7 +1545,7 @@ mod tests {
     let _ = std::fs::remove_dir_all(&profile_dir);
   }
 
-  /// Regression: a brand-new Wayfern profile has no `Default/Cookies` file
+  /// Regression: a brand-new Chromium profile has no `Default/Cookies` file
   /// yet (Chromium only writes it on first launch). Copying/importing into
   /// such a profile must create the file on demand.
   #[test]

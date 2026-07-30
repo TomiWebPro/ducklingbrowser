@@ -94,7 +94,7 @@ fn language_matches_country(cc: &str, language: &str) -> Option<bool> {
 
 /// Extract (timezone, language) from a profile's stored fingerprint JSON.
 fn fingerprint_locale(profile: &BrowserProfile) -> (Option<String>, Option<String>) {
-  let Some(config) = &profile.wayfern_config else {
+  let Some(config) = &profile.chromium_config else {
     return (None, None);
   };
   let Some(fp_str) = &config.fingerprint else {
@@ -245,14 +245,14 @@ pub async fn match_profile_fingerprint_to_exit(
     .ok_or_else(|| serde_json::json!({ "code": "PROFILE_NOT_FOUND" }).to_string())?;
 
   let mut config = profile
-    .wayfern_config
+    .chromium_config
     .clone()
     .filter(|c| c.fingerprint.is_some())
     .ok_or_else(|| serde_json::json!({ "code": "FINGERPRINT_MATCH_FAILED" }).to_string())?;
   let fingerprint = config.fingerprint.clone().unwrap();
 
   let geoip_override = serde_json::Value::String(exit_ip);
-  let refreshed = crate::wayfern_manager::WayfernManager::refresh_fingerprint_geolocation(
+  let refreshed = crate::chromium_manager::ChromiumManager::refresh_fingerprint_geolocation(
     &fingerprint,
     None,
     Some(&geoip_override),
@@ -261,7 +261,7 @@ pub async fn match_profile_fingerprint_to_exit(
   .ok_or_else(|| serde_json::json!({ "code": "FINGERPRINT_MATCH_FAILED" }).to_string())?;
 
   config.fingerprint = Some(refreshed);
-  profile.wayfern_config = Some(config);
+  profile.chromium_config = Some(config);
   manager.save_profile(&profile).map_err(|e| {
     serde_json::json!({ "code": "INTERNAL_ERROR", "params": { "detail": e.to_string() } })
       .to_string()

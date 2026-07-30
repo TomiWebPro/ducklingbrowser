@@ -81,9 +81,7 @@ export class CdpClient {
         await sleep(100);
       }
     }
-    throw new Error(
-      `Timed out connecting to Wayfern CDP on ${port}: ${lastError}`,
-    );
+    throw new Error(`Timed out connecting to CDP on ${port}: ${lastError}`);
   }
 
   command(method, params = {}) {
