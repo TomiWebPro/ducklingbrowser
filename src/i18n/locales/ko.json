@@ -1847,7 +1847,9 @@
     "mcpAgentRemoveFailed": "MCP 클라이언트에서 Duckling Browser를 제거하지 못했습니다: {{detail}}",
     "chromiumVersionNotAvailable": "Chromium 버전 {{requested}}은(는) 다운로드할 수 없습니다. 현재 버전은 {{current}}입니다.",
     "taskNotFound": "Scheduled task not found",
-    "taskInvalidSchedule": "Invalid task schedule: {{detail}}"
+    "taskInvalidSchedule": "Invalid task schedule: {{detail}}",
+    "aiKeyInvalid": "Invalid AI key: {{detail}}",
+    "aiKeyNotFound": "AI key not found"
   },
   "rail": {
     "profiles": "프로필",

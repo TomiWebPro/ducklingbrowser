@@ -64,6 +64,8 @@ export type BackendErrorCode =
   | "MCP_AGENT_REMOVE_FAILED"
   | "TASK_NOT_FOUND"
   | "TASK_INVALID_SCHEDULE"
+  | "AI_KEY_INVALID"
+  | "AI_KEY_NOT_FOUND"
   | "INTERNAL_ERROR";
 
 export interface BackendError {
@@ -247,6 +249,12 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.taskInvalidSchedule", {
         detail: parsed.params?.detail ?? "",
       });
+    case "AI_KEY_INVALID":
+      return t("backendErrors.aiKeyInvalid", {
+        detail: parsed.params?.detail ?? "",
+      });
+    case "AI_KEY_NOT_FOUND":
+      return t("backendErrors.aiKeyNotFound");
     case "CLEAR_ON_CLOSE_UNAVAILABLE":
       return t("backendErrors.clearOnCloseUnavailable");
     case "INTERNAL_ERROR":

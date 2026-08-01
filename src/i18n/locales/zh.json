@@ -1847,7 +1847,9 @@
     "mcpAgentRemoveFailed": "无法从 MCP 客户端移除 Duckling Browser：{{detail}}",
     "chromiumVersionNotAvailable": "Chromium 版本 {{requested}} 无法下载。当前版本为 {{current}}。",
     "taskNotFound": "Scheduled task not found",
-    "taskInvalidSchedule": "Invalid task schedule: {{detail}}"
+    "taskInvalidSchedule": "Invalid task schedule: {{detail}}",
+    "aiKeyInvalid": "Invalid AI key: {{detail}}",
+    "aiKeyNotFound": "AI key not found"
   },
   "rail": {
     "profiles": "配置文件",

@@ -272,6 +272,16 @@ export const commandCoverage = {
       "scheduler_set_enabled",
     ],
   },
+  aiKeys: {
+    suite: "ai",
+    level: "integration",
+    commands: [
+      "ai_keys_list",
+      "ai_keys_save",
+      "ai_keys_delete",
+      "ai_keys_test",
+    ],
+  },
   hostMutating: {
     suite: "full",
     level: "host-mutating",

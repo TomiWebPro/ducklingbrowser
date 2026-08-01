@@ -1847,7 +1847,9 @@
     "mcpAgentRemoveFailed": "Duckling Browser MCP istemcisinden kaldırılamadı: {{detail}}",
     "chromiumVersionNotAvailable": "Chromium {{requested}} sürümü indirilemiyor. Güncel sürüm: {{current}}.",
     "taskNotFound": "Scheduled task not found",
-    "taskInvalidSchedule": "Invalid task schedule: {{detail}}"
+    "taskInvalidSchedule": "Invalid task schedule: {{detail}}",
+    "aiKeyInvalid": "Invalid AI key: {{detail}}",
+    "aiKeyNotFound": "AI key not found"
   },
   "rail": {
     "profiles": "Profiller",

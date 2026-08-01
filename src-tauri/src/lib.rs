@@ -42,6 +42,7 @@ fn e2e_automation_profile_dir() -> Option<std::path::PathBuf> {
     .flatten()
 }
 
+mod ai_keys;
 mod api_client;
 mod api_server;
 mod app_auto_updater;
@@ -124,6 +125,8 @@ use downloaded_browsers_registry::{
   check_missing_binaries, ensure_active_browsers_downloaded, ensure_all_binaries_exist,
   get_downloaded_browser_versions,
 };
+
+use ai_keys::{ai_keys_delete, ai_keys_list, ai_keys_save, ai_keys_test};
 
 use downloader::{cancel_download, download_browser};
 
@@ -2471,6 +2474,10 @@ pub fn run_with_builder(
       scheduler_save,
       scheduler_delete,
       scheduler_set_enabled,
+      ai_keys_list,
+      ai_keys_save,
+      ai_keys_delete,
+      ai_keys_test,
     ])
     .build(tauri::generate_context!())
     .expect("error while building tauri application")
@@ -2543,6 +2550,11 @@ mod tests {
       "scheduler_save",
       "scheduler_delete",
       "scheduler_set_enabled",
+      // AI keys commands: used by the keys tab (M3) and e2e ai suite.
+      "ai_keys_list",
+      "ai_keys_save",
+      "ai_keys_delete",
+      "ai_keys_test",
     ];
 
     // Extract command names from the generate_handler! macro in this file

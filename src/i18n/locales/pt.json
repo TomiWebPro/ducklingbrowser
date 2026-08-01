@@ -1847,7 +1847,9 @@
     "mcpAgentRemoveFailed": "Não foi possível remover o Duckling Browser do cliente MCP: {{detail}}",
     "chromiumVersionNotAvailable": "A versão {{requested}} do Chromium não está disponível para download. A versão atual é {{current}}.",
     "taskNotFound": "Scheduled task not found",
-    "taskInvalidSchedule": "Invalid task schedule: {{detail}}"
+    "taskInvalidSchedule": "Invalid task schedule: {{detail}}",
+    "aiKeyInvalid": "Invalid AI key: {{detail}}",
+    "aiKeyNotFound": "AI key not found"
   },
   "rail": {
     "profiles": "Perfis",
