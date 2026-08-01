@@ -1875,7 +1875,8 @@
     "integrations": "Integraciones",
     "account": "Cuenta",
     "keys": "AI keys",
-    "agent": "AI Agent"
+    "agent": "AI Agent",
+    "tasks": "Tasks"
   },
   "pageTitle": {
     "proxies": "Red",
@@ -2154,6 +2155,63 @@
       "profileUpdate": "Profile update",
       "proxy": "Proxy",
       "custom": "Action"
+    }
+  },
+  "tasks": {
+    "title": "Scheduled tasks",
+    "tabTasks": "Tasks",
+    "tabCalendar": "Calendar",
+    "listTitle": "Your tasks",
+    "newTask": "New task",
+    "empty": "No scheduled tasks yet. Create one to automate browser work at a random time inside a daily window.",
+    "edit": "Edit task",
+    "delete": "Delete task",
+    "saved": "Task saved",
+    "deleted": "Task deleted",
+    "noNextRun": "Disabled — no next run",
+    "mode": {
+      "liveAgent": "Agent CLI",
+      "macro": "Macro"
+    },
+    "form": {
+      "title": "Task details",
+      "name": "Name",
+      "namePlaceholder": "Nightly refresh",
+      "description": "Description",
+      "mode": "Mode",
+      "agent": "Agent",
+      "agentPlaceholder": "Pick an installed agent",
+      "prompt": "Instructions",
+      "promptPlaceholder": "What should the agent do in the window?",
+      "windowStart": "Window start",
+      "windowEnd": "Window end",
+      "timezone": "Timezone",
+      "jitter": "Jitter (minutes)",
+      "randomizeDaily": "Re-roll the exact time daily",
+      "sameBucket": "Share the automation rate limit",
+      "enabled": "Enabled",
+      "save": "Save task",
+      "cancel": "Cancel",
+      "prefillName": "Task on",
+      "nameRequired": "Give the task a name",
+      "agentRequired": "Pick an agent CLI for this task",
+      "promptRequired": "Write instructions for the agent",
+      "macroUnavailable": "Macro steps arrive in a future update. Use an agent CLI task for now."
+    },
+    "calendar": {
+      "today": "Today",
+      "prevMonth": "Previous month",
+      "nextMonth": "Next month",
+      "noTasks": "No tasks run on this day",
+      "weekdays": {
+        "sun": "Sun",
+        "mon": "Mon",
+        "tue": "Tue",
+        "wed": "Wed",
+        "thu": "Thu",
+        "fri": "Fri",
+        "sat": "Sat"
+      }
     }
   }
 }

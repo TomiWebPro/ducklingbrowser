@@ -45,6 +45,7 @@ import { ProfileSyncDialog } from "@/components/profile-sync-dialog";
 import { ProxyAssignmentDialog } from "@/components/proxy-assignment-dialog";
 import { ProxyManagementDialog } from "@/components/proxy-management-dialog";
 import { type AppPage, RailNav } from "@/components/rail-nav";
+import { ScheduledTasksDialog } from "@/components/scheduled-tasks-dialog";
 import { SettingsDialog } from "@/components/settings-dialog";
 import { ShortcutsPage } from "@/components/shortcuts-page";
 import { SyncAllDialog } from "@/components/sync-all-dialog";
@@ -279,6 +280,8 @@ export default function Home() {
   const [integrationsDialogOpen, setIntegrationsDialogOpen] = useState(false);
   const [aiKeysDialogOpen, setAiKeysDialogOpen] = useState(false);
   const [agentDialogOpen, setAgentDialogOpen] = useState(false);
+  const [scheduledTasksDialogOpen, setScheduledTasksDialogOpen] =
+    useState(false);
   const [importProfileDialogOpen, setImportProfileDialogOpen] = useState(false);
   const [proxyManagementDialogOpen, setProxyManagementDialogOpen] =
     useState(false);
@@ -398,6 +401,9 @@ export default function Home() {
         break;
       case "agent":
         setAgentDialogOpen(true);
+        break;
+      case "tasks":
+        setScheduledTasksDialogOpen(true);
         break;
       case "import":
         setImportProfileDialogOpen(true);
@@ -1731,6 +1737,17 @@ export default function Home() {
                 setAiKeysDialogOpen(true);
                 setCurrentPage("keys");
               }}
+            />
+          )}
+
+          {scheduledTasksDialogOpen && (
+            <ScheduledTasksDialog
+              isOpen={scheduledTasksDialogOpen}
+              onClose={() => {
+                setScheduledTasksDialogOpen(false);
+                setCurrentPage("profiles");
+              }}
+              subPage={currentPage === "tasks"}
             />
           )}
 

@@ -8,6 +8,7 @@ import { FiWifi } from "react-icons/fi";
 import { GoGear, GoKebabHorizontal } from "react-icons/go";
 import {
   LuBot,
+  LuCalendarDays,
   LuCloud,
   LuInfo,
   LuKey,
@@ -32,6 +33,7 @@ export type AppPage =
   | "settings"
   | "integrations"
   | "agent"
+  | "tasks"
   | "account"
   | "import"
   | "keys"
@@ -205,6 +207,7 @@ const TOP_ITEMS: RailItem[] = [
   { page: "groups", Icon: LuUsers, labelKey: "rail.groups" },
   { page: "integrations", Icon: LuPlug, labelKey: "rail.integrations" },
   { page: "agent", Icon: LuBot, labelKey: "rail.agent" },
+  { page: "tasks", Icon: LuCalendarDays, labelKey: "rail.tasks" },
   { page: "keys", Icon: LuKey, labelKey: "rail.keys" },
   { page: "account", Icon: LuCloud, labelKey: "rail.account" },
 ];

@@ -2552,11 +2552,6 @@ mod tests {
       "check_chromium_terms_accepted",
       "check_chromium_downloaded",
       "accept_chromium_terms",
-      // Scheduler commands: used by the tasks tab (M5) and e2e tasks suite.
-      "scheduler_list",
-      "scheduler_save",
-      "scheduler_delete",
-      "scheduler_set_enabled",
     ];
 
     // Extract command names from the generate_handler! macro in this file
