@@ -515,7 +515,10 @@ fn delegate_flags(agent_id: &str) -> Option<Vec<String>> {
   }
 }
 
-async fn delegate_to_agent(agent_id: &str, prompt: &str) -> Result<AgentChatResult, String> {
+pub(crate) async fn delegate_to_agent(
+  agent_id: &str,
+  prompt: &str,
+) -> Result<AgentChatResult, String> {
   let flags = delegate_flags(agent_id).ok_or_else(|| delegate_not_found(agent_id))?;
   let full_prompt = format!(
     "{prompt}\n\nRespond in JSON with the shape {{\"reply\": \"<your answer>\", \"cards\": []}}.",

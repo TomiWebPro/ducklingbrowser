@@ -270,6 +270,7 @@ export const commandCoverage = {
       "scheduler_save",
       "scheduler_delete",
       "scheduler_set_enabled",
+      "scheduler_run_now",
     ],
   },
   aiKeys: {

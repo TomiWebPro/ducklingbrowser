@@ -70,3 +70,35 @@ test("scheduler rejects invalid tasks", async () => {
     await app.invokeError("scheduler_delete", { id: "missing-task-id" });
   });
 });
+
+test("scheduler_run_now reports run outcomes", async () => {
+  await withApp("tasks-run-now", async (app) => {
+    const saved = await app.invoke("scheduler_save", {
+      task: {
+        id: "",
+        name: "Manual run probe",
+        mode: "macro",
+        profile_id: null,
+        agent_id: null,
+        prompt: null,
+        steps: [],
+        schedule: {
+          window_start: "02:00",
+          window_end: "04:00",
+          timezone: "UTC",
+          jitter_minutes: 30,
+          randomize_daily: true,
+        },
+        same_bucket_rate_limit: true,
+        enabled: true,
+      },
+    });
+
+    const outcome = await app.invoke("scheduler_run_now", { id: saved.id });
+    assert.equal(outcome.id, saved.id);
+    assert.ok(outcome.status, "run now should report a status");
+    assert.ok(Number.isFinite(outcome.durationMs));
+
+    await app.invokeError("scheduler_run_now", { id: "missing-task-id" });
+  });
+});

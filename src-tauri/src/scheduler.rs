@@ -1,13 +1,20 @@
+use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::LazyLock;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{LazyLock, Mutex};
+use std::time::Instant;
 
 use chrono::{DateTime, LocalResult, NaiveDate, NaiveTime, TimeDelta, TimeZone, Utc};
 use chrono_tz::Tz;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::agent_engine::delegate_to_agent;
+use crate::automation_rate_limiter::RateLimitOutcome;
+use crate::cdp_session::CdpSession;
 use crate::macro_step::MacroStep;
+use crate::task_runner::{apply_deferred_profile_fields, run_task, TaskRunResult};
 
 pub static SCHEDULER_STORE: LazyLock<SchedulerStore> = LazyLock::new(|| SchedulerStore);
 
@@ -317,6 +324,192 @@ impl SchedulerStore {
 struct SchedulerFile {
   version: u32,
   tasks: Vec<TaskDefinition>,
+}
+
+/// Polling interval between JobRunner ticks.
+const RUNNER_TICK_SECS: u64 = 30;
+
+/// One-shot retry when the automation quota gate is hit.
+const RATE_LIMIT_RETRY_ATTEMPTS: u32 = 1;
+
+pub struct JobRunner {
+  started: AtomicBool,
+  in_flight: Mutex<HashSet<String>>,
+}
+
+pub static JOB_RUNNER: LazyLock<JobRunner> = LazyLock::new(|| JobRunner {
+  started: AtomicBool::new(false),
+  in_flight: Mutex::new(HashSet::new()),
+});
+
+impl JobRunner {
+  pub fn instance() -> &'static JobRunner {
+    &JOB_RUNNER
+  }
+
+  /// Starts the background tick loop. Safe to call repeatedly.
+  pub fn start(&'static self) {
+    if self.started.swap(true, Ordering::SeqCst) {
+      return;
+    }
+    tauri::async_runtime::spawn(async move {
+      loop {
+        self.tick().await;
+        tokio::time::sleep(std::time::Duration::from_secs(RUNNER_TICK_SECS)).await;
+      }
+    });
+    log::info!("Scheduled task runner started");
+  }
+
+  async fn tick(&'static self) {
+    let now = Utc::now();
+    let due: Vec<TaskDefinition> = SchedulerStore::instance()
+      .list_tasks()
+      .into_iter()
+      .filter(|t| t.enabled)
+      .filter(|t| {
+        t.next_run_at
+          .as_deref()
+          .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+          .map(|d| d.with_timezone(&Utc) <= now)
+          .unwrap_or(false)
+      })
+      .collect();
+
+    for task in due {
+      let mut in_flight = self.in_flight.lock().unwrap_or_else(|p| p.into_inner());
+      if in_flight.contains(&task.id) {
+        continue;
+      }
+      in_flight.insert(task.id.clone());
+      drop(in_flight);
+      let me = self;
+      tauri::async_runtime::spawn(async move {
+        me.run_one(&task).await;
+        me.in_flight
+          .lock()
+          .unwrap_or_else(|p| p.into_inner())
+          .remove(&task.id);
+      });
+    }
+  }
+
+  /// Runs one task immediately (manual trigger) and records the outcome.
+  pub async fn run_now(&self, id: &str) -> Result<serde_json::Value, String> {
+    let task = SchedulerStore::instance()
+      .get_task(id)
+      .ok_or_else(|| code_error("TASK_NOT_FOUND", serde_json::json!({ "id": id })))?;
+    let (status, error, duration_ms) = self.execute(&task).await;
+    Ok(serde_json::json!({
+      "id": task.id,
+      "name": task.name,
+      "status": status,
+      "error": error,
+      "durationMs": duration_ms,
+    }))
+  }
+
+  async fn run_one(&self, task: &TaskDefinition) {
+    let (status, error, duration_ms) = self.execute(task).await;
+    let mut updated = SchedulerStore::instance()
+      .get_task(&task.id)
+      .unwrap_or_else(|| task.clone());
+    updated.last_run_at = Some(now_iso());
+    updated.last_run_status = Some(status);
+    updated.last_run_error = error;
+    updated.last_run_duration_ms = Some(duration_ms);
+    if let Err(e) = SchedulerStore::instance().save_task(&updated) {
+      log::warn!("Failed to record run for task {}: {e}", task.id);
+    }
+  }
+
+  async fn execute(&self, task: &TaskDefinition) -> (String, Option<String>, u64) {
+    let started = Instant::now();
+
+    if task.same_bucket_rate_limit {
+      for attempt in 0..=RATE_LIMIT_RETRY_ATTEMPTS {
+        match crate::automation_rate_limiter::check_automation_rate_limit().await {
+          RateLimitOutcome::Allowed { .. } | RateLimitOutcome::Unlimited => break,
+          RateLimitOutcome::Limited { retry_after_secs } => {
+            if attempt == RATE_LIMIT_RETRY_ATTEMPTS {
+              let msg =
+                format!("Rate limited; skipped after {attempt} retries (quota resets in {retry_after_secs}s)");
+              return (
+                "skipped".to_string(),
+                Some(msg),
+                started.elapsed().as_millis() as u64,
+              );
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(retry_after_secs)).await;
+          }
+        }
+      }
+    }
+
+    let outcome = match task.mode.as_str() {
+      "macro" => run_macro_task(task).await,
+      "live_agent" => run_live_agent_task(task).await,
+      other => Err(format!("Unknown task mode '{other}'")),
+    };
+
+    match outcome {
+      Ok(result) => {
+        if !result.extracted.is_empty() {
+          log::info!(
+            "Task {} extracted {} value(s) during run",
+            task.id,
+            result.extracted.len()
+          );
+        }
+        let duration = if result.duration_ms > 0 {
+          result.duration_ms
+        } else {
+          started.elapsed().as_millis() as u64
+        };
+        (result.status, result.error, duration)
+      }
+      Err(error) => (
+        "error".to_string(),
+        Some(error),
+        started.elapsed().as_millis() as u64,
+      ),
+    }
+  }
+}
+
+async fn run_macro_task(task: &TaskDefinition) -> Result<TaskRunResult, String> {
+  let mut session = CdpSession::new();
+  let result = run_task(task, &mut session).await?;
+  if !result.deferred_profile_fields.is_empty() {
+    apply_deferred_profile_fields(&result.deferred_profile_fields)
+      .map_err(|e| format!("Failed to apply profile fields: {e}"))?;
+  }
+  Ok(result)
+}
+
+async fn run_live_agent_task(task: &TaskDefinition) -> Result<TaskRunResult, String> {
+  let agent_id = task
+    .agent_id
+    .as_deref()
+    .ok_or_else(|| "Task has no agent".to_string())?;
+  let prompt = task.prompt.as_deref().unwrap_or("");
+  if prompt.trim().is_empty() {
+    return Err("Task has no prompt".to_string());
+  }
+  let _result = delegate_to_agent(agent_id, prompt).await?;
+  Ok(TaskRunResult {
+    status: "success".to_string(),
+    error: None,
+    duration_ms: 0,
+    extracted: std::collections::BTreeMap::new(),
+    deferred_profile_fields: Vec::new(),
+  })
+}
+
+/// Runs one task immediately (manual trigger / tests).
+#[tauri::command]
+pub async fn scheduler_run_now(id: String) -> Result<serde_json::Value, String> {
+  JobRunner::instance().run_now(&id).await
 }
 
 #[cfg(test)]

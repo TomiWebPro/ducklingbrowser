@@ -94,6 +94,7 @@ mod mcp_integrations;
 mod mcp_server;
 mod scheduler;
 mod tag_manager;
+mod task_runner;
 mod team_lock;
 mod version_updater;
 pub mod vpn;
@@ -134,7 +135,9 @@ use agent_engine::{agent_chat, agent_chat_confirm, agent_chat_decline};
 
 use downloader::{cancel_download, download_browser};
 
-use scheduler::{scheduler_delete, scheduler_list, scheduler_save, scheduler_set_enabled};
+use scheduler::{
+  scheduler_delete, scheduler_list, scheduler_run_now, scheduler_save, scheduler_set_enabled,
+};
 
 use settings_manager::{
   complete_onboarding, dismiss_window_resize_warning, get_app_settings, get_onboarding_completed,
@@ -2261,6 +2264,9 @@ pub fn run_with_builder(
         }
       });
 
+      // Start the scheduled task runner (AI cron) in the background
+      scheduler::JobRunner::instance().start();
+
       // Start cloud auth background refresh loop
       let app_handle_cloud = app.handle().clone();
       tauri::async_runtime::spawn(async move {
@@ -2478,6 +2484,7 @@ pub fn run_with_builder(
       scheduler_save,
       scheduler_delete,
       scheduler_set_enabled,
+      scheduler_run_now,
       ai_keys_list,
       ai_keys_save,
       ai_keys_delete,
@@ -2552,6 +2559,7 @@ mod tests {
       "check_chromium_terms_accepted",
       "check_chromium_downloaded",
       "accept_chromium_terms",
+      "scheduler_run_now",
     ];
 
     // Extract command names from the generate_handler! macro in this file
