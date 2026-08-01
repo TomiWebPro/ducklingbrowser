@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AboutDialog } from "@/components/about-dialog";
 import { AccountPage } from "@/components/account-page";
+import { AiKeysDialog } from "@/components/ai-keys-dialog";
 import { BrowserConfigDialog } from "@/components/browser-config-dialog";
 import { BrowserTermsDialog } from "@/components/browser-terms-dialog";
 import { CloneProfileDialog } from "@/components/clone-profile-dialog";
@@ -275,6 +276,7 @@ export default function Home() {
   const [createProfileDialogOpen, setCreateProfileDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [integrationsDialogOpen, setIntegrationsDialogOpen] = useState(false);
+  const [aiKeysDialogOpen, setAiKeysDialogOpen] = useState(false);
   const [importProfileDialogOpen, setImportProfileDialogOpen] = useState(false);
   const [proxyManagementDialogOpen, setProxyManagementDialogOpen] =
     useState(false);
@@ -388,6 +390,9 @@ export default function Home() {
         break;
       case "integrations":
         setIntegrationsDialogOpen(true);
+        break;
+      case "keys":
+        setAiKeysDialogOpen(true);
         break;
       case "import":
         setImportProfileDialogOpen(true);
@@ -1694,6 +1699,17 @@ export default function Home() {
               }}
               subPage={currentPage === "integrations"}
               initialTab={integrationsInitialTab}
+            />
+          )}
+
+          {aiKeysDialogOpen && (
+            <AiKeysDialog
+              isOpen={aiKeysDialogOpen}
+              onClose={() => {
+                setAiKeysDialogOpen(false);
+                setCurrentPage("profiles");
+              }}
+              subPage={currentPage === "keys"}
             />
           )}
 

@@ -2550,11 +2550,6 @@ mod tests {
       "scheduler_save",
       "scheduler_delete",
       "scheduler_set_enabled",
-      // AI keys commands: used by the keys tab (M3) and e2e ai suite.
-      "ai_keys_list",
-      "ai_keys_save",
-      "ai_keys_delete",
-      "ai_keys_test",
     ];
 
     // Extract command names from the generate_handler! macro in this file

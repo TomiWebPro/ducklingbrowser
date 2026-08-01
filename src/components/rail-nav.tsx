@@ -9,6 +9,7 @@ import { GoGear, GoKebabHorizontal } from "react-icons/go";
 import {
   LuCloud,
   LuInfo,
+  LuKey,
   LuKeyboard,
   LuPlug,
   LuPuzzle,
@@ -31,6 +32,7 @@ export type AppPage =
   | "integrations"
   | "account"
   | "import"
+  | "keys"
   | "shortcuts";
 
 const CLICK_THRESHOLD = 5;
@@ -200,6 +202,7 @@ const TOP_ITEMS: RailItem[] = [
   { page: "extensions", Icon: LuPuzzle, labelKey: "rail.extensions" },
   { page: "groups", Icon: LuUsers, labelKey: "rail.groups" },
   { page: "integrations", Icon: LuPlug, labelKey: "rail.integrations" },
+  { page: "keys", Icon: LuKey, labelKey: "rail.keys" },
   { page: "account", Icon: LuCloud, labelKey: "rail.account" },
 ];
 

@@ -1868,7 +1868,8 @@
     },
     "network": "网络",
     "integrations": "集成",
-    "account": "账号"
+    "account": "账号",
+    "keys": "AI keys"
   },
   "pageTitle": {
     "proxies": "网络",
@@ -2091,5 +2092,34 @@
     "matchToProxy": "将指纹匹配到代理",
     "matching": "匹配中…",
     "matchSuccess": "指纹已更新以匹配代理。重新启动配置文件以生效。"
+  },
+  "aiKeys": {
+    "title": "AI keys",
+    "addTitle": "Add a key",
+    "storedTitle": "Stored keys",
+    "provider": "Provider",
+    "model": "Model",
+    "name": "Name",
+    "namePlaceholder": "Primary key",
+    "key": "API key",
+    "showKey": "Show key",
+    "hideKey": "Hide key",
+    "save": "Save key",
+    "saveAndTest": "Save and test",
+    "test": "Test key",
+    "delete": "Delete key",
+    "empty": "No AI keys stored yet. Add one to use the agent chat and scheduled tasks.",
+    "emptyFields": "Name, model, and key are required",
+    "saved": "Key saved",
+    "deleted": "Key deleted",
+    "testSuccess": "Key works",
+    "testFailed": "Key test failed: {{detail}}",
+    "providers": {
+      "anthropic": "Anthropic",
+      "openai": "OpenAI",
+      "groq": "Groq",
+      "google": "Google",
+      "openrouter": "OpenRouter"
+    }
   }
 }

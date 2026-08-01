@@ -1868,7 +1868,8 @@
     },
     "network": "Сеть",
     "integrations": "Интеграции",
-    "account": "Аккаунт"
+    "account": "Аккаунт",
+    "keys": "AI keys"
   },
   "pageTitle": {
     "proxies": "Сеть",
@@ -2091,5 +2092,34 @@
     "matchToProxy": "Подогнать отпечаток под прокси",
     "matching": "Подгонка…",
     "matchSuccess": "Отпечаток обновлён под прокси. Перезапустите профиль, чтобы применить."
+  },
+  "aiKeys": {
+    "title": "AI keys",
+    "addTitle": "Add a key",
+    "storedTitle": "Stored keys",
+    "provider": "Provider",
+    "model": "Model",
+    "name": "Name",
+    "namePlaceholder": "Primary key",
+    "key": "API key",
+    "showKey": "Show key",
+    "hideKey": "Hide key",
+    "save": "Save key",
+    "saveAndTest": "Save and test",
+    "test": "Test key",
+    "delete": "Delete key",
+    "empty": "No AI keys stored yet. Add one to use the agent chat and scheduled tasks.",
+    "emptyFields": "Name, model, and key are required",
+    "saved": "Key saved",
+    "deleted": "Key deleted",
+    "testSuccess": "Key works",
+    "testFailed": "Key test failed: {{detail}}",
+    "providers": {
+      "anthropic": "Anthropic",
+      "openai": "OpenAI",
+      "groq": "Groq",
+      "google": "Google",
+      "openrouter": "OpenRouter"
+    }
   }
 }

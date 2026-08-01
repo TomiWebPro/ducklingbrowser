@@ -1868,7 +1868,8 @@
     },
     "network": "네트워크",
     "integrations": "통합",
-    "account": "계정"
+    "account": "계정",
+    "keys": "AI keys"
   },
   "pageTitle": {
     "proxies": "네트워크",
@@ -2091,5 +2092,34 @@
     "matchToProxy": "지문을 프록시에 맞추기",
     "matching": "맞추는 중…",
     "matchSuccess": "지문이 프록시에 맞게 업데이트되었습니다. 적용하려면 프로필을 다시 실행하세요."
+  },
+  "aiKeys": {
+    "title": "AI keys",
+    "addTitle": "Add a key",
+    "storedTitle": "Stored keys",
+    "provider": "Provider",
+    "model": "Model",
+    "name": "Name",
+    "namePlaceholder": "Primary key",
+    "key": "API key",
+    "showKey": "Show key",
+    "hideKey": "Hide key",
+    "save": "Save key",
+    "saveAndTest": "Save and test",
+    "test": "Test key",
+    "delete": "Delete key",
+    "empty": "No AI keys stored yet. Add one to use the agent chat and scheduled tasks.",
+    "emptyFields": "Name, model, and key are required",
+    "saved": "Key saved",
+    "deleted": "Key deleted",
+    "testSuccess": "Key works",
+    "testFailed": "Key test failed: {{detail}}",
+    "providers": {
+      "anthropic": "Anthropic",
+      "openai": "OpenAI",
+      "groq": "Groq",
+      "google": "Google",
+      "openrouter": "OpenRouter"
+    }
   }
 }

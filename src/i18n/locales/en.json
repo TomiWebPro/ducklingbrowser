@@ -1868,7 +1868,8 @@
     },
     "network": "Network",
     "integrations": "Integrations",
-    "account": "Account"
+    "account": "Account",
+    "keys": "AI keys"
   },
   "pageTitle": {
     "proxies": "Network",
@@ -2091,5 +2092,34 @@
     "matchToProxy": "Match fingerprint to proxy",
     "matching": "Matching…",
     "matchSuccess": "Fingerprint updated to match the proxy. Relaunch the profile to apply."
+  },
+  "aiKeys": {
+    "title": "AI keys",
+    "addTitle": "Add a key",
+    "storedTitle": "Stored keys",
+    "provider": "Provider",
+    "model": "Model",
+    "name": "Name",
+    "namePlaceholder": "Primary key",
+    "key": "API key",
+    "showKey": "Show key",
+    "hideKey": "Hide key",
+    "save": "Save key",
+    "saveAndTest": "Save and test",
+    "test": "Test key",
+    "delete": "Delete key",
+    "empty": "No AI keys stored yet. Add one to use the agent chat and scheduled tasks.",
+    "emptyFields": "Name, model, and key are required",
+    "saved": "Key saved",
+    "deleted": "Key deleted",
+    "testSuccess": "Key works",
+    "testFailed": "Key test failed: {{detail}}",
+    "providers": {
+      "anthropic": "Anthropic",
+      "openai": "OpenAI",
+      "groq": "Groq",
+      "google": "Google",
+      "openrouter": "OpenRouter"
+    }
   }
 }

@@ -1868,7 +1868,8 @@
     },
     "network": "Mạng",
     "integrations": "Tích hợp",
-    "account": "Tài khoản"
+    "account": "Tài khoản",
+    "keys": "AI keys"
   },
   "pageTitle": {
     "proxies": "Mạng",
@@ -2091,5 +2092,34 @@
     "matchToProxy": "Khớp vân tay với proxy",
     "matching": "Đang khớp…",
     "matchSuccess": "Đã cập nhật vân tay để khớp với proxy. Khởi động lại hồ sơ để áp dụng."
+  },
+  "aiKeys": {
+    "title": "AI keys",
+    "addTitle": "Add a key",
+    "storedTitle": "Stored keys",
+    "provider": "Provider",
+    "model": "Model",
+    "name": "Name",
+    "namePlaceholder": "Primary key",
+    "key": "API key",
+    "showKey": "Show key",
+    "hideKey": "Hide key",
+    "save": "Save key",
+    "saveAndTest": "Save and test",
+    "test": "Test key",
+    "delete": "Delete key",
+    "empty": "No AI keys stored yet. Add one to use the agent chat and scheduled tasks.",
+    "emptyFields": "Name, model, and key are required",
+    "saved": "Key saved",
+    "deleted": "Key deleted",
+    "testSuccess": "Key works",
+    "testFailed": "Key test failed: {{detail}}",
+    "providers": {
+      "anthropic": "Anthropic",
+      "openai": "OpenAI",
+      "groq": "Groq",
+      "google": "Google",
+      "openrouter": "OpenRouter"
+    }
   }
 }
