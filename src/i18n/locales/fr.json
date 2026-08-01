@@ -198,6 +198,8 @@
     "disableAutoUpdatesDescription": "Empêche l'application de vérifier et d'installer automatiquement les mises à jour de Duckling Browser. Les mises à jour des navigateurs ne sont pas affectées.",
     "keepDecryptedProfilesInRam": "Conserver les profils déchiffrés en RAM",
     "keepDecryptedProfilesInRamDescription": "Conserver en RAM la copie déchiffrée des profils protégés par mot de passe entre les lancements pour un démarrage plus rapide. La copie sur disque reste chiffrée dans tous les cas.",
+    "keepRunningInBackground": "Keep Decrypted Profiles In RAM",
+    "keepRunningInBackgroundDescription": "Preserve the decrypted in-RAM copy of password-protected profiles between launches for faster startup. The on-disk copy stays encrypted regardless.",
     "privacy": {
       "consistencyWarning": "Avertissement de cohérence d'empreinte",
       "consistencyWarningDescription": "Avertir au lancement lorsque le fuseau horaire ou la langue d'un profil ne correspond pas à son nœud de sortie proxy.",

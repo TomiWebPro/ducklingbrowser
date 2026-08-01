@@ -198,6 +198,8 @@
     "disableAutoUpdatesDescription": "Запретить автоматическую проверку и установку обновлений Duckling Browser. Обновления браузеров не затрагиваются.",
     "keepDecryptedProfilesInRam": "Хранить расшифрованные профили в ОЗУ",
     "keepDecryptedProfilesInRamDescription": "Сохранять расшифрованную копию защищённых паролем профилей в ОЗУ между запусками для ускорения старта. Копия на диске в любом случае остаётся зашифрованной.",
+    "keepRunningInBackground": "Keep Decrypted Profiles In RAM",
+    "keepRunningInBackgroundDescription": "Preserve the decrypted in-RAM copy of password-protected profiles between launches for faster startup. The on-disk copy stays encrypted regardless.",
     "privacy": {
       "consistencyWarning": "Предупреждение о согласованности отпечатка",
       "consistencyWarningDescription": "Предупреждать при запуске, если часовой пояс или язык профиля не совпадает с выходным узлом прокси.",

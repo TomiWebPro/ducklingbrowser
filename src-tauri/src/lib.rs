@@ -1577,18 +1577,29 @@ pub fn run_with_builder(
         }
       }
 
-      // Intercept the window close so the frontend can ask the user whether
-      // to minimize or quit. The app exits when `confirm_quit` flips
-      // QUIT_CONFIRMED — until then, every CloseRequested is held back.
+      // Intercept the window close: when "run in background" is enabled, hide
+      // to the tray directly so scheduled AI tasks keep running 24/7;
+      // otherwise let the frontend ask the user whether to minimize or quit.
+      // The app exits when `confirm_quit` flips QUIT_CONFIRMED — until then,
+      // every CloseRequested is held back.
       {
         let app_handle = app.handle().clone();
+        let close_window = window.clone();
         window.on_window_event(move |event| {
           if let tauri::WindowEvent::CloseRequested { api, .. } = event {
             if QUIT_CONFIRMED.load(Ordering::SeqCst) {
               return;
             }
             api.prevent_close();
-            if let Err(e) = app_handle.emit("close-confirm-requested", ()) {
+            let keep_in_background = crate::settings_manager::SettingsManager::instance()
+              .load_settings()
+              .map(|s| s.keep_running_in_background)
+              .unwrap_or(true);
+            if keep_in_background {
+              if let Err(e) = close_window.hide() {
+                log::warn!("Failed to hide window to tray: {e}");
+              }
+            } else if let Err(e) = app_handle.emit("close-confirm-requested", ()) {
               log::warn!("Failed to emit close-confirm-requested: {e}");
             }
           }

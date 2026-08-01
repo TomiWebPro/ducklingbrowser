@@ -70,6 +70,7 @@ interface AppSettings {
   api_token?: string;
   disable_auto_updates?: boolean;
   keep_decrypted_profiles_in_ram?: boolean;
+  keep_running_in_background?: boolean;
 }
 
 interface CustomThemeState {
@@ -1335,6 +1336,30 @@ export function SettingsDialog({
                     </Label>
                     <p className="text-xs text-muted-foreground">
                       {t("settings.keepDecryptedProfilesInRamDescription")}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-x-3 rounded-lg border p-3">
+                  <Checkbox
+                    id="keep-running-in-background"
+                    checked={settings.keep_running_in_background ?? true}
+                    onCheckedChange={(checked) => {
+                      updateSetting(
+                        "keep_running_in_background",
+                        checked as boolean,
+                      );
+                    }}
+                  />
+                  <div className="space-y-1">
+                    <Label
+                      htmlFor="keep-running-in-background"
+                      className="text-sm font-medium"
+                    >
+                      {t("settings.keepRunningInBackground")}
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      {t("settings.keepRunningInBackgroundDescription")}
                     </p>
                   </div>
                 </div>

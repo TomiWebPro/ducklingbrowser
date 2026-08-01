@@ -63,6 +63,14 @@ pub struct AppSettings {
   /// copy is always re-encrypted regardless of this flag.
   #[serde(default)]
   pub keep_decrypted_profiles_in_ram: bool,
+  /// When true, closing the window hides the app to the tray instead of
+  /// quitting, so scheduled AI tasks keep running 24/7.
+  #[serde(default = "default_true")]
+  pub keep_running_in_background: bool,
+}
+
+fn default_true() -> bool {
+  true
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -99,6 +107,7 @@ impl Default for AppSettings {
       onboarding_completed: false,
       disable_auto_updates: false,
       keep_decrypted_profiles_in_ram: false,
+      keep_running_in_background: true,
     }
   }
 }
@@ -1193,6 +1202,7 @@ mod tests {
       onboarding_completed: false,
       disable_auto_updates: false,
       keep_decrypted_profiles_in_ram: false,
+      keep_running_in_background: true,
     };
 
     let save_result = manager.save_settings(&test_settings);
