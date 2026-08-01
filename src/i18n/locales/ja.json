@@ -1310,25 +1310,27 @@
     "notCached": "キャッシュなし",
     "tabBlocklists": "ブロックリスト",
     "tabCustom": "カスタムリスト",
-    "custom.description": "ソース URL と手動ルールから独自のブロックリストを作成します。許可ドメインは常にブロックより優先されます。",
-    "custom.sourcesLabel": "ブロックリストのソース URL",
-    "custom.sourcesPlaceholder": "1 行につき 1 つの URL",
-    "custom.blockLabel": "ブロックするドメイン",
-    "custom.blockPlaceholder": "1 行につき 1 つのドメイン",
-    "custom.allowLabel": "許可するドメイン",
-    "custom.allowPlaceholder": "1 行につき 1 つのドメイン",
-    "custom.allowHint": "許可ドメインはコンパイル済みブロックリストから除外され、あらゆるブロックルールより優先されます。",
-    "custom.saved": "カスタム DNS ルールを保存しました",
-    "custom.imported": "カスタム DNS ルールをインポートしました",
-    "custom.exported": "カスタム DNS ルールをエクスポートしました",
-    "custom.exportTxt": "TXT をエクスポート",
-    "custom.exportJson": "JSON をエクスポート",
-    "customLevel": "カスタム",
-    "custom.allowlistModeLabel": "許可リストモード",
-    "custom.allowlistModeOn": "下記のドメインのみアクセス可能で、それ以外はすべてブロックされます。",
-    "custom.allowlistModeOff": "リストのドメインをブロックし、それ以外はすべて許可します。",
-    "custom.allowedOnlyLabel": "許可するドメイン（これらのみ）",
-    "custom.allowedOnlyHint": "リスト内ドメインのサブドメインも許可されます。リストが空の場合はフィルタリングが無効になります。"
+    "custom": {
+      "description": "ソース URL と手動ルールから独自のブロックリストを作成します。許可ドメインは常にブロックより優先されます。",
+      "sourcesLabel": "ブロックリストのソース URL",
+      "sourcesPlaceholder": "1 行につき 1 つの URL",
+      "blockLabel": "ブロックするドメイン",
+      "blockPlaceholder": "1 行につき 1 つのドメイン",
+      "allowLabel": "許可するドメイン",
+      "allowPlaceholder": "1 行につき 1 つのドメイン",
+      "allowHint": "許可ドメインはコンパイル済みブロックリストから除外され、あらゆるブロックルールより優先されます。",
+      "saved": "カスタム DNS ルールを保存しました",
+      "imported": "カスタム DNS ルールをインポートしました",
+      "exported": "カスタム DNS ルールをエクスポートしました",
+      "exportTxt": "TXT をエクスポート",
+      "exportJson": "JSON をエクスポート",
+      "allowlistModeLabel": "許可リストモード",
+      "allowlistModeOn": "下記のドメインのみアクセス可能で、それ以外はすべてブロックされます。",
+      "allowlistModeOff": "リストのドメインをブロックし、それ以外はすべて許可します。",
+      "allowedOnlyLabel": "許可するドメイン（これらのみ）",
+      "allowedOnlyHint": "リスト内ドメインのサブドメインも許可されます。リストが空の場合はフィルタリングが無効になります。"
+    },
+    "customLevel": "カスタム"
   },
   "vpns": {
     "form": {
@@ -1843,7 +1845,9 @@
     "mcpAgentUnknown": "このMCPクライアントはサポートされていません。",
     "mcpAgentInstallFailed": "MCPクライアントにDuckling Browserを追加できませんでした：{{detail}}",
     "mcpAgentRemoveFailed": "MCPクライアントからDuckling Browserを削除できませんでした：{{detail}}",
-    "chromiumVersionNotAvailable": "Chromiumのバージョン{{requested}}はダウンロードできません。現在のバージョンは{{current}}です。"
+    "chromiumVersionNotAvailable": "Chromiumのバージョン{{requested}}はダウンロードできません。現在のバージョンは{{current}}です。",
+    "taskNotFound": "Scheduled task not found",
+    "taskInvalidSchedule": "Invalid task schedule: {{detail}}"
   },
   "rail": {
     "profiles": "プロファイル",

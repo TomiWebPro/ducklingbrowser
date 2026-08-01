@@ -1310,25 +1310,27 @@
     "notCached": "Önbelleğe alınmadı",
     "tabBlocklists": "Engel listeleri",
     "tabCustom": "Özel listeler",
-    "custom.description": "Kaynak URL'lerden ve manuel kurallardan kendi engel listenizi oluşturun. İzin verilen alan adları her zaman engellenenlerin önüne geçer.",
-    "custom.sourcesLabel": "Engel listesi kaynak URL'leri",
-    "custom.sourcesPlaceholder": "Her satıra bir URL",
-    "custom.blockLabel": "Engellenen alan adları",
-    "custom.blockPlaceholder": "Her satıra bir alan adı",
-    "custom.allowLabel": "İzin verilen alan adları",
-    "custom.allowPlaceholder": "Her satıra bir alan adı",
-    "custom.allowHint": "İzin verilen alan adları derlenen engel listesinden çıkarılır ve tüm engelleme kurallarını geçersiz kılar.",
-    "custom.saved": "Özel DNS kuralları kaydedildi",
-    "custom.imported": "Özel DNS kuralları içe aktarıldı",
-    "custom.exported": "Özel DNS kuralları dışa aktarıldı",
-    "custom.exportTxt": "TXT olarak dışa aktar",
-    "custom.exportJson": "JSON olarak dışa aktar",
-    "customLevel": "Özel",
-    "custom.allowlistModeLabel": "İzin listesi modu",
-    "custom.allowlistModeOn": "Yalnızca aşağıdaki alan adlarına erişilebilir; diğer her şey engellenir.",
-    "custom.allowlistModeOff": "Listelenen alan adlarını engelle; diğer her şeye izin ver.",
-    "custom.allowedOnlyLabel": "İzin verilen alan adları (yalnızca bunlar)",
-    "custom.allowedOnlyHint": "Listelenen bir alan adının alt alan adlarına da izin verilir. Boş liste filtrelemeyi devre dışı bırakır."
+    "custom": {
+      "description": "Kaynak URL'lerden ve manuel kurallardan kendi engel listenizi oluşturun. İzin verilen alan adları her zaman engellenenlerin önüne geçer.",
+      "sourcesLabel": "Engel listesi kaynak URL'leri",
+      "sourcesPlaceholder": "Her satıra bir URL",
+      "blockLabel": "Engellenen alan adları",
+      "blockPlaceholder": "Her satıra bir alan adı",
+      "allowLabel": "İzin verilen alan adları",
+      "allowPlaceholder": "Her satıra bir alan adı",
+      "allowHint": "İzin verilen alan adları derlenen engel listesinden çıkarılır ve tüm engelleme kurallarını geçersiz kılar.",
+      "saved": "Özel DNS kuralları kaydedildi",
+      "imported": "Özel DNS kuralları içe aktarıldı",
+      "exported": "Özel DNS kuralları dışa aktarıldı",
+      "exportTxt": "TXT olarak dışa aktar",
+      "exportJson": "JSON olarak dışa aktar",
+      "allowlistModeLabel": "İzin listesi modu",
+      "allowlistModeOn": "Yalnızca aşağıdaki alan adlarına erişilebilir; diğer her şey engellenir.",
+      "allowlistModeOff": "Listelenen alan adlarını engelle; diğer her şeye izin ver.",
+      "allowedOnlyLabel": "İzin verilen alan adları (yalnızca bunlar)",
+      "allowedOnlyHint": "Listelenen bir alan adının alt alan adlarına da izin verilir. Boş liste filtrelemeyi devre dışı bırakır."
+    },
+    "customLevel": "Özel"
   },
   "vpns": {
     "form": {
@@ -1843,7 +1845,9 @@
     "mcpAgentUnknown": "Bu MCP istemcisi desteklenmiyor.",
     "mcpAgentInstallFailed": "Duckling Browser MCP istemcisine eklenemedi: {{detail}}",
     "mcpAgentRemoveFailed": "Duckling Browser MCP istemcisinden kaldırılamadı: {{detail}}",
-    "chromiumVersionNotAvailable": "Chromium {{requested}} sürümü indirilemiyor. Güncel sürüm: {{current}}."
+    "chromiumVersionNotAvailable": "Chromium {{requested}} sürümü indirilemiyor. Güncel sürüm: {{current}}.",
+    "taskNotFound": "Scheduled task not found",
+    "taskInvalidSchedule": "Invalid task schedule: {{detail}}"
   },
   "rail": {
     "profiles": "Profiller",

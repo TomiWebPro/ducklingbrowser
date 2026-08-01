@@ -69,6 +69,7 @@ mod group_manager;
 mod human_typing;
 mod ip_utils;
 mod log_redaction;
+mod macro_step;
 mod platform_browser;
 mod profile;
 mod profile_importer;
@@ -88,6 +89,7 @@ mod cookie_manager;
 pub mod events;
 mod mcp_integrations;
 mod mcp_server;
+mod scheduler;
 mod tag_manager;
 mod team_lock;
 mod version_updater;
@@ -124,6 +126,8 @@ use downloaded_browsers_registry::{
 };
 
 use downloader::{cancel_download, download_browser};
+
+use scheduler::{scheduler_delete, scheduler_list, scheduler_save, scheduler_set_enabled};
 
 use settings_manager::{
   complete_onboarding, dismiss_window_resize_warning, get_app_settings, get_onboarding_completed,
@@ -2463,6 +2467,10 @@ pub fn run_with_builder(
       unlock_profile,
       lock_profile,
       is_profile_locked,
+      scheduler_list,
+      scheduler_save,
+      scheduler_delete,
+      scheduler_set_enabled,
     ])
     .build(tauri::generate_context!())
     .expect("error while building tauri application")
@@ -2530,6 +2538,11 @@ mod tests {
       "check_chromium_terms_accepted",
       "check_chromium_downloaded",
       "accept_chromium_terms",
+      // Scheduler commands: used by the tasks tab (M5) and e2e tasks suite.
+      "scheduler_list",
+      "scheduler_save",
+      "scheduler_delete",
+      "scheduler_set_enabled",
     ];
 
     // Extract command names from the generate_handler! macro in this file

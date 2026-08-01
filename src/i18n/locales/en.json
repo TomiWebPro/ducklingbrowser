@@ -1310,25 +1310,27 @@
     "notCached": "Not cached",
     "tabBlocklists": "Blocklists",
     "tabCustom": "Custom lists",
-    "custom.description": "Build your own blocklist from source URLs and manual rules. Allowed domains always override blocked ones.",
-    "custom.sourcesLabel": "Blocklist source URLs",
-    "custom.sourcesPlaceholder": "One URL per line",
-    "custom.blockLabel": "Blocked domains",
-    "custom.blockPlaceholder": "One domain per line",
-    "custom.allowLabel": "Allowed domains",
-    "custom.allowPlaceholder": "One domain per line",
-    "custom.allowHint": "Allowed domains are removed from the compiled blocklist, overriding any block rule.",
-    "custom.saved": "Custom DNS rules saved",
-    "custom.imported": "Custom DNS rules imported",
-    "custom.exported": "Custom DNS rules exported",
-    "custom.exportTxt": "Export TXT",
-    "custom.exportJson": "Export JSON",
-    "customLevel": "Custom",
-    "custom.allowlistModeLabel": "Allowlist mode",
-    "custom.allowlistModeOn": "Only the domains below are reachable; everything else is blocked.",
-    "custom.allowlistModeOff": "Block listed domains; allow everything else.",
-    "custom.allowedOnlyLabel": "Allowed domains (only these)",
-    "custom.allowedOnlyHint": "Subdomains of a listed domain are allowed too. An empty list disables filtering."
+    "custom": {
+      "description": "Build your own blocklist from source URLs and manual rules. Allowed domains always override blocked ones.",
+      "sourcesLabel": "Blocklist source URLs",
+      "sourcesPlaceholder": "One URL per line",
+      "blockLabel": "Blocked domains",
+      "blockPlaceholder": "One domain per line",
+      "allowLabel": "Allowed domains",
+      "allowPlaceholder": "One domain per line",
+      "allowHint": "Allowed domains are removed from the compiled blocklist, overriding any block rule.",
+      "saved": "Custom DNS rules saved",
+      "imported": "Custom DNS rules imported",
+      "exported": "Custom DNS rules exported",
+      "exportTxt": "Export TXT",
+      "exportJson": "Export JSON",
+      "allowlistModeLabel": "Allowlist mode",
+      "allowlistModeOn": "Only the domains below are reachable; everything else is blocked.",
+      "allowlistModeOff": "Block listed domains; allow everything else.",
+      "allowedOnlyLabel": "Allowed domains (only these)",
+      "allowedOnlyHint": "Subdomains of a listed domain are allowed too. An empty list disables filtering."
+    },
+    "customLevel": "Custom"
   },
   "vpns": {
     "form": {
@@ -1546,7 +1548,13 @@
     "title": "Browser",
     "description": "Chromium is open source software licensed under BSD.",
     "body": "Duckling Browser uses the Chromium web browser engine. Chromium is distributed under the BSD license, which allows free use, modification, and redistribution.",
-    "acknowledgeButton": "Acknowledge"
+    "acknowledgeButton": "Acknowledge",
+    "reviewLabel": "Please review the Terms and Conditions at:",
+    "agreeNotice": "By clicking \"I Agree\", you accept these terms.",
+    "acceptButton": "I Agree",
+    "acceptSuccess": "Terms accepted successfully",
+    "acceptFailed": "Failed to accept terms",
+    "tryAgain": "Please try again"
   },
   "commercialTrial": {
     "title": "Commercial Trial Expired",
@@ -1837,7 +1845,9 @@
     "mcpAgentUnknown": "This MCP client is not supported.",
     "mcpAgentInstallFailed": "Could not add Duckling Browser to the MCP client: {{detail}}",
     "mcpAgentRemoveFailed": "Could not remove Duckling Browser from the MCP client: {{detail}}",
-    "chromiumVersionNotAvailable": "Chromium version {{requested}} is not available for download. The current version is {{current}}."
+    "chromiumVersionNotAvailable": "Chromium version {{requested}} is not available for download. The current version is {{current}}.",
+    "taskNotFound": "Scheduled task not found",
+    "taskInvalidSchedule": "Invalid task schedule: {{detail}}"
   },
   "rail": {
     "profiles": "Profiles",

@@ -1310,25 +1310,27 @@
     "notCached": "Chưa lưu bộ nhớ đệm",
     "tabBlocklists": "Danh sách chặn",
     "tabCustom": "Danh sách tùy chỉnh",
-    "custom.description": "Tự tạo danh sách chặn của riêng bạn từ các URL nguồn và quy tắc thủ công. Tên miền được phép luôn được ưu tiên hơn tên miền bị chặn.",
-    "custom.sourcesLabel": "URL nguồn danh sách chặn",
-    "custom.sourcesPlaceholder": "Mỗi dòng một URL",
-    "custom.blockLabel": "Tên miền bị chặn",
-    "custom.blockPlaceholder": "Mỗi dòng một tên miền",
-    "custom.allowLabel": "Tên miền được phép",
-    "custom.allowPlaceholder": "Mỗi dòng một tên miền",
-    "custom.allowHint": "Tên miền được phép sẽ bị loại khỏi danh sách chặn đã biên dịch, ghi đè mọi quy tắc chặn.",
-    "custom.saved": "Đã lưu quy tắc DNS tùy chỉnh",
-    "custom.imported": "Đã nhập quy tắc DNS tùy chỉnh",
-    "custom.exported": "Đã xuất quy tắc DNS tùy chỉnh",
-    "custom.exportTxt": "Xuất TXT",
-    "custom.exportJson": "Xuất JSON",
-    "customLevel": "Tùy chỉnh",
-    "custom.allowlistModeLabel": "Chế độ danh sách cho phép",
-    "custom.allowlistModeOn": "Chỉ các tên miền bên dưới có thể truy cập; mọi thứ khác đều bị chặn.",
-    "custom.allowlistModeOff": "Chặn các tên miền trong danh sách; cho phép mọi thứ khác.",
-    "custom.allowedOnlyLabel": "Tên miền được phép (chỉ những tên này)",
-    "custom.allowedOnlyHint": "Tên miền phụ của tên miền trong danh sách cũng được phép. Danh sách trống sẽ tắt bộ lọc."
+    "custom": {
+      "description": "Tự tạo danh sách chặn của riêng bạn từ các URL nguồn và quy tắc thủ công. Tên miền được phép luôn được ưu tiên hơn tên miền bị chặn.",
+      "sourcesLabel": "URL nguồn danh sách chặn",
+      "sourcesPlaceholder": "Mỗi dòng một URL",
+      "blockLabel": "Tên miền bị chặn",
+      "blockPlaceholder": "Mỗi dòng một tên miền",
+      "allowLabel": "Tên miền được phép",
+      "allowPlaceholder": "Mỗi dòng một tên miền",
+      "allowHint": "Tên miền được phép sẽ bị loại khỏi danh sách chặn đã biên dịch, ghi đè mọi quy tắc chặn.",
+      "saved": "Đã lưu quy tắc DNS tùy chỉnh",
+      "imported": "Đã nhập quy tắc DNS tùy chỉnh",
+      "exported": "Đã xuất quy tắc DNS tùy chỉnh",
+      "exportTxt": "Xuất TXT",
+      "exportJson": "Xuất JSON",
+      "allowlistModeLabel": "Chế độ danh sách cho phép",
+      "allowlistModeOn": "Chỉ các tên miền bên dưới có thể truy cập; mọi thứ khác đều bị chặn.",
+      "allowlistModeOff": "Chặn các tên miền trong danh sách; cho phép mọi thứ khác.",
+      "allowedOnlyLabel": "Tên miền được phép (chỉ những tên này)",
+      "allowedOnlyHint": "Tên miền phụ của tên miền trong danh sách cũng được phép. Danh sách trống sẽ tắt bộ lọc."
+    },
+    "customLevel": "Tùy chỉnh"
   },
   "vpns": {
     "form": {
@@ -1843,7 +1845,9 @@
     "mcpAgentUnknown": "Ứng dụng MCP này không được hỗ trợ.",
     "mcpAgentInstallFailed": "Không thể thêm Duckling Browser vào ứng dụng MCP: {{detail}}",
     "mcpAgentRemoveFailed": "Không thể xóa Duckling Browser khỏi ứng dụng MCP: {{detail}}",
-    "chromiumVersionNotAvailable": "Phiên bản Chromium {{requested}} không có sẵn để tải xuống. Phiên bản hiện tại là {{current}}."
+    "chromiumVersionNotAvailable": "Phiên bản Chromium {{requested}} không có sẵn để tải xuống. Phiên bản hiện tại là {{current}}.",
+    "taskNotFound": "Scheduled task not found",
+    "taskInvalidSchedule": "Invalid task schedule: {{detail}}"
   },
   "rail": {
     "profiles": "Profile",

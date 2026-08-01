@@ -62,6 +62,8 @@ export type BackendErrorCode =
   | "MCP_AGENT_UNKNOWN"
   | "MCP_AGENT_INSTALL_FAILED"
   | "MCP_AGENT_REMOVE_FAILED"
+  | "TASK_NOT_FOUND"
+  | "TASK_INVALID_SCHEDULE"
   | "INTERNAL_ERROR";
 
 export interface BackendError {
@@ -237,6 +239,12 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       });
     case "MCP_AGENT_REMOVE_FAILED":
       return t("backendErrors.mcpAgentRemoveFailed", {
+        detail: parsed.params?.detail ?? "",
+      });
+    case "TASK_NOT_FOUND":
+      return t("backendErrors.taskNotFound");
+    case "TASK_INVALID_SCHEDULE":
+      return t("backendErrors.taskInvalidSchedule", {
         detail: parsed.params?.detail ?? "",
       });
     case "CLEAR_ON_CLOSE_UNAVAILABLE":

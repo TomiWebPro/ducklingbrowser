@@ -262,6 +262,16 @@ export const commandCoverage = {
       "download_and_prepare_app_update",
     ],
   },
+  scheduledTasks: {
+    suite: "tasks",
+    level: "integration",
+    commands: [
+      "scheduler_list",
+      "scheduler_save",
+      "scheduler_delete",
+      "scheduler_set_enabled",
+    ],
+  },
   hostMutating: {
     suite: "full",
     level: "host-mutating",

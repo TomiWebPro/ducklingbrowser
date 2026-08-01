@@ -1310,25 +1310,27 @@
     "notCached": "캐시되지 않음",
     "tabBlocklists": "차단 목록",
     "tabCustom": "사용자 지정 목록",
-    "custom.description": "소스 URL과 수동 규칙으로 나만의 차단 목록을 만드세요. 허용 도메인은 항상 차단 도메인보다 우선합니다.",
-    "custom.sourcesLabel": "차단 목록 소스 URL",
-    "custom.sourcesPlaceholder": "한 줄에 URL 하나",
-    "custom.blockLabel": "차단할 도메인",
-    "custom.blockPlaceholder": "한 줄에 도메인 하나",
-    "custom.allowLabel": "허용할 도메인",
-    "custom.allowPlaceholder": "한 줄에 도메인 하나",
-    "custom.allowHint": "허용 도메인은 컴파일된 차단 목록에서 제거되어 모든 차단 규칙보다 우선합니다.",
-    "custom.saved": "사용자 지정 DNS 규칙이 저장되었습니다",
-    "custom.imported": "사용자 지정 DNS 규칙을 가져왔습니다",
-    "custom.exported": "사용자 지정 DNS 규칙을 내보냈습니다",
-    "custom.exportTxt": "TXT 내보내기",
-    "custom.exportJson": "JSON 내보내기",
-    "customLevel": "사용자 지정",
-    "custom.allowlistModeLabel": "허용 목록 모드",
-    "custom.allowlistModeOn": "아래 도메인만 접근할 수 있으며, 그 외에는 모두 차단됩니다.",
-    "custom.allowlistModeOff": "목록의 도메인을 차단하고, 그 외에는 모두 허용합니다.",
-    "custom.allowedOnlyLabel": "허용 도메인 (이것만)",
-    "custom.allowedOnlyHint": "목록에 있는 도메인의 하위 도메인도 허용됩니다. 목록이 비어 있으면 필터링이 비활성화됩니다."
+    "custom": {
+      "description": "소스 URL과 수동 규칙으로 나만의 차단 목록을 만드세요. 허용 도메인은 항상 차단 도메인보다 우선합니다.",
+      "sourcesLabel": "차단 목록 소스 URL",
+      "sourcesPlaceholder": "한 줄에 URL 하나",
+      "blockLabel": "차단할 도메인",
+      "blockPlaceholder": "한 줄에 도메인 하나",
+      "allowLabel": "허용할 도메인",
+      "allowPlaceholder": "한 줄에 도메인 하나",
+      "allowHint": "허용 도메인은 컴파일된 차단 목록에서 제거되어 모든 차단 규칙보다 우선합니다.",
+      "saved": "사용자 지정 DNS 규칙이 저장되었습니다",
+      "imported": "사용자 지정 DNS 규칙을 가져왔습니다",
+      "exported": "사용자 지정 DNS 규칙을 내보냈습니다",
+      "exportTxt": "TXT 내보내기",
+      "exportJson": "JSON 내보내기",
+      "allowlistModeLabel": "허용 목록 모드",
+      "allowlistModeOn": "아래 도메인만 접근할 수 있으며, 그 외에는 모두 차단됩니다.",
+      "allowlistModeOff": "목록의 도메인을 차단하고, 그 외에는 모두 허용합니다.",
+      "allowedOnlyLabel": "허용 도메인 (이것만)",
+      "allowedOnlyHint": "목록에 있는 도메인의 하위 도메인도 허용됩니다. 목록이 비어 있으면 필터링이 비활성화됩니다."
+    },
+    "customLevel": "사용자 지정"
   },
   "vpns": {
     "form": {
@@ -1843,7 +1845,9 @@
     "mcpAgentUnknown": "이 MCP 클라이언트는 지원되지 않습니다.",
     "mcpAgentInstallFailed": "MCP 클라이언트에 Duckling Browser를 추가하지 못했습니다: {{detail}}",
     "mcpAgentRemoveFailed": "MCP 클라이언트에서 Duckling Browser를 제거하지 못했습니다: {{detail}}",
-    "chromiumVersionNotAvailable": "Chromium 버전 {{requested}}은(는) 다운로드할 수 없습니다. 현재 버전은 {{current}}입니다."
+    "chromiumVersionNotAvailable": "Chromium 버전 {{requested}}은(는) 다운로드할 수 없습니다. 현재 버전은 {{current}}입니다.",
+    "taskNotFound": "Scheduled task not found",
+    "taskInvalidSchedule": "Invalid task schedule: {{detail}}"
   },
   "rail": {
     "profiles": "프로필",

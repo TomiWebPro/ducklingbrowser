@@ -54,6 +54,7 @@ const suiteFiles = {
   entities: ["entities.test.mjs"],
   network: ["network.test.mjs"],
   integrations: ["integrations.test.mjs"],
+  tasks: ["tasks.test.mjs"],
   sync: ["sync.test.mjs"],
   browser: ["browser.test.mjs"],
   full: [
@@ -64,6 +65,7 @@ const suiteFiles = {
     "entities.test.mjs",
     "network.test.mjs",
     "integrations.test.mjs",
+    "tasks.test.mjs",
     "sync.test.mjs",
     "browser.test.mjs",
   ],

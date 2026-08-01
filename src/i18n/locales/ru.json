@@ -1310,25 +1310,27 @@
     "notCached": "Не кэшировано",
     "tabBlocklists": "Списки блокировки",
     "tabCustom": "Пользовательские списки",
-    "custom.description": "Составьте собственный список блокировки из URL-источников и ручных правил. Разрешённые домены всегда имеют приоритет над заблокированными.",
-    "custom.sourcesLabel": "URL-источники списков блокировки",
-    "custom.sourcesPlaceholder": "Один URL на строку",
-    "custom.blockLabel": "Заблокированные домены",
-    "custom.blockPlaceholder": "Один домен на строку",
-    "custom.allowLabel": "Разрешённые домены",
-    "custom.allowPlaceholder": "Один домен на строку",
-    "custom.allowHint": "Разрешённые домены исключаются из итогового списка блокировки и имеют приоритет над любым правилом блокировки.",
-    "custom.saved": "Пользовательские правила DNS сохранены",
-    "custom.imported": "Пользовательские правила DNS импортированы",
-    "custom.exported": "Пользовательские правила DNS экспортированы",
-    "custom.exportTxt": "Экспорт TXT",
-    "custom.exportJson": "Экспорт JSON",
-    "customLevel": "Пользовательский",
-    "custom.allowlistModeLabel": "Режим разрешённого списка",
-    "custom.allowlistModeOn": "Доступны только домены ниже; всё остальное блокируется.",
-    "custom.allowlistModeOff": "Блокировать домены из списка; всё остальное разрешено.",
-    "custom.allowedOnlyLabel": "Разрешённые домены (только эти)",
-    "custom.allowedOnlyHint": "Поддомены указанных доменов также разрешены. Пустой список отключает фильтрацию."
+    "custom": {
+      "description": "Составьте собственный список блокировки из URL-источников и ручных правил. Разрешённые домены всегда имеют приоритет над заблокированными.",
+      "sourcesLabel": "URL-источники списков блокировки",
+      "sourcesPlaceholder": "Один URL на строку",
+      "blockLabel": "Заблокированные домены",
+      "blockPlaceholder": "Один домен на строку",
+      "allowLabel": "Разрешённые домены",
+      "allowPlaceholder": "Один домен на строку",
+      "allowHint": "Разрешённые домены исключаются из итогового списка блокировки и имеют приоритет над любым правилом блокировки.",
+      "saved": "Пользовательские правила DNS сохранены",
+      "imported": "Пользовательские правила DNS импортированы",
+      "exported": "Пользовательские правила DNS экспортированы",
+      "exportTxt": "Экспорт TXT",
+      "exportJson": "Экспорт JSON",
+      "allowlistModeLabel": "Режим разрешённого списка",
+      "allowlistModeOn": "Доступны только домены ниже; всё остальное блокируется.",
+      "allowlistModeOff": "Блокировать домены из списка; всё остальное разрешено.",
+      "allowedOnlyLabel": "Разрешённые домены (только эти)",
+      "allowedOnlyHint": "Поддомены указанных доменов также разрешены. Пустой список отключает фильтрацию."
+    },
+    "customLevel": "Пользовательский"
   },
   "vpns": {
     "form": {
@@ -1843,7 +1845,9 @@
     "mcpAgentUnknown": "Этот клиент MCP не поддерживается.",
     "mcpAgentInstallFailed": "Не удалось добавить Duckling Browser в клиент MCP: {{detail}}",
     "mcpAgentRemoveFailed": "Не удалось удалить Duckling Browser из клиента MCP: {{detail}}",
-    "chromiumVersionNotAvailable": "Версия Chromium {{requested}} недоступна для загрузки. Текущая версия — {{current}}."
+    "chromiumVersionNotAvailable": "Версия Chromium {{requested}} недоступна для загрузки. Текущая версия — {{current}}.",
+    "taskNotFound": "Scheduled task not found",
+    "taskInvalidSchedule": "Invalid task schedule: {{detail}}"
   },
   "rail": {
     "profiles": "Профили",

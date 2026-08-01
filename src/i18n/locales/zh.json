@@ -1310,25 +1310,27 @@
     "notCached": "未缓存",
     "tabBlocklists": "拦截列表",
     "tabCustom": "自定义列表",
-    "custom.description": "通过源 URL 和手动规则构建您自己的拦截列表。允许的域名始终优先于被拦截的域名。",
-    "custom.sourcesLabel": "拦截列表源 URL",
-    "custom.sourcesPlaceholder": "每行一个 URL",
-    "custom.blockLabel": "拦截的域名",
-    "custom.blockPlaceholder": "每行一个域名",
-    "custom.allowLabel": "允许的域名",
-    "custom.allowPlaceholder": "每行一个域名",
-    "custom.allowHint": "允许的域名会从编译后的拦截列表中移除,并覆盖任何拦截规则。",
-    "custom.saved": "自定义 DNS 规则已保存",
-    "custom.imported": "自定义 DNS 规则已导入",
-    "custom.exported": "自定义 DNS 规则已导出",
-    "custom.exportTxt": "导出 TXT",
-    "custom.exportJson": "导出 JSON",
-    "customLevel": "自定义",
-    "custom.allowlistModeLabel": "允许列表模式",
-    "custom.allowlistModeOn": "仅可访问下方域名，其余全部拦截。",
-    "custom.allowlistModeOff": "拦截列表中的域名，允许其余所有域名。",
-    "custom.allowedOnlyLabel": "允许的域名（仅限这些）",
-    "custom.allowedOnlyHint": "列表中域名的子域名也会被允许。列表为空时将禁用过滤。"
+    "custom": {
+      "description": "通过源 URL 和手动规则构建您自己的拦截列表。允许的域名始终优先于被拦截的域名。",
+      "sourcesLabel": "拦截列表源 URL",
+      "sourcesPlaceholder": "每行一个 URL",
+      "blockLabel": "拦截的域名",
+      "blockPlaceholder": "每行一个域名",
+      "allowLabel": "允许的域名",
+      "allowPlaceholder": "每行一个域名",
+      "allowHint": "允许的域名会从编译后的拦截列表中移除,并覆盖任何拦截规则。",
+      "saved": "自定义 DNS 规则已保存",
+      "imported": "自定义 DNS 规则已导入",
+      "exported": "自定义 DNS 规则已导出",
+      "exportTxt": "导出 TXT",
+      "exportJson": "导出 JSON",
+      "allowlistModeLabel": "允许列表模式",
+      "allowlistModeOn": "仅可访问下方域名，其余全部拦截。",
+      "allowlistModeOff": "拦截列表中的域名，允许其余所有域名。",
+      "allowedOnlyLabel": "允许的域名（仅限这些）",
+      "allowedOnlyHint": "列表中域名的子域名也会被允许。列表为空时将禁用过滤。"
+    },
+    "customLevel": "自定义"
   },
   "vpns": {
     "form": {
@@ -1843,7 +1845,9 @@
     "mcpAgentUnknown": "不支持此 MCP 客户端。",
     "mcpAgentInstallFailed": "无法将 Duckling Browser 添加到 MCP 客户端：{{detail}}",
     "mcpAgentRemoveFailed": "无法从 MCP 客户端移除 Duckling Browser：{{detail}}",
-    "chromiumVersionNotAvailable": "Chromium 版本 {{requested}} 无法下载。当前版本为 {{current}}。"
+    "chromiumVersionNotAvailable": "Chromium 版本 {{requested}} 无法下载。当前版本为 {{current}}。",
+    "taskNotFound": "Scheduled task not found",
+    "taskInvalidSchedule": "Invalid task schedule: {{detail}}"
   },
   "rail": {
     "profiles": "配置文件",

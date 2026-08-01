@@ -1310,25 +1310,27 @@
     "notCached": "Sin caché",
     "tabBlocklists": "Listas de bloqueo",
     "tabCustom": "Listas personalizadas",
-    "custom.description": "Crea tu propia lista de bloqueo a partir de URLs de origen y reglas manuales. Los dominios permitidos siempre prevalecen sobre los bloqueados.",
-    "custom.sourcesLabel": "URLs de origen de listas de bloqueo",
-    "custom.sourcesPlaceholder": "Una URL por línea",
-    "custom.blockLabel": "Dominios bloqueados",
-    "custom.blockPlaceholder": "Un dominio por línea",
-    "custom.allowLabel": "Dominios permitidos",
-    "custom.allowPlaceholder": "Un dominio por línea",
-    "custom.allowHint": "Los dominios permitidos se eliminan de la lista de bloqueo compilada, anulando cualquier regla de bloqueo.",
-    "custom.saved": "Reglas DNS personalizadas guardadas",
-    "custom.imported": "Reglas DNS personalizadas importadas",
-    "custom.exported": "Reglas DNS personalizadas exportadas",
-    "custom.exportTxt": "Exportar TXT",
-    "custom.exportJson": "Exportar JSON",
-    "customLevel": "Personalizada",
-    "custom.allowlistModeLabel": "Modo lista de permitidos",
-    "custom.allowlistModeOn": "Solo se puede acceder a los dominios de abajo; todo lo demás se bloquea.",
-    "custom.allowlistModeOff": "Bloquear los dominios de la lista; permitir todo lo demás.",
-    "custom.allowedOnlyLabel": "Dominios permitidos (solo estos)",
-    "custom.allowedOnlyHint": "También se permiten los subdominios de un dominio de la lista. Una lista vacía desactiva el filtrado."
+    "custom": {
+      "description": "Crea tu propia lista de bloqueo a partir de URLs de origen y reglas manuales. Los dominios permitidos siempre prevalecen sobre los bloqueados.",
+      "sourcesLabel": "URLs de origen de listas de bloqueo",
+      "sourcesPlaceholder": "Una URL por línea",
+      "blockLabel": "Dominios bloqueados",
+      "blockPlaceholder": "Un dominio por línea",
+      "allowLabel": "Dominios permitidos",
+      "allowPlaceholder": "Un dominio por línea",
+      "allowHint": "Los dominios permitidos se eliminan de la lista de bloqueo compilada, anulando cualquier regla de bloqueo.",
+      "saved": "Reglas DNS personalizadas guardadas",
+      "imported": "Reglas DNS personalizadas importadas",
+      "exported": "Reglas DNS personalizadas exportadas",
+      "exportTxt": "Exportar TXT",
+      "exportJson": "Exportar JSON",
+      "allowlistModeLabel": "Modo lista de permitidos",
+      "allowlistModeOn": "Solo se puede acceder a los dominios de abajo; todo lo demás se bloquea.",
+      "allowlistModeOff": "Bloquear los dominios de la lista; permitir todo lo demás.",
+      "allowedOnlyLabel": "Dominios permitidos (solo estos)",
+      "allowedOnlyHint": "También se permiten los subdominios de un dominio de la lista. Una lista vacía desactiva el filtrado."
+    },
+    "customLevel": "Personalizada"
   },
   "vpns": {
     "form": {
@@ -1843,7 +1845,9 @@
     "mcpAgentUnknown": "Este cliente MCP no es compatible.",
     "mcpAgentInstallFailed": "No se pudo añadir Duckling Browser al cliente MCP: {{detail}}",
     "mcpAgentRemoveFailed": "No se pudo eliminar Duckling Browser del cliente MCP: {{detail}}",
-    "chromiumVersionNotAvailable": "La versión {{requested}} de Chromium no está disponible para descargar. La versión actual es {{current}}."
+    "chromiumVersionNotAvailable": "La versión {{requested}} de Chromium no está disponible para descargar. La versión actual es {{current}}.",
+    "taskNotFound": "Scheduled task not found",
+    "taskInvalidSchedule": "Invalid task schedule: {{detail}}"
   },
   "rail": {
     "profiles": "Perfiles",
