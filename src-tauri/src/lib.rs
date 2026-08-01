@@ -42,6 +42,7 @@ fn e2e_automation_profile_dir() -> Option<std::path::PathBuf> {
     .flatten()
 }
 
+mod agent_engine;
 mod ai_keys;
 mod api_client;
 mod api_server;
@@ -69,6 +70,7 @@ mod geolocation;
 mod group_manager;
 mod human_typing;
 mod ip_utils;
+mod llm;
 mod log_redaction;
 mod macro_step;
 mod platform_browser;
@@ -127,6 +129,8 @@ use downloaded_browsers_registry::{
 };
 
 use ai_keys::{ai_keys_delete, ai_keys_list, ai_keys_save, ai_keys_test};
+
+use agent_engine::{agent_chat, agent_chat_confirm, agent_chat_decline};
 
 use downloader::{cancel_download, download_browser};
 
@@ -2478,6 +2482,9 @@ pub fn run_with_builder(
       ai_keys_save,
       ai_keys_delete,
       ai_keys_test,
+      agent_chat,
+      agent_chat_confirm,
+      agent_chat_decline,
     ])
     .build(tauri::generate_context!())
     .expect("error while building tauri application")

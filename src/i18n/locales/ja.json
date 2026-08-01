@@ -1849,7 +1849,12 @@
     "taskNotFound": "Scheduled task not found",
     "taskInvalidSchedule": "Invalid task schedule: {{detail}}",
     "aiKeyInvalid": "Invalid AI key: {{detail}}",
-    "aiKeyNotFound": "AI key not found"
+    "aiKeyNotFound": "AI key not found",
+    "agentNoKey": "Add an AI provider key or choose an agent CLI first",
+    "agentToolUnknown": "The agent requested an unknown tool: {{tool}}",
+    "agentDelegateNotFound": "That agent CLI is not supported for delegation",
+    "agentCardNotFound": "Change request not found (it may have already been handled)",
+    "agentLlmError": "Agent request failed: {{detail}}"
   },
   "rail": {
     "profiles": "プロファイル",
@@ -1869,7 +1874,8 @@
     "network": "ネットワーク",
     "integrations": "連携",
     "account": "アカウント",
-    "keys": "AI keys"
+    "keys": "AI keys",
+    "agent": "AI Agent"
   },
   "pageTitle": {
     "proxies": "ネットワーク",
@@ -2120,6 +2126,34 @@
       "groq": "Groq",
       "google": "Google",
       "openrouter": "OpenRouter"
+    }
+  },
+  "agentChat": {
+    "title": "AI Agent",
+    "welcome": "Ask me to inspect or control your browser profiles. Anything that changes state will appear as a card for you to confirm.",
+    "placeholder": "Describe what you want to do…",
+    "send": "Send",
+    "working": "Agent is working…",
+    "empty": "Add an AI provider key to start chatting, or delegate to an installed agent CLI.",
+    "goToKeys": "Open AI keys",
+    "noKeySelected": "Select a provider key or an agent CLI first",
+    "pickModel": "Pick provider or agent",
+    "orDirect": "— or chat directly —"
+  },
+  "changeCard": {
+    "sectionTitle": "Proposed changes",
+    "confirm": "Confirm",
+    "decline": "Decline",
+    "reversible": "reversible",
+    "applied": "Change applied",
+    "declined": "Change declined",
+    "applyFailed": "Failed to apply change",
+    "kinds": {
+      "navigate": "Navigate",
+      "runBrowser": "Run browser",
+      "profileUpdate": "Profile update",
+      "proxy": "Proxy",
+      "custom": "Action"
     }
   }
 }

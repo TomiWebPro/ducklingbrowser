@@ -61,3 +61,39 @@ test("AI key store validates input and probes reject bogus keys", async () => {
     assert.ok(result.detail.length > 0);
   });
 });
+
+test("agent chat requires a configured key and handles cards", async () => {
+  await withApp("ai-agent", async (app) => {
+    await app.invokeError("agent_chat", {
+      keyId: null,
+      model: null,
+      message: "hello",
+      useAgent: null,
+    });
+
+    await app.invokeError("agent_chat", {
+      keyId: "missing-key",
+      model: null,
+      message: "hello",
+      useAgent: null,
+    });
+
+    await app.invokeError("agent_chat", {
+      keyId: null,
+      model: null,
+      message: "hello",
+      useAgent: "not-a-real-cli",
+    });
+
+    const declined = await app.invoke("agent_chat_decline", {
+      cardIds: ["missing-card"],
+    });
+    assert.deepEqual(declined.declined, ["missing-card"]);
+
+    const confirmed = await app.invoke("agent_chat_confirm", {
+      cardIds: ["missing-card"],
+    });
+    assert.deepEqual(confirmed.applied, []);
+    assert.ok(confirmed.errors.length === 1);
+  });
+});

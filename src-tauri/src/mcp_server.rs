@@ -105,6 +105,12 @@ pub struct McpError {
   message: String,
 }
 
+impl std::fmt::Display for McpError {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(f, "{}: {}", self.code, self.message)
+  }
+}
+
 impl From<crate::cdp_session::CdpError> for McpError {
   fn from(e: crate::cdp_session::CdpError) -> Self {
     McpError {
@@ -1771,7 +1777,7 @@ impl McpServer {
     result
   }
 
-  async fn dispatch_tool_call(
+  pub(crate) async fn dispatch_tool_call(
     &self,
     tool_name: &str,
     arguments: &serde_json::Value,

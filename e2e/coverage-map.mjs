@@ -282,6 +282,11 @@ export const commandCoverage = {
       "ai_keys_test",
     ],
   },
+  aiAgent: {
+    suite: "ai",
+    level: "integration",
+    commands: ["agent_chat", "agent_chat_confirm", "agent_chat_decline"],
+  },
   hostMutating: {
     suite: "full",
     level: "host-mutating",

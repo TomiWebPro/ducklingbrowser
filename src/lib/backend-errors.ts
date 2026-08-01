@@ -66,6 +66,11 @@ export type BackendErrorCode =
   | "TASK_INVALID_SCHEDULE"
   | "AI_KEY_INVALID"
   | "AI_KEY_NOT_FOUND"
+  | "AGENT_NO_KEY"
+  | "AGENT_TOOL_UNKNOWN"
+  | "AGENT_DELEGATE_NOT_FOUND"
+  | "AGENT_CARD_NOT_FOUND"
+  | "AGENT_LLM_ERROR"
   | "INTERNAL_ERROR";
 
 export interface BackendError {
@@ -255,6 +260,20 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       });
     case "AI_KEY_NOT_FOUND":
       return t("backendErrors.aiKeyNotFound");
+    case "AGENT_NO_KEY":
+      return t("backendErrors.agentNoKey");
+    case "AGENT_TOOL_UNKNOWN":
+      return t("backendErrors.agentToolUnknown", {
+        tool: parsed.params?.tool ?? "",
+      });
+    case "AGENT_DELEGATE_NOT_FOUND":
+      return t("backendErrors.agentDelegateNotFound");
+    case "AGENT_CARD_NOT_FOUND":
+      return t("backendErrors.agentCardNotFound");
+    case "AGENT_LLM_ERROR":
+      return t("backendErrors.agentLlmError", {
+        detail: parsed.params?.detail ?? "",
+      });
     case "CLEAR_ON_CLOSE_UNAVAILABLE":
       return t("backendErrors.clearOnCloseUnavailable");
     case "INTERNAL_ERROR":

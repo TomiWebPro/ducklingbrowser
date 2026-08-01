@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AboutDialog } from "@/components/about-dialog";
 import { AccountPage } from "@/components/account-page";
+import { AgentChatDialog } from "@/components/agent-chat-dialog";
 import { AiKeysDialog } from "@/components/ai-keys-dialog";
 import { BrowserConfigDialog } from "@/components/browser-config-dialog";
 import { BrowserTermsDialog } from "@/components/browser-terms-dialog";
@@ -277,6 +278,7 @@ export default function Home() {
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [integrationsDialogOpen, setIntegrationsDialogOpen] = useState(false);
   const [aiKeysDialogOpen, setAiKeysDialogOpen] = useState(false);
+  const [agentDialogOpen, setAgentDialogOpen] = useState(false);
   const [importProfileDialogOpen, setImportProfileDialogOpen] = useState(false);
   const [proxyManagementDialogOpen, setProxyManagementDialogOpen] =
     useState(false);
@@ -393,6 +395,9 @@ export default function Home() {
         break;
       case "keys":
         setAiKeysDialogOpen(true);
+        break;
+      case "agent":
+        setAgentDialogOpen(true);
         break;
       case "import":
         setImportProfileDialogOpen(true);
@@ -1710,6 +1715,22 @@ export default function Home() {
                 setCurrentPage("profiles");
               }}
               subPage={currentPage === "keys"}
+            />
+          )}
+
+          {agentDialogOpen && (
+            <AgentChatDialog
+              isOpen={agentDialogOpen}
+              onClose={() => {
+                setAgentDialogOpen(false);
+                setCurrentPage("profiles");
+              }}
+              subPage={currentPage === "agent"}
+              onGoToKeys={() => {
+                setAgentDialogOpen(false);
+                setAiKeysDialogOpen(true);
+                setCurrentPage("keys");
+              }}
             />
           )}
 

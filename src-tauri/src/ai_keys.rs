@@ -251,6 +251,12 @@ pub fn get_key(id: &str) -> Result<Option<AiKeyRecord>, String> {
   Ok(load_records().into_iter().find(|r| r.id == id))
 }
 
+/// Crate-internal: all decrypted records, used to pick a key when the chat
+/// call does not specify one.
+pub fn all_records() -> Vec<AiKeyRecord> {
+  load_records()
+}
+
 pub fn save_key(provider: &str, name: &str, model: &str, key: &str) -> Result<AiKeyInfo, String> {
   if name.trim().is_empty() {
     return Err(crate::backend_error("NAME_CANNOT_BE_EMPTY"));
