@@ -423,9 +423,10 @@ impl ChromiumManager {
       });
 
     // Generate fingerprint entirely client-side — no need for a headless browser
-    let mut fingerprint: serde_json::Value =
-      serde_json::from_str(&crate::fingerprint_injector::FingerprintInjector::generate_fingerprint(os))
-        .map_err(|e| format!("Failed to parse generated fingerprint: {e}"))?;
+    let mut fingerprint: serde_json::Value = serde_json::from_str(
+      &crate::fingerprint_injector::FingerprintInjector::generate_fingerprint(os),
+    )
+    .map_err(|e| format!("Failed to parse generated fingerprint: {e}"))?;
 
     // reqwest's SOCKS connector (hyper-util) corrupts its parse buffer
     // when a proxy splits a handshake reply across TCP segments, so a
@@ -466,9 +467,12 @@ impl ChromiumManager {
 
     // Apply timezone/geolocation for the proxy this fingerprint is being
     // generated against. Shared with the launch-time location refresh.
-    let geolocation_applied =
-      Self::apply_geolocation(&mut fingerprint, geo_proxy.as_deref(), config.geoip.as_ref())
-        .await;
+    let geolocation_applied = Self::apply_geolocation(
+      &mut fingerprint,
+      geo_proxy.as_deref(),
+      config.geoip.as_ref(),
+    )
+    .await;
 
     if let Some(worker_id) = temp_worker_id {
       let _ = crate::proxy_runner::stop_proxy_process(&worker_id).await;
@@ -749,11 +753,10 @@ impl ChromiumManager {
       );
 
       // Build and execute CDP commands (Network.setUserAgentOverride, Emulation.*)
-      let cdp_commands =
-        crate::fingerprint_injector::FingerprintInjector::build_cdp_commands(
-          fingerprint_json,
-          config.proxy.as_deref(),
-        );
+      let cdp_commands = crate::fingerprint_injector::FingerprintInjector::build_cdp_commands(
+        fingerprint_json,
+        config.proxy.as_deref(),
+      );
 
       for cmd in &cdp_commands {
         log::info!("Executing CDP command: {}", cmd.method);
@@ -1200,8 +1203,12 @@ mod tests {
     assert!(ChromiumManager::is_remote_socks_url(
       "socks5://user:pass@gw.dataimpulse.com:10000"
     ));
-    assert!(ChromiumManager::is_remote_socks_url("socks5://1.2.3.4:1080"));
-    assert!(ChromiumManager::is_remote_socks_url("socks4://1.2.3.4:1080"));
+    assert!(ChromiumManager::is_remote_socks_url(
+      "socks5://1.2.3.4:1080"
+    ));
+    assert!(ChromiumManager::is_remote_socks_url(
+      "socks4://1.2.3.4:1080"
+    ));
 
     // ...but the app's own loopback workers are not. socks is a non-special
     // URL scheme, so the IP literal parses as Host::Domain — the launch-time
@@ -1209,7 +1216,9 @@ mod tests {
     assert!(!ChromiumManager::is_remote_socks_url(
       "socks5://127.0.0.1:24001"
     ));
-    assert!(!ChromiumManager::is_remote_socks_url("socks5://[::1]:24001"));
+    assert!(!ChromiumManager::is_remote_socks_url(
+      "socks5://[::1]:24001"
+    ));
     assert!(!ChromiumManager::is_remote_socks_url(
       "socks5://localhost:24001"
     ));

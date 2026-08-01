@@ -1340,7 +1340,8 @@ mod tests {
 
   #[test]
   fn test_write_chrome_cookies_stores_plaintext_values() {
-    let tmp = std::env::temp_dir().join(format!("duckling_cookie_test_{}.db", uuid::Uuid::new_v4()));
+    let tmp =
+      std::env::temp_dir().join(format!("duckling_cookie_test_{}.db", uuid::Uuid::new_v4()));
     create_chrome_cookies_db(&tmp);
 
     let cookies = vec![UnifiedCookie {
@@ -1401,7 +1402,8 @@ mod tests {
 
   #[test]
   fn test_write_chrome_cookies_session_cookie_persisted() {
-    let tmp = std::env::temp_dir().join(format!("duckling_cookie_test_{}.db", uuid::Uuid::new_v4()));
+    let tmp =
+      std::env::temp_dir().join(format!("duckling_cookie_test_{}.db", uuid::Uuid::new_v4()));
     create_chrome_cookies_db(&tmp);
 
     let cookies = vec![UnifiedCookie {
@@ -1458,7 +1460,8 @@ mod tests {
 
   #[test]
   fn test_write_chrome_cookies_replaces_existing() {
-    let tmp = std::env::temp_dir().join(format!("duckling_cookie_test_{}.db", uuid::Uuid::new_v4()));
+    let tmp =
+      std::env::temp_dir().join(format!("duckling_cookie_test_{}.db", uuid::Uuid::new_v4()));
     create_chrome_cookies_db(&tmp);
 
     let cookie = UnifiedCookie {
@@ -1525,8 +1528,10 @@ mod tests {
   #[test]
   #[cfg(target_os = "macos")]
   fn test_decrypt_with_wrong_host_returns_none_or_raw() {
-    let profile_dir =
-      std::env::temp_dir().join(format!("duckling_decrypt_wrong_host_{}", uuid::Uuid::new_v4()));
+    let profile_dir = std::env::temp_dir().join(format!(
+      "duckling_decrypt_wrong_host_{}",
+      uuid::Uuid::new_v4()
+    ));
     std::fs::create_dir_all(&profile_dir).unwrap();
     std::fs::write(
       profile_dir.join("os_crypt_key"),

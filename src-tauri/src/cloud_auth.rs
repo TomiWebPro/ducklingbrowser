@@ -990,8 +990,7 @@ impl CloudAuthManager {
   }
 
   /// Clear the cached Chromium token. No-op in this fork.
-  pub async fn clear_chromium_token(&self) {
-  }
+  pub async fn clear_chromium_token(&self) {}
 
   /// Background loop that refreshes the sync token periodically
   pub async fn start_sync_token_refresh_loop(app_handle: tauri::AppHandle) {
@@ -1101,15 +1100,15 @@ pub async fn cloud_exchange_device_code(
     has_subscription
   );
 
-    // Pre-fetch sync token so sync can start immediately
-    if has_subscription {
-      log::info!("Pre-fetching sync token...");
-      match CLOUD_AUTH.get_or_refresh_sync_token().await {
-        Ok(Some(_)) => log::info!("Sync token pre-fetched successfully"),
-        Ok(None) => log::warn!("Sync token not available despite active subscription"),
-        Err(e) => log::error!("Failed to pre-fetch sync token after login: {e}"),
-      }
+  // Pre-fetch sync token so sync can start immediately
+  if has_subscription {
+    log::info!("Pre-fetching sync token...");
+    match CLOUD_AUTH.get_or_refresh_sync_token().await {
+      Ok(Some(_)) => log::info!("Sync token pre-fetched successfully"),
+      Ok(None) => log::warn!("Sync token not available despite active subscription"),
+      Err(e) => log::error!("Failed to pre-fetch sync token after login: {e}"),
     }
+  }
 
   // Sync cloud proxy after login
   CLOUD_AUTH.sync_cloud_proxy().await;

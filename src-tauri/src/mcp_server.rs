@@ -18,11 +18,11 @@ use tokio::sync::Mutex as AsyncMutex;
 use uuid::Uuid;
 
 use crate::browser::ProxySettings;
+use crate::chromium_terms::ChromiumTermsManager;
 use crate::group_manager::GROUP_MANAGER;
 use crate::profile::{BrowserProfile, ProfileManager};
 use crate::proxy_manager::PROXY_MANAGER;
 use crate::settings_manager::SettingsManager;
-use crate::chromium_terms::ChromiumTermsManager;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1863,8 +1863,10 @@ impl McpServer {
       })?;
 
     // Filter to only Chromium profiles
-    let filtered: Vec<&BrowserProfile> =
-      profiles.iter().filter(|p| p.browser == "chromium").collect();
+    let filtered: Vec<&BrowserProfile> = profiles
+      .iter()
+      .filter(|p| p.browser == "chromium")
+      .collect();
 
     Ok(serde_json::json!({
       "content": [{
@@ -3536,7 +3538,11 @@ impl McpServer {
 
     let fingerprint_info = match profile.browser.as_str() {
       "chromium" => {
-        let config = profile.chromium_config.as_ref().cloned().unwrap_or_default();
+        let config = profile
+          .chromium_config
+          .as_ref()
+          .cloned()
+          .unwrap_or_default();
         serde_json::json!({
           "browser": "chromium",
           "fingerprint": config.fingerprint,
@@ -3605,7 +3611,11 @@ impl McpServer {
 
     match profile.browser.as_str() {
       "chromium" => {
-        let mut config = profile.chromium_config.as_ref().cloned().unwrap_or_default();
+        let mut config = profile
+          .chromium_config
+          .as_ref()
+          .cloned()
+          .unwrap_or_default();
         if let Some(fp) = fingerprint {
           config.fingerprint = Some(fp.to_string());
         }

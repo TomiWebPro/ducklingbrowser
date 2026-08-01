@@ -1,10 +1,10 @@
 use crate::browser::{create_browser, BrowserType};
+use crate::chromium_manager::ChromiumConfig;
 use crate::cloud_auth::CLOUD_AUTH;
 use crate::downloaded_browsers_registry::DownloadedBrowsersRegistry;
 use crate::events;
 use crate::profile::types::{get_host_os, BrowserProfile, SyncMode};
 use crate::proxy_manager::PROXY_MANAGER;
-use crate::chromium_manager::ChromiumConfig;
 use std::fs::{self, create_dir_all};
 use std::path::{Path, PathBuf};
 use sysinfo::{Pid, ProcessRefreshKind, RefreshKind, System};
@@ -229,9 +229,7 @@ impl ProfileManager {
             log::info!("Successfully generated fingerprint for profile: {name}");
           }
           Err(e) => {
-            return Err(
-              format!("Failed to generate fingerprint for profile '{name}': {e}").into(),
-            );
+            return Err(format!("Failed to generate fingerprint for profile '{name}': {e}").into());
           }
         }
       } else {

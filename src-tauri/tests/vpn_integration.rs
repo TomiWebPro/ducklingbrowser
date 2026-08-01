@@ -440,7 +440,8 @@ struct ProxyProcess {
   local_port: u16,
 }
 
-async fn ensure_duckling_proxy_binary() -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
+async fn ensure_duckling_proxy_binary() -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>>
+{
   let cargo_manifest_dir = std::env::var("CARGO_MANIFEST_DIR")?;
   let project_root = PathBuf::from(cargo_manifest_dir)
     .parent()

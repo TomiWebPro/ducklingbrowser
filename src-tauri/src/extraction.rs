@@ -1288,12 +1288,7 @@ impl Extractor {
 
     // Enhanced list of common browser executable names.
     // Chrome for Testing ships as `chrome` on Linux.
-    let exe_names = [
-      "chrome",
-      "chromium",
-      "chromium-browser",
-      "chromium-bin",
-    ];
+    let exe_names = ["chrome", "chromium", "chromium-browser", "chromium-bin"];
 
     // First, try direct lookup in the main directory
     for exe_name in &exe_names {

@@ -5,12 +5,12 @@ use std::fs::{self, create_dir_all, File};
 use std::io;
 use std::path::{Path, PathBuf};
 
+use crate::chromium_manager::ChromiumConfig;
 use crate::downloaded_browsers_registry::DownloadedBrowsersRegistry;
 use crate::events;
 use crate::profile::types::{get_host_os, BrowserProfile, SyncMode};
 use crate::profile::ProfileManager;
 use crate::proxy_manager::PROXY_MANAGER;
-use crate::chromium_manager::ChromiumConfig;
 
 /// Prefix for temp directories that hold extracted profile archives. Cleanup
 /// refuses to delete anything outside the system temp dir with this prefix.

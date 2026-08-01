@@ -34,7 +34,8 @@ impl FingerprintInjector {
     let sample_rate = rng.random_range(44100..=48000);
     let channel_count = rng.random_range(1..=2);
 
-    let webgl_params = serde_json::from_str(r#"{
+    let webgl_params = serde_json::from_str(
+      r#"{
       "UNMASKED_VENDOR_WEBGL": "Google Inc. (Intel)",
       "UNMASKED_RENDERER_WEBGL": "ANGLE (Intel, Intel(R) UHD Graphics Direct3D11 vs_5_0 ps_5_0)",
       "MAX_TEXTURE_SIZE": 16384, "MAX_CUBE_MAP_TEXTURE_SIZE": 16384,
@@ -44,15 +45,21 @@ impl FingerprintInjector {
       "MAX_VERTEX_UNIFORM_VECTORS": 4096, "MAX_FRAGMENT_UNIFORM_VECTORS": 4096,
       "ALIASED_LINE_WIDTH_RANGE": [1, 1], "ALIASED_POINT_SIZE_RANGE": [1, 1024],
       "MAX_VIEWPORT_DIMS": [32767, 32767]
-    }"#).unwrap();
-    let webgl2_params = serde_json::from_str(r#"{
+    }"#,
+    )
+    .unwrap();
+    let webgl2_params = serde_json::from_str(
+      r#"{
       "UNMASKED_VENDOR_WEBGL": "Google Inc. (Intel)",
       "UNMASKED_RENDERER_WEBGL": "ANGLE (Intel, Intel(R) UHD Graphics Direct3D11 vs_5_0 ps_5_0)",
       "MAX_TEXTURE_SIZE": 16384, "MAX_3D_TEXTURE_SIZE": 16384,
       "MAX_ARRAY_TEXTURE_LAYERS": 256, "MAX_COLOR_ATTACHMENTS": 8,
       "MAX_DRAW_BUFFERS": 8, "MAX_SAMPLES": 4
-    }"#).unwrap();
-    let fonts_val: Value = serde_json::from_str(r#"[
+    }"#,
+    )
+    .unwrap();
+    let fonts_val: Value = serde_json::from_str(
+      r#"[
       "Arial","Calibri","Cambria","Cambria Math","Candara",
       "Comic Sans MS","Consolas","Constantia","Corbel","Courier New",
       "Ebrima","Franklin Gothic Medium","Gabriola","Gadugi",
@@ -65,15 +72,20 @@ impl FingerprintInjector {
       "Segoe UI Emoji","Segoe UI Historic","Segoe UI Symbol",
       "SimSun-ExtB","Sitka","Sylfaen","Symbol","Tahoma",
       "Times New Roman","Trebuchet MS","Verdana","Webdings","Wingdings"
-    ]"#).unwrap();
+    ]"#,
+    )
+    .unwrap();
     let plugins_val: Value = serde_json::from_str(r#"[
       {"name":"Chrome PDF Plugin","filename":"internal-pdf-viewer","description":"Portable Document Format"},
       {"name":"Chrome PDF Viewer","filename":"mhjfbmdgcfjbbpaeojofohoefgiehjai","description":""},
       {"name":"Native Client","filename":"internal-nacl-plugin","description":""}
     ]"#).unwrap();
-    let mime_types_val: Value = serde_json::from_str(r#"[
+    let mime_types_val: Value = serde_json::from_str(
+      r#"[
       "application/pdf","text/pdf","application/x-google-chrome-pdf"
-    ]"#).unwrap();
+    ]"#,
+    )
+    .unwrap();
 
     let mut fp = serde_json::Map::new();
     fp.insert("userAgent".into(), json!(Self::random_ua(&mut rng, os)));
@@ -95,8 +107,14 @@ impl FingerprintInjector {
     fp.insert("timezoneOffset".into(), json!(300));
     fp.insert("latitude".into(), json!(40.7128));
     fp.insert("longitude".into(), json!(-74.0060));
-    fp.insert("webglVendor".into(), json!(rng.random_range(10000..=99999).to_string()));
-    fp.insert("webglRenderer".into(), json!(rng.random_range(10000..=99999).to_string()));
+    fp.insert(
+      "webglVendor".into(),
+      json!(rng.random_range(10000..=99999).to_string()),
+    );
+    fp.insert(
+      "webglRenderer".into(),
+      json!(rng.random_range(10000..=99999).to_string()),
+    );
     fp.insert("webglParameters".into(), webgl_params);
     fp.insert("webgl2Parameters".into(), webgl2_params);
     fp.insert("fonts".into(), fonts_val);
@@ -115,7 +133,10 @@ impl FingerprintInjector {
     fp.insert("vendorSub".into(), json!(""));
     fp.insert("appName".into(), json!("Netscape"));
     fp.insert("appCodeName".into(), json!("Mozilla"));
-    fp.insert("appVersion".into(), json!(Self::random_app_version(&mut rng, os)));
+    fp.insert(
+      "appVersion".into(),
+      json!(Self::random_app_version(&mut rng, os)),
+    );
     fp.insert("buildID".into(), json!("20181001000000"));
     fp.insert("maxTouchPoints".into(), json!(max_touch));
     fp.insert("cookieEnabled".into(), json!(true));
@@ -123,17 +144,17 @@ impl FingerprintInjector {
     fp.insert("webdriver".into(), json!(false));
     fp.insert("pdfViewerEnabled".into(), json!(true));
     fp.insert("privateWindow".into(), json!(false));
-    fp.insert("audioContext".into(), json!({ "sampleRate": sample_rate, "channelCount": channel_count }));
+    fp.insert(
+      "audioContext".into(),
+      json!({ "sampleRate": sample_rate, "channelCount": channel_count }),
+    );
 
     serde_json::to_string(&fp).unwrap()
   }
 
   /// Build CDP commands to apply this fingerprint to a running Chromium instance.
   /// Returns a list of (method, params) to execute via CDP.
-  pub fn build_cdp_commands(
-    fingerprint_json: &str,
-    _proxy_url: Option<&str>,
-  ) -> Vec<CdpCommand> {
+  pub fn build_cdp_commands(fingerprint_json: &str, _proxy_url: Option<&str>) -> Vec<CdpCommand> {
     let fp: Value = serde_json::from_str(fingerprint_json).unwrap_or_default();
     let mut commands = Vec::new();
 
@@ -150,9 +171,18 @@ impl FingerprintInjector {
     }
 
     // Device metrics (screen dimensions, device scale factor)
-    let screen_w = fp.get("screenWidth").and_then(|v| v.as_u64()).unwrap_or(1920) as i64;
-    let screen_h = fp.get("screenHeight").and_then(|v| v.as_u64()).unwrap_or(1080) as i64;
-    let dsf = fp.get("deviceScaleFactor").and_then(|v| v.as_f64()).unwrap_or(1.0);
+    let screen_w = fp
+      .get("screenWidth")
+      .and_then(|v| v.as_u64())
+      .unwrap_or(1920) as i64;
+    let screen_h = fp
+      .get("screenHeight")
+      .and_then(|v| v.as_u64())
+      .unwrap_or(1080) as i64;
+    let dsf = fp
+      .get("deviceScaleFactor")
+      .and_then(|v| v.as_f64())
+      .unwrap_or(1.0);
     commands.push(CdpCommand {
       method: "Emulation.setDeviceMetricsOverride".to_string(),
       params: json!({
@@ -208,42 +238,85 @@ impl FingerprintInjector {
   pub fn generate_injection_script(fingerprint_json: &str) -> String {
     let fp: Value = serde_json::from_str(fingerprint_json).unwrap_or_default();
 
-    let platform = fp.get("platform").and_then(|v| v.as_str()).unwrap_or("Win32");
-    let hardware_concurrency = fp.get("hardwareConcurrency").and_then(|v| v.as_u64()).unwrap_or(4);
-    let device_memory = fp.get("deviceMemory").and_then(|v| v.as_f64()).unwrap_or(8.0);
-    let language = fp.get("language").and_then(|v| v.as_str()).unwrap_or("en-US");
-    let languages = fp.get("languages").and_then(|v| v.as_array()).map(|a| {
-      a.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>()
-    }).unwrap_or_else(|| vec!["en-US", "en"]);
-    let max_touch = fp.get("maxTouchPoints").and_then(|v| v.as_u64()).unwrap_or(0);
+    let platform = fp
+      .get("platform")
+      .and_then(|v| v.as_str())
+      .unwrap_or("Win32");
+    let hardware_concurrency = fp
+      .get("hardwareConcurrency")
+      .and_then(|v| v.as_u64())
+      .unwrap_or(4);
+    let device_memory = fp
+      .get("deviceMemory")
+      .and_then(|v| v.as_f64())
+      .unwrap_or(8.0);
+    let language = fp
+      .get("language")
+      .and_then(|v| v.as_str())
+      .unwrap_or("en-US");
+    let languages = fp
+      .get("languages")
+      .and_then(|v| v.as_array())
+      .map(|a| a.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>())
+      .unwrap_or_else(|| vec!["en-US", "en"]);
+    let max_touch = fp
+      .get("maxTouchPoints")
+      .and_then(|v| v.as_u64())
+      .unwrap_or(0);
     let webgl_params = fp.get("webglParameters").and_then(|v| v.as_object());
     let webgl2_params = fp.get("webgl2Parameters").and_then(|v| v.as_object());
-    let fonts = fp.get("fonts").and_then(|v| v.as_array()).map(|a| {
-      a.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>()
-    }).unwrap_or_default();
-    let plugins_json = fp.get("plugins").map(|v| v.to_string()).unwrap_or_else(|| "[]".to_string());
-    let mime_types_json = fp.get("mimeTypes").map(|v| v.to_string()).unwrap_or_else(|| "[]".to_string());
+    let fonts = fp
+      .get("fonts")
+      .and_then(|v| v.as_array())
+      .map(|a| a.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>())
+      .unwrap_or_default();
+    let plugins_json = fp
+      .get("plugins")
+      .map(|v| v.to_string())
+      .unwrap_or_else(|| "[]".to_string());
+    let mime_types_json = fp
+      .get("mimeTypes")
+      .map(|v| v.to_string())
+      .unwrap_or_else(|| "[]".to_string());
     let do_not_track = fp.get("doNotTrack");
-    let webdriver = fp.get("webdriver").and_then(|v| v.as_bool()).unwrap_or(false);
-    let oscpu = fp.get("oscpu").and_then(|v| v.as_str()).unwrap_or("Windows NT 10.0");
-    let app_version = fp.get("appVersion").and_then(|v| v.as_str()).unwrap_or("5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
-    let cookie_enabled = fp.get("cookieEnabled").and_then(|v| v.as_bool()).unwrap_or(true);
+    let webdriver = fp
+      .get("webdriver")
+      .and_then(|v| v.as_bool())
+      .unwrap_or(false);
+    let oscpu = fp
+      .get("oscpu")
+      .and_then(|v| v.as_str())
+      .unwrap_or("Windows NT 10.0");
+    let app_version = fp
+      .get("appVersion")
+      .and_then(|v| v.as_str())
+      .unwrap_or("5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+    let cookie_enabled = fp
+      .get("cookieEnabled")
+      .and_then(|v| v.as_bool())
+      .unwrap_or(true);
     let on_line = fp.get("onLine").and_then(|v| v.as_bool()).unwrap_or(true);
 
     // Build WebGL parameter override object
-    let webgl_override = webgl_params.map(|obj| {
-      let kvs: Vec<String> = obj.iter()
-        .map(|(k, v)| format!("p['{}']={};", k, json!(v)))
-        .collect();
-      kvs.join("")
-    }).unwrap_or_default();
+    let webgl_override = webgl_params
+      .map(|obj| {
+        let kvs: Vec<String> = obj
+          .iter()
+          .map(|(k, v)| format!("p['{}']={};", k, json!(v)))
+          .collect();
+        kvs.join("")
+      })
+      .unwrap_or_default();
 
-    let webgl2_override = webgl2_params.map(|obj| {
-      let kvs: Vec<String> = obj.iter()
-        .map(|(k, v)| format!("p['{}']={};", k, json!(v)))
-        .collect();
-      kvs.join("")
-    }).unwrap_or_default();
+    let webgl2_override = webgl2_params
+      .map(|obj| {
+        let kvs: Vec<String> = obj
+          .iter()
+          .map(|(k, v)| format!("p['{}']={};", k, json!(v)))
+          .collect();
+        kvs.join("")
+      })
+      .unwrap_or_default();
 
     // Fonts for font enumeration spoofing
     let fonts_json_str = serde_json::to_string(&fonts).unwrap_or_else(|_| "[]".to_string());
@@ -259,7 +332,8 @@ impl FingerprintInjector {
 
     let languages_json = serde_json::to_string(&languages).unwrap_or_else(|_| "[]".to_string());
 
-    format!(r#"
+    format!(
+      r#"
 // ==UserScript==
 // @name        Duckling Fingerprint Injection
 // @description Override navigator, screen, WebGL, canvas, and audio properties for anti-detection
@@ -480,10 +554,22 @@ impl FingerprintInjector {
 
 }})();
 "#,
-      screen_w = fp.get("screenWidth").and_then(|v| v.as_u64()).unwrap_or(1920),
-      screen_h = fp.get("screenHeight").and_then(|v| v.as_u64()).unwrap_or(1080),
-      avail_w = fp.get("screenAvailWidth").and_then(|v| v.as_u64()).unwrap_or(1920),
-      avail_h = fp.get("screenAvailHeight").and_then(|v| v.as_u64()).unwrap_or(1040),
+      screen_w = fp
+        .get("screenWidth")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(1920),
+      screen_h = fp
+        .get("screenHeight")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(1080),
+      avail_w = fp
+        .get("screenAvailWidth")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(1920),
+      avail_h = fp
+        .get("screenAvailHeight")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(1040),
       color_depth = fp.get("colorDepth").and_then(|v| v.as_u64()).unwrap_or(24),
       pixel_depth = fp.get("pixelDepth").and_then(|v| v.as_u64()).unwrap_or(24),
       plugins_json = plugins_json,
@@ -498,11 +584,25 @@ impl FingerprintInjector {
   fn random_screen_size(rng: &mut impl Rng, os: &str) -> (u32, u32) {
     match os {
       "windows" => {
-        let pairs = [(1920, 1080), (1366, 768), (1536, 864), (1440, 900), (2560, 1440), (3840, 2160)];
+        let pairs = [
+          (1920, 1080),
+          (1366, 768),
+          (1536, 864),
+          (1440, 900),
+          (2560, 1440),
+          (3840, 2160),
+        ];
         pairs[rng.random_range(0..pairs.len())]
       }
       "macos" => {
-        let pairs = [(1440, 900), (1680, 1050), (2560, 1600), (2880, 1800), (3024, 1964), (3456, 2234)];
+        let pairs = [
+          (1440, 900),
+          (1680, 1050),
+          (2560, 1600),
+          (2880, 1800),
+          (3024, 1964),
+          (3456, 2234),
+        ];
         pairs[rng.random_range(0..pairs.len())]
       }
       _ => {
@@ -513,7 +613,14 @@ impl FingerprintInjector {
   }
 
   fn random_ua(rng: &mut impl Rng, os: &str) -> String {
-    let chrome_versions = ["136.0.0.0", "135.0.0.0", "134.0.0.0", "133.0.0.0", "132.0.0.0", "131.0.0.0"];
+    let chrome_versions = [
+      "136.0.0.0",
+      "135.0.0.0",
+      "134.0.0.0",
+      "133.0.0.0",
+      "132.0.0.0",
+      "131.0.0.0",
+    ];
     let cv = chrome_versions[rng.random_range(0..chrome_versions.len())];
     match os {
       "windows" => format!("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{cv} Safari/537.36"),
@@ -539,7 +646,14 @@ impl FingerprintInjector {
   }
 
   fn random_app_version(rng: &mut impl Rng, os: &str) -> String {
-    let chrome_versions = ["136.0.0.0", "135.0.0.0", "134.0.0.0", "133.0.0.0", "132.0.0.0", "131.0.0.0"];
+    let chrome_versions = [
+      "136.0.0.0",
+      "135.0.0.0",
+      "134.0.0.0",
+      "133.0.0.0",
+      "132.0.0.0",
+      "131.0.0.0",
+    ];
     let cv = chrome_versions[rng.random_range(0..chrome_versions.len())];
     let safari_vers = ["537.36", "537.35", "537.34"];
     let safari_ver = safari_vers[rng.random_range(0..safari_vers.len())];
@@ -549,7 +663,4 @@ impl FingerprintInjector {
       _ => format!("5.0 (X11; Linux x86_64) AppleWebKit/{safari_ver} (KHTML, like Gecko) Chrome/{cv} Safari/{safari_ver}"),
     }
   }
-
 }
-
-

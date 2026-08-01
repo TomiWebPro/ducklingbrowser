@@ -1,10 +1,10 @@
 use crate::browser::ProxySettings;
+use crate::chromium_manager::{ChromiumConfig, ChromiumManager};
 use crate::cloud_auth::CLOUD_AUTH;
 use crate::downloaded_browsers_registry::DownloadedBrowsersRegistry;
 use crate::events;
 use crate::profile::{BrowserProfile, ProfileManager};
 use crate::proxy_manager::PROXY_MANAGER;
-use crate::chromium_manager::{ChromiumConfig, ChromiumManager};
 use serde::Serialize;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -201,7 +201,7 @@ impl BrowserRunner {
     _local_proxy_settings: Option<&ProxySettings>,
     remote_debugging_port: Option<u16>,
     headless: bool,
-    ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
+  ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
     // Handle Chromium profiles
     if profile.browser == "chromium" {
       // Get or create Chromium config
@@ -355,7 +355,8 @@ impl BrowserRunner {
         chromium_config.fingerprint = Some(new_fingerprint.clone());
 
         // Save the updated fingerprint to the profile so it persists.
-        let mut updated_chromium_config = updated_profile.chromium_config.clone().unwrap_or_default();
+        let mut updated_chromium_config =
+          updated_profile.chromium_config.clone().unwrap_or_default();
         updated_chromium_config.fingerprint = Some(new_fingerprint);
         // Preserve the randomize flag so it persists across launches
         updated_chromium_config.randomize_fingerprint_on_launch = Some(true);
@@ -824,7 +825,11 @@ impl BrowserRunner {
             chromium_process.processId
           );
 
-          match self.chromium_manager.stop_chromium(&chromium_process.id).await {
+          match self
+            .chromium_manager
+            .stop_chromium(&chromium_process.id)
+            .await
+          {
             Ok(_) => {
               if let Some(pid) = chromium_process.processId {
                 // Verify the process actually died by checking after a short delay
@@ -857,7 +862,7 @@ impl BrowserRunner {
                     )
                     .await
                     {
-                        log::error!("Failed to force kill browser process {}: {}", pid, e);
+                      log::error!("Failed to force kill browser process {}: {}", pid, e);
                     } else {
                       sleep(Duration::from_millis(500)).await;
                       let system = System::new_all();
@@ -926,10 +931,7 @@ impl BrowserRunner {
               );
               // Try to force kill if we have a PID
               if let Some(pid) = chromium_process.processId {
-                log::info!(
-                  "Attempting force kill after stop error for PID: {}",
-                  pid
-                );
+                log::info!("Attempting force kill after stop error for PID: {}", pid);
                 #[cfg(target_os = "macos")]
                 {
                   use crate::platform_browser;
