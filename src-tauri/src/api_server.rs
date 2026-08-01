@@ -2660,7 +2660,7 @@ mod tests {
     // same predicate it uses, kept in lockstep with MCP's create_profile.
     let is_valid = |b: &str| b == "chromium";
     assert!(is_valid("chromium"));
-    assert!(!is_valid("chromium"));
+    assert!(!is_valid("firefox"));
     assert!(!is_valid(""));
   }
 

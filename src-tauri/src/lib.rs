@@ -51,6 +51,8 @@ mod automation_rate_limiter;
 mod browser;
 mod browser_runner;
 mod browser_version_manager;
+mod chromium_manager;
+mod chromium_terms;
 mod default_browser;
 pub mod dns_blocklist;
 mod downloaded_browsers_registry;
@@ -78,8 +80,6 @@ pub mod socks5_local;
 pub mod sync;
 mod synchronizer;
 pub mod traffic_stats;
-mod chromium_manager;
-mod chromium_terms;
 // mod theme_detector; // removed: theme detection handled in webview via CSS prefers-color-scheme
 pub mod cloud_auth;
 mod commercial_license;
@@ -100,10 +100,10 @@ use browser_runner::{
 
 use profile::manager::{
   check_browser_status, clone_profile, create_browser_profile_new, delete_profile,
-  list_browser_profiles, rename_profile, update_profile_clear_on_close,
+  list_browser_profiles, rename_profile, update_chromium_config, update_profile_clear_on_close,
   update_profile_dns_blocklist, update_profile_launch_hook, update_profile_note,
   update_profile_proxy, update_profile_proxy_bypass_rules, update_profile_tags, update_profile_vpn,
-  update_profile_window_color, update_chromium_config,
+  update_profile_window_color,
 };
 
 use profile::password::{
@@ -679,7 +679,10 @@ rl.on("close", () => setTimeout(() => process.exit(0), 500));
     .map_err(|e| format!("Failed to write bridge script: {e}"))?;
 
   // Update the extensions-installations.json registry so Claude Desktop picks it up
-  update_claude_extensions_registry("local.mcpb.duckling-browser.duckling-browser", Some(manifest))?;
+  update_claude_extensions_registry(
+    "local.mcpb.duckling-browser.duckling-browser",
+    Some(manifest),
+  )?;
 
   Ok(())
 }
@@ -2507,9 +2510,10 @@ mod tests {
   }
 
   fn check_unused_commands(verbose: bool) {
-    // Commands that are intentionally not used in the frontend
-    // but are used via MCP server or other programmatic APIs
-    let mcp_only_commands = [
+    // Commands that are intentionally not used in the React frontend
+    // but are used via the MCP server, the e2e test harness, or other
+    // programmatic APIs
+    let non_frontend_commands = [
       "connect_vpn",
       "disconnect_vpn",
       "get_vpn_status",
@@ -2522,6 +2526,9 @@ mod tests {
       "get_team_lock_status",
       "generate_sample_fingerprint",
       "lock_profile",
+      "check_chromium_terms_accepted",
+      "check_chromium_downloaded",
+      "accept_chromium_terms",
     ];
 
     // Extract command names from the generate_handler! macro in this file
@@ -2536,11 +2543,11 @@ mod tests {
     let mut used_commands = Vec::new();
 
     for command in &commands {
-      // Skip commands that are intentionally MCP-only
-      if mcp_only_commands.contains(&command.as_str()) {
+      // Skip commands that are intentionally not frontend-facing
+      if non_frontend_commands.contains(&command.as_str()) {
         used_commands.push(command.clone());
         if verbose {
-          println!("✅ {command} (MCP-only)");
+          println!("✅ {command} (non-frontend)");
         }
         continue;
       }

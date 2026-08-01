@@ -1,4 +1,4 @@
-/// Chromium terms manager — always accepted in this community fork.
+//! Chromium terms manager — always accepted in this community fork.
 
 pub struct ChromiumTermsManager;
 

@@ -302,11 +302,11 @@ impl BrowserVersionManager {
         // File naming: chrome-{platform}.zip
         let platform_key = format!("{os}-{arch}");
         let (filename, is_archive) = match platform_key.as_str() {
-          "linux-x64" => (format!("chrome-linux64.zip"), true),
-          "macos-arm64" => (format!("chrome-mac-arm64.zip"), true),
-          "macos-x64" => (format!("chrome-mac-x64.zip"), true),
-          "windows-x64" => (format!("chrome-win64.zip"), true),
-          "windows-arm64" => (format!("chrome-win64-arm64.zip"), true),
+          "linux-x64" => ("chrome-linux64.zip".to_string(), true),
+          "macos-arm64" => ("chrome-mac-arm64.zip".to_string(), true),
+          "macos-x64" => ("chrome-mac-x64.zip".to_string(), true),
+          "windows-x64" => ("chrome-win64.zip".to_string(), true),
+          "windows-arm64" => ("chrome-win64-arm64.zip".to_string(), true),
           _ => {
             return Err(
               format!("Unsupported platform/architecture for Chromium: {os}/{arch}").into(),

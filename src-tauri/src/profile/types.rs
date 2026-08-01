@@ -38,7 +38,7 @@ pub struct BrowserProfile {
   pub last_launch: Option<u64>,
   #[serde(default = "default_release_type")]
   pub release_type: String,
-  #[serde(default, alias = "wayfern_config")]
+  #[serde(default)]
   pub chromium_config: Option<ChromiumConfig>, // Browser engine configuration
   #[serde(default)]
   pub group_id: Option<String>, // Reference to profile group

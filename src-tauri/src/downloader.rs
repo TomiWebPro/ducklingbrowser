@@ -172,9 +172,7 @@ impl Downloader {
           .get_chromium_download_url(&version_info)
           .ok_or_else(|| {
             let (os, arch) = Self::get_platform_info();
-            format!(
-              "No compatible download found for Chromium on {os}/{arch}"
-            )
+            format!("No compatible download found for Chromium on {os}/{arch}")
           })?;
 
         Ok(download_url)
@@ -1032,7 +1030,7 @@ mod tests {
     }
 
     // A different browser's in-progress state must be left untouched.
-    let other = "chromium-9.9.9".to_string();
+    let other = "firefox-9.9.9".to_string();
     {
       let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
       downloading.insert(other.clone());
@@ -1052,13 +1050,13 @@ mod tests {
       );
     }
     assert!(
-      is_downloading("chromium", "9.9.9"),
+      is_downloading("firefox", "9.9.9"),
       "unrelated browser's download state must be preserved"
     );
 
     // Cleanup so we don't leak global state into other tests.
     clear_download_state_for_browser("chromium");
-    clear_download_state_for_browser("chromium");
+    clear_download_state_for_browser("firefox");
   }
 }
 

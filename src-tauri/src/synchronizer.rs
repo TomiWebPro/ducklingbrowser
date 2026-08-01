@@ -11,7 +11,6 @@ use crate::profile::types::BrowserProfile;
 /// Maximum number of profiles to launch concurrently
 const MAX_CONCURRENT_LAUNCHES: usize = 5;
 /// Event captured from the leader browser via CDP input capture events.
-
 /// Fields match the CDP input capture event schema directly.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CapturedEvent {
@@ -45,7 +44,7 @@ pub struct CapturedEvent {
   pub timestamp: Option<f64>,
 }
 
-    // Input capture via JS event listeners + Runtime.bindingCalled (stock Chromium CDP).
+// Input capture via JS event listeners + Runtime.bindingCalled (stock Chromium CDP).
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncFollowerState {
