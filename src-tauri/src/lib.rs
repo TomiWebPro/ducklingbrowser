@@ -51,6 +51,7 @@ mod automation_rate_limiter;
 mod browser;
 mod browser_runner;
 mod browser_version_manager;
+mod cdp_session;
 mod chromium_manager;
 mod chromium_terms;
 mod default_browser;

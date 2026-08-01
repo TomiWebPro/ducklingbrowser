@@ -18,6 +18,7 @@ use tokio::sync::Mutex as AsyncMutex;
 use uuid::Uuid;
 
 use crate::browser::ProxySettings;
+use crate::cdp_session::CdpSession;
 use crate::chromium_terms::ChromiumTermsManager;
 use crate::group_manager::GROUP_MANAGER;
 use crate::profile::{BrowserProfile, ProfileManager};
@@ -102,6 +103,15 @@ pub struct McpResponse {
 pub struct McpError {
   code: i32,
   message: String,
+}
+
+impl From<crate::cdp_session::CdpError> for McpError {
+  fn from(e: crate::cdp_session::CdpError) -> Self {
+    McpError {
+      code: e.code,
+      message: e.message,
+    }
+  }
 }
 
 const DEFAULT_MCP_PORT: u16 = 51080;
@@ -3925,79 +3935,11 @@ impl McpServer {
   // --- CDP utility methods for browser interaction ---
 
   async fn get_cdp_port_for_profile(&self, profile: &BrowserProfile) -> Result<u16, McpError> {
-    let profiles_dir = ProfileManager::instance().get_profiles_dir();
-    let profile_path = profile.get_profile_data_path(&profiles_dir);
-    let profile_path_str = profile_path.to_string_lossy();
-
-    // Retry a few times — port info may not be stored yet right after launch
-    for attempt in 0..10 {
-      if attempt > 0 {
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-      }
-      let port = if profile.browser == "chromium" {
-        crate::chromium_manager::ChromiumManager::instance()
-          .get_cdp_port(&profile_path_str)
-          .await
-      } else {
-        None
-      };
-      if let Some(p) = port {
-        return Ok(p);
-      }
-    }
-
-    Err(McpError {
-      code: -32000,
-      message: format!(
-        "No CDP connection available for profile '{}'. Make sure the browser is running.",
-        profile.name
-      ),
-    })
+    Ok(CdpSession::new().get_cdp_port_for_profile(profile).await?)
   }
 
   async fn get_cdp_ws_url(&self, port: u16) -> Result<String, McpError> {
-    let url = format!("http://127.0.0.1:{port}/json");
-    let client = reqwest::Client::new();
-
-    // Retry connecting to CDP endpoint (browser may still be starting up)
-    let max_attempts = 15;
-    let mut last_err = String::new();
-    for attempt in 0..max_attempts {
-      if attempt > 0 {
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-      }
-      match client
-        .get(&url)
-        .timeout(std::time::Duration::from_secs(3))
-        .send()
-        .await
-      {
-        Ok(resp) => match resp.json::<Vec<serde_json::Value>>().await {
-          Ok(targets) => {
-            if let Some(ws_url) = targets
-              .iter()
-              .find(|t| t.get("type").and_then(|v| v.as_str()) == Some("page"))
-              .and_then(|t| t.get("webSocketDebuggerUrl"))
-              .and_then(|v| v.as_str())
-            {
-              return Ok(ws_url.to_string());
-            }
-            last_err = "No page target found in browser".to_string();
-          }
-          Err(e) => {
-            last_err = format!("Failed to parse CDP targets: {e}");
-          }
-        },
-        Err(e) => {
-          last_err = format!("Failed to connect to browser CDP endpoint: {e}");
-        }
-      }
-    }
-
-    Err(McpError {
-      code: -32000,
-      message: last_err,
-    })
+    Ok(CdpSession::new().get_cdp_ws_url(port).await?)
   }
 
   async fn send_cdp(
@@ -4006,62 +3948,7 @@ impl McpServer {
     method: &str,
     params: serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
-    use futures_util::sink::SinkExt;
-    use futures_util::stream::StreamExt;
-    use tokio_tungstenite::connect_async;
-    use tokio_tungstenite::tungstenite::Message;
-
-    let (mut ws_stream, _) = connect_async(ws_url).await.map_err(|e| McpError {
-      code: -32000,
-      message: format!("Failed to connect to CDP WebSocket: {e}"),
-    })?;
-
-    let command = serde_json::json!({
-      "id": 1,
-      "method": method,
-      "params": params
-    });
-
-    ws_stream
-      .send(Message::Text(command.to_string().into()))
-      .await
-      .map_err(|e| McpError {
-        code: -32000,
-        message: format!("Failed to send CDP command: {e}"),
-      })?;
-
-    while let Some(msg) = ws_stream.next().await {
-      let msg = msg.map_err(|e| McpError {
-        code: -32000,
-        message: format!("CDP WebSocket error: {e}"),
-      })?;
-      if let Message::Text(text) = msg {
-        let response: serde_json::Value =
-          serde_json::from_str(text.as_str()).map_err(|e| McpError {
-            code: -32000,
-            message: format!("Failed to parse CDP response: {e}"),
-          })?;
-        if response.get("id") == Some(&serde_json::json!(1)) {
-          if let Some(error) = response.get("error") {
-            return Err(McpError {
-              code: -32000,
-              message: format!("CDP error: {error}"),
-            });
-          }
-          return Ok(
-            response
-              .get("result")
-              .cloned()
-              .unwrap_or(serde_json::json!({})),
-          );
-        }
-      }
-    }
-
-    Err(McpError {
-      code: -32000,
-      message: "No response received from CDP".to_string(),
-    })
+    Ok(CdpSession::new().send_cdp(ws_url, method, params).await?)
   }
 
   async fn send_human_keystrokes(
@@ -4070,120 +3957,11 @@ impl McpServer {
     text: &str,
     wpm: Option<f64>,
   ) -> Result<(), McpError> {
-    use crate::human_typing::{MarkovTyper, TypingAction};
-    use futures_util::sink::SinkExt;
-    use futures_util::stream::StreamExt;
-    use tokio_tungstenite::connect_async;
-    use tokio_tungstenite::tungstenite::Message;
-
-    let events = MarkovTyper::new(text, wpm).run();
-
-    let (mut ws_stream, _) = connect_async(ws_url).await.map_err(|e| McpError {
-      code: -32000,
-      message: format!("Failed to connect to CDP WebSocket: {e}"),
-    })?;
-
-    let mut cmd_id = 1u64;
-    let mut last_time = 0.0;
-
-    for event in &events {
-      let delay = event.time - last_time;
-      if delay > 0.0 {
-        tokio::time::sleep(std::time::Duration::from_secs_f64(delay)).await;
-      }
-      last_time = event.time;
-
-      match &event.action {
-        TypingAction::Char(ch) => {
-          let text_str = ch.to_string();
-          // keyDown
-          let down = serde_json::json!({
-            "id": cmd_id,
-            "method": "Input.dispatchKeyEvent",
-            "params": {
-              "type": "keyDown",
-              "text": text_str,
-              "key": text_str,
-              "unmodifiedText": text_str,
-            }
-          });
-          cmd_id += 1;
-          ws_stream
-            .send(Message::Text(down.to_string().into()))
-            .await
-            .map_err(|e| McpError {
-              code: -32000,
-              message: format!("Failed to send key event: {e}"),
-            })?;
-          // Drain response
-          let _ = ws_stream.next().await;
-
-          // keyUp
-          let up = serde_json::json!({
-            "id": cmd_id,
-            "method": "Input.dispatchKeyEvent",
-            "params": {
-              "type": "keyUp",
-              "key": text_str,
-            }
-          });
-          cmd_id += 1;
-          ws_stream
-            .send(Message::Text(up.to_string().into()))
-            .await
-            .map_err(|e| McpError {
-              code: -32000,
-              message: format!("Failed to send key event: {e}"),
-            })?;
-          let _ = ws_stream.next().await;
-        }
-        TypingAction::Backspace => {
-          let down = serde_json::json!({
-            "id": cmd_id,
-            "method": "Input.dispatchKeyEvent",
-            "params": {
-              "type": "keyDown",
-              "key": "Backspace",
-              "code": "Backspace",
-              "windowsVirtualKeyCode": 8,
-              "nativeVirtualKeyCode": 8,
-            }
-          });
-          cmd_id += 1;
-          ws_stream
-            .send(Message::Text(down.to_string().into()))
-            .await
-            .map_err(|e| McpError {
-              code: -32000,
-              message: format!("Failed to send key event: {e}"),
-            })?;
-          let _ = ws_stream.next().await;
-
-          let up = serde_json::json!({
-            "id": cmd_id,
-            "method": "Input.dispatchKeyEvent",
-            "params": {
-              "type": "keyUp",
-              "key": "Backspace",
-              "code": "Backspace",
-              "windowsVirtualKeyCode": 8,
-              "nativeVirtualKeyCode": 8,
-            }
-          });
-          cmd_id += 1;
-          ws_stream
-            .send(Message::Text(up.to_string().into()))
-            .await
-            .map_err(|e| McpError {
-              code: -32000,
-              message: format!("Failed to send key event: {e}"),
-            })?;
-          let _ = ws_stream.next().await;
-        }
-      }
-    }
-
-    Ok(())
+    Ok(
+      CdpSession::new()
+        .send_human_keystrokes(ws_url, text, wpm)
+        .await?,
+    )
   }
 
   /// Send a CDP command and wait for the page to finish loading.
@@ -4196,161 +3974,15 @@ impl McpServer {
     params: serde_json::Value,
     timeout_secs: u64,
   ) -> Result<serde_json::Value, McpError> {
-    use futures_util::sink::SinkExt;
-    use futures_util::stream::StreamExt;
-    use tokio_tungstenite::connect_async;
-    use tokio_tungstenite::tungstenite::Message;
-
-    let (mut ws_stream, _) = connect_async(ws_url).await.map_err(|e| McpError {
-      code: -32000,
-      message: format!("Failed to connect to CDP WebSocket: {e}"),
-    })?;
-
-    // Enable Page domain events so we receive loadEventFired
-    let enable_cmd = serde_json::json!({
-      "id": 1,
-      "method": "Page.enable",
-      "params": {}
-    });
-    ws_stream
-      .send(Message::Text(enable_cmd.to_string().into()))
-      .await
-      .map_err(|e| McpError {
-        code: -32000,
-        message: format!("Failed to send Page.enable: {e}"),
-      })?;
-
-    // Wait for Page.enable response
-    loop {
-      let msg = ws_stream
-        .next()
-        .await
-        .ok_or_else(|| McpError {
-          code: -32000,
-          message: "WebSocket closed waiting for Page.enable response".to_string(),
-        })?
-        .map_err(|e| McpError {
-          code: -32000,
-          message: format!("CDP WebSocket error: {e}"),
-        })?;
-      if let Message::Text(text) = msg {
-        let resp: serde_json::Value = serde_json::from_str(text.as_str()).unwrap_or_default();
-        if resp.get("id") == Some(&serde_json::json!(1)) {
-          break;
-        }
-      }
-    }
-
-    // Send the actual command (e.g., Page.navigate)
-    let command = serde_json::json!({
-      "id": 2,
-      "method": method,
-      "params": params
-    });
-    ws_stream
-      .send(Message::Text(command.to_string().into()))
-      .await
-      .map_err(|e| McpError {
-        code: -32000,
-        message: format!("Failed to send CDP command: {e}"),
-      })?;
-
-    // Wait for command response and then for Page.loadEventFired
-    let mut command_result = None;
-    let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_secs(timeout_secs);
-
-    loop {
-      let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
-      if remaining.is_zero() {
-        // Timed out waiting for load — return the command result if we have it
-        break;
-      }
-
-      let msg = match tokio::time::timeout(remaining, ws_stream.next()).await {
-        Ok(Some(Ok(msg))) => msg,
-        Ok(Some(Err(e))) => {
-          return Err(McpError {
-            code: -32000,
-            message: format!("CDP WebSocket error: {e}"),
-          });
-        }
-        Ok(None) => break, // stream ended
-        Err(_) => break,   // timeout
-      };
-
-      if let Message::Text(text) = msg {
-        let response: serde_json::Value = serde_json::from_str(text.as_str()).unwrap_or_default();
-
-        // Check for command response
-        if response.get("id") == Some(&serde_json::json!(2)) {
-          if let Some(error) = response.get("error") {
-            return Err(McpError {
-              code: -32000,
-              message: format!("CDP error: {error}"),
-            });
-          }
-          command_result = Some(
-            response
-              .get("result")
-              .cloned()
-              .unwrap_or(serde_json::json!({})),
-          );
-        }
-
-        // Check for Page.loadEventFired — page is fully loaded
-        if response.get("method") == Some(&serde_json::json!("Page.loadEventFired")) {
-          break;
-        }
-      }
-    }
-
-    // Disable Page domain events
-    let disable_cmd = serde_json::json!({
-      "id": 3,
-      "method": "Page.disable",
-      "params": {}
-    });
-    let _ = ws_stream
-      .send(Message::Text(disable_cmd.to_string().into()))
-      .await;
-
-    command_result.ok_or_else(|| McpError {
-      code: -32000,
-      message: "No response received from CDP".to_string(),
-    })
+    Ok(
+      CdpSession::new()
+        .send_cdp_and_wait_for_load(ws_url, method, params, timeout_secs)
+        .await?,
+    )
   }
 
   fn get_running_profile(&self, profile_id: &str) -> Result<BrowserProfile, McpError> {
-    let profiles = ProfileManager::instance()
-      .list_profiles()
-      .map_err(|e| McpError {
-        code: -32000,
-        message: format!("Failed to list profiles: {e}"),
-      })?;
-
-    let profile = profiles
-      .into_iter()
-      .find(|p| p.id.to_string() == profile_id)
-      .ok_or_else(|| McpError {
-        code: -32000,
-        message: format!("Profile not found: {profile_id}"),
-      })?;
-
-    if profile.browser != "chromium" {
-      return Err(McpError {
-        code: -32000,
-        message: "MCP only supports Chromium profiles".to_string(),
-      });
-    }
-
-    if profile.process_id.is_none() {
-      return Err(McpError {
-        code: -32000,
-        message: format!("Profile '{}' is not running", profile.name),
-      });
-    }
-
-    Ok(profile)
+    Ok(CdpSession::new().get_running_profile(profile_id)?)
   }
 
   // --- Browser interaction handlers ---
