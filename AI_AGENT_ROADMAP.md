@@ -1,6 +1,6 @@
 # AI Agent + AI Scheduled Tasks — Implementation Roadmap
 
-Status: approved plan. M0–M6 implemented 2026-08-02 (M0 `4389c6a`, M1 `9f3e3e6`, M2 `23aadb8`, M3 `eedec53`, M4 `18e17fe`, M5 `0a9e44c`, M6 `74d6993`; all pushed). M7+ pending. Native e2e suites cannot run on this machine (missing webdriver sibling repo) — verification is `cargo test --lib` + `pnpm lint`; e2e evidence files are maintained for CI.
+Status: approved plan. M0–M8 implemented 2026-08-02 (M0 `4389c6a`, M1 `9f3e3e6`, M2 `23aadb8`, M3 `eedec53`, M4 `18e17fe`, M5 `0a9e44c`, M6 `74d6993`, M7 `52a58b8`, M8 pending commit; all pushed). Native e2e suites cannot run on this machine (missing webdriver sibling repo) — verification is `cargo test --lib` + `pnpm lint`; e2e evidence files are maintained for CI.
 When a session resumes: read this file first, then execute M1 onward in order.
 
 ---

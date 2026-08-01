@@ -115,6 +115,69 @@ pub fn now_iso() -> String {
   Utc::now().to_rfc3339()
 }
 
+/// True when `now` (UTC) falls inside the task's daily window, expressed in
+/// the task's own timezone. Used by the missed-job policy: a run that came
+/// due while the machine was asleep is only executed while its window is
+/// still open.
+pub fn is_now_within_window(task: &TaskDefinition, now: DateTime<Utc>) -> bool {
+  let Ok(start) = parse_window_time(&task.schedule.window_start) else {
+    return false;
+  };
+  let Ok(end) = parse_window_time(&task.schedule.window_end) else {
+    return false;
+  };
+  let Ok(tz) = task.schedule.timezone.parse::<Tz>() else {
+    return false;
+  };
+  let local_date = now.with_timezone(&tz).date_naive();
+  let (Some(start_local), Some(end_local)) = (
+    tz.from_local_datetime(&local_date.and_time(start)).single(),
+    tz.from_local_datetime(&local_date.and_time(end)).single(),
+  ) else {
+    return false;
+  };
+  let window_start_utc = start_local.with_timezone(&Utc);
+  let window_end_utc = end_local.with_timezone(&Utc);
+  now >= window_start_utc && now <= window_end_utc
+}
+
+/// Best-effort startup pass: enabled tasks whose stored `next_run_at` is in
+/// the past AND outside their current window (e.g. stale after DST/timezone
+/// changes or a long sleep) get recomputed to the next valid instant. Runs
+/// that are still inside an open window are left alone — the tick loop picks
+/// them up and executes them.
+pub fn reconcile_stale_schedules() {
+  reconcile_stale_schedules_at(Utc::now());
+}
+
+/// Testable core of [`reconcile_stale_schedules`].
+pub fn reconcile_stale_schedules_at(now: DateTime<Utc>) {
+  let store = SchedulerStore::instance();
+  for task in store.list_tasks() {
+    if !task.enabled {
+      continue;
+    }
+    let stale = match task
+      .next_run_at
+      .as_deref()
+      .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+    {
+      None => true,
+      Some(next) => next.with_timezone(&Utc) < now && !is_now_within_window(&task, now),
+    };
+    if stale {
+      let Ok(Some(next)) = compute_next_run(&task, now) else {
+        continue;
+      };
+      let mut updated = task.clone();
+      updated.next_run_at = Some(next.to_rfc3339());
+      if let Err(e) = store.save_task(&updated) {
+        log::warn!("Failed to reconcile next_run_at for task {}: {e}", task.id);
+      }
+    }
+  }
+}
+
 pub fn parse_window_time(hhmm: &str) -> Result<NaiveTime, String> {
   let mut parts = hhmm.split(':');
   let hour: u32 = parts
@@ -377,6 +440,20 @@ impl JobRunner {
       .collect();
 
     for task in due {
+      // Missed-job policy (§2.1): if the run came due while the machine was
+      // asleep or closed and the window has already passed, skip to the next
+      // day instead of running late.
+      if !is_now_within_window(&task, now) {
+        self
+          .record_run(
+            &task,
+            "skipped",
+            Some("Run window already passed; skipped to next day".to_string()),
+            0,
+          )
+          .await;
+        continue;
+      }
       let mut in_flight = self.in_flight.lock().unwrap_or_else(|p| p.into_inner());
       if in_flight.contains(&task.id) {
         continue;
@@ -411,11 +488,23 @@ impl JobRunner {
 
   async fn run_one(&self, task: &TaskDefinition) {
     let (status, error, duration_ms) = self.execute(task).await;
+    self.record_run(task, &status, error, duration_ms).await;
+  }
+
+  /// Persists the outcome of a run and recomputes `next_run_at` through
+  /// `save_task` (which also advances to the next window).
+  async fn record_run(
+    &self,
+    task: &TaskDefinition,
+    status: &str,
+    error: Option<String>,
+    duration_ms: u64,
+  ) {
     let mut updated = SchedulerStore::instance()
       .get_task(&task.id)
       .unwrap_or_else(|| task.clone());
     updated.last_run_at = Some(now_iso());
-    updated.last_run_status = Some(status);
+    updated.last_run_status = Some(status.to_string());
     updated.last_run_error = error;
     updated.last_run_duration_ms = Some(duration_ms);
     if let Err(e) = SchedulerStore::instance().save_task(&updated) {
@@ -631,6 +720,85 @@ mod tests {
     let mut t = task("task-d", test_schedule("09:00", "10:00", "UTC"));
     t.enabled = false;
     assert_eq!(compute_next_run(&t, Utc::now()).unwrap(), None);
+  }
+
+  #[test]
+  fn is_now_within_window_respects_timezone() {
+    let t = task("task-w", test_schedule("09:00", "10:00", "UTC"));
+    let inside = Utc.with_ymd_and_hms(2026, 8, 2, 9, 30, 0).single().unwrap();
+    let before = Utc.with_ymd_and_hms(2026, 8, 2, 8, 59, 0).single().unwrap();
+    let after = Utc.with_ymd_and_hms(2026, 8, 2, 10, 1, 0).single().unwrap();
+    assert!(is_now_within_window(&t, inside));
+    assert!(!is_now_within_window(&t, before));
+    assert!(!is_now_within_window(&t, after));
+  }
+
+  #[test]
+  fn is_now_within_window_rejects_bad_schedule() {
+    let t = task("task-bad", test_schedule("09:00", "10:00", "Mars/Olympus"));
+    let now = Utc.with_ymd_and_hms(2026, 8, 2, 9, 30, 0).single().unwrap();
+    assert!(!is_now_within_window(&t, now));
+  }
+
+  #[test]
+  fn reconcile_stale_schedules_advances_past_windows() {
+    let tmp = tempfile::tempdir().unwrap();
+    let _guard = crate::app_dirs::set_test_data_dir(tmp.path().to_path_buf());
+    let store = SchedulerStore::instance();
+
+    let mut missed = task("task-missed", test_schedule("02:00", "04:00", "UTC"));
+    missed.next_run_at = Some("2026-08-01T03:00:00+00:00".to_string());
+    let mut upcoming = task("task-open", test_schedule("09:00", "12:00", "UTC"));
+    upcoming.next_run_at = Some("2026-08-01T10:00:00+00:00".to_string());
+    store
+      .persist(&[missed.clone(), upcoming.clone()])
+      .expect("seed scheduler store");
+
+    // Frozen "now" at 05:00 UTC on Aug 1: the 02:00-04:00 window has passed,
+    // so task-missed must be rescheduled to its next window. task-open is not
+    // due yet (10:00 > 05:00) and must be left untouched.
+    let now = Utc.with_ymd_and_hms(2026, 8, 1, 5, 0, 0).single().unwrap();
+    reconcile_stale_schedules_at(now);
+
+    let reloaded_missed = store.get_task("task-missed").unwrap();
+    let next_missed = DateTime::parse_from_rfc3339(reloaded_missed.next_run_at.as_deref().unwrap())
+      .unwrap()
+      .with_timezone(&Utc);
+    assert!(
+      next_missed > now,
+      "missed task must be rescheduled after now"
+    );
+
+    let reloaded_open = store.get_task("task-open").unwrap();
+    assert_eq!(
+      reloaded_open.next_run_at.as_deref(),
+      Some("2026-08-01T10:00:00+00:00"),
+      "not-yet-due task must be left untouched"
+    );
+  }
+
+  #[test]
+  fn reconcile_stale_schedules_keeps_open_windows() {
+    let tmp = tempfile::tempdir().unwrap();
+    let _guard = crate::app_dirs::set_test_data_dir(tmp.path().to_path_buf());
+    let store = SchedulerStore::instance();
+
+    let mut in_window = task("task-live", test_schedule("02:00", "12:00", "UTC"));
+    in_window.next_run_at = Some("2026-08-01T03:00:00+00:00".to_string());
+    store
+      .persist(&[in_window.clone()])
+      .expect("seed scheduler store");
+
+    // 06:00 UTC is still inside the 02:00-12:00 window: the stale run must be
+    // left alone so the tick loop can execute it (missed-job policy).
+    let now = Utc.with_ymd_and_hms(2026, 8, 1, 6, 0, 0).single().unwrap();
+    reconcile_stale_schedules_at(now);
+
+    let reloaded = store.get_task("task-live").unwrap();
+    assert_eq!(
+      reloaded.next_run_at.as_deref(),
+      Some("2026-08-01T03:00:00+00:00")
+    );
   }
 
   #[test]

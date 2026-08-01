@@ -2276,6 +2276,7 @@ pub fn run_with_builder(
       });
 
       // Start the scheduled task runner (AI cron) in the background
+      scheduler::reconcile_stale_schedules();
       scheduler::JobRunner::instance().start();
 
       // Start cloud auth background refresh loop
