@@ -421,4 +421,177 @@ mod tests {
     let result = run_with_fake(&t).await;
     assert!(result.is_err());
   }
+
+  fn seeded_profile() -> String {
+    let profile = crate::profile::BrowserProfile {
+      id: uuid::Uuid::new_v4(),
+      name: "Test profile".to_string(),
+      browser: "chromium".to_string(),
+      version: "130.0".to_string(),
+      proxy_id: None,
+      vpn_id: None,
+      launch_hook: None,
+      process_id: None,
+      last_launch: None,
+      release_type: "stable".to_string(),
+      chromium_config: None,
+      group_id: None,
+      tags: Vec::new(),
+      note: None,
+      window_color: None,
+      sync_mode: crate::profile::types::SyncMode::Disabled,
+      encryption_salt: None,
+      last_sync: None,
+      host_os: None,
+      ephemeral: false,
+      extension_group_id: None,
+      proxy_bypass_rules: Vec::new(),
+      created_by_id: None,
+      created_by_email: None,
+      dns_blocklist: None,
+      password_protected: false,
+      clear_on_close: false,
+      created_at: Some(0),
+      updated_at: Some(0),
+    };
+    ProfileManager::instance().save_profile(&profile).unwrap();
+    profile.id.to_string()
+  }
+
+  #[tokio::test]
+  async fn run_task_executes_full_plan() {
+    let tmp = tempfile::tempdir().unwrap();
+    let _guard = crate::app_dirs::set_test_data_dir(tmp.path().to_path_buf());
+    let profile_id = seeded_profile();
+
+    let steps = vec![
+      MacroStep::Navigate {
+        url: "https://example.com".to_string(),
+      },
+      MacroStep::WaitSelector {
+        selector: "#login".to_string(),
+        timeout_ms: None,
+      },
+      MacroStep::Click {
+        selector: Some("button.submit".to_string()),
+        index: None,
+      },
+      MacroStep::Type {
+        selector: None,
+        index: Some(0),
+        text: "hello".to_string(),
+      },
+      MacroStep::Evaluate {
+        expression: "document.title".to_string(),
+      },
+      MacroStep::Extract {
+        expression: "location.href".to_string(),
+        key: "url".to_string(),
+      },
+      MacroStep::Screenshot,
+      MacroStep::SaveProfileField {
+        path: format!("profile.{profile_id}.note"),
+        value: json!("from-macro"),
+      },
+    ];
+    let mut t = task(steps);
+    t.profile_id = Some(profile_id.clone());
+
+    let mut fake = FakeCdpSession::new();
+    let result = run_task(&t, &mut fake).await.unwrap();
+
+    assert_eq!(result.status, "success");
+    assert_eq!(result.error, None);
+    assert_eq!(fake.navigations, vec!["https://example.com".to_string()]);
+    assert_eq!(fake.evaluations.len(), 4, "click, type, evaluate, extract");
+    assert_eq!(result.extracted.get("url"), Some(&json!({ "value": 42 })));
+    assert_eq!(result.deferred_profile_fields.len(), 1);
+    assert_eq!(
+      result.deferred_profile_fields[0],
+      (format!("profile.{profile_id}.note"), json!("from-macro"))
+    );
+  }
+
+  #[tokio::test]
+  async fn run_task_stops_at_failed_step() {
+    let tmp = tempfile::tempdir().unwrap();
+    let _guard = crate::app_dirs::set_test_data_dir(tmp.path().to_path_buf());
+    let profile_id = seeded_profile();
+
+    let steps = vec![
+      MacroStep::Navigate {
+        url: "https://example.com".to_string(),
+      },
+      MacroStep::Click {
+        selector: None,
+        index: None,
+      },
+      MacroStep::Screenshot,
+    ];
+    let mut t = task(steps);
+    t.profile_id = Some(profile_id);
+
+    let mut fake = FakeCdpSession::new();
+    let error = run_task(&t, &mut fake).await.unwrap_err();
+    assert!(error.contains("Click requires a selector or an index"));
+    assert_eq!(
+      fake.evaluations.len(),
+      0,
+      "steps after the failure must not run"
+    );
+    assert_eq!(fake.navigations.len(), 1);
+  }
+
+  #[tokio::test]
+  async fn run_task_requires_running_profile() {
+    let tmp = tempfile::tempdir().unwrap();
+    let _guard = crate::app_dirs::set_test_data_dir(tmp.path().to_path_buf());
+    let mut t = task(vec![MacroStep::Navigate {
+      url: "https://example.com".to_string(),
+    }]);
+    t.profile_id = Some("no-such-profile".to_string());
+
+    let mut fake = FakeCdpSession::new();
+    let error = run_task(&t, &mut fake).await.unwrap_err();
+    assert!(error.contains("not found"));
+  }
+
+  #[test]
+  fn save_profile_field_updates_whitelisted_fields() {
+    let tmp = tempfile::tempdir().unwrap();
+    let _guard = crate::app_dirs::set_test_data_dir(tmp.path().to_path_buf());
+    let profile_id = seeded_profile();
+
+    save_profile_field(&format!("profile.{profile_id}.note"), &json!("hello")).unwrap();
+    save_profile_field(
+      &format!("profile.{profile_id}.window_color"),
+      &json!("#112233"),
+    )
+    .unwrap();
+    save_profile_field(
+      &format!("profile.{profile_id}.clear_on_close"),
+      &json!(true),
+    )
+    .unwrap();
+    assert!(
+      save_profile_field(
+        &format!("profile.{profile_id}.clear_on_close"),
+        &json!("yes")
+      )
+      .is_err(),
+      "clear_on_close must be a boolean"
+    );
+    assert!(
+      save_profile_field(&format!("profile.{profile_id}.unknown_field"), &json!("x")).is_err()
+    );
+
+    let profiles = ProfileManager::instance().list_profiles().unwrap();
+    let profile = profiles
+      .iter()
+      .find(|p| p.id.to_string() == profile_id)
+      .expect("seeded profile must persist");
+    assert_eq!(profile.note.as_deref(), Some("hello"));
+    assert_eq!(profile.window_color.as_deref(), Some("#112233"));
+    assert!(profile.clear_on_close);
+  }
 }

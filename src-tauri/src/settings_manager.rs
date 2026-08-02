@@ -1223,6 +1223,27 @@ mod tests {
   }
 
   #[test]
+  fn test_keep_running_in_background_defaults_true_and_persists() {
+    let (manager, _temp_dir, _guard) = create_test_settings_manager();
+
+    let defaults = manager.load_settings().unwrap();
+    assert!(
+      defaults.keep_running_in_background,
+      "24/7 background mode must be on by default"
+    );
+
+    let mut modified = defaults.clone();
+    modified.keep_running_in_background = false;
+    manager.save_settings(&modified).unwrap();
+
+    let reloaded = manager.load_settings().unwrap();
+    assert!(
+      !reloaded.keep_running_in_background,
+      "toggle must persist across save/load"
+    );
+  }
+
+  #[test]
   fn test_load_table_sorting_nonexistent_file() {
     let (manager, _temp_dir, _guard) = create_test_settings_manager();
 

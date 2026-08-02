@@ -801,6 +801,82 @@ mod tests {
     );
   }
 
+  #[tokio::test]
+  async fn record_run_persists_outcome_and_advances_schedule() {
+    let tmp = tempfile::tempdir().unwrap();
+    let _guard = crate::app_dirs::set_test_data_dir(tmp.path().to_path_buf());
+    let store = SchedulerStore::instance();
+    let mut t = task("task-rec", test_schedule("02:00", "04:00", "UTC"));
+    t.next_run_at = Some("2020-01-01T03:00:00+00:00".to_string());
+    store.persist(&[t.clone()]).unwrap();
+
+    JobRunner::instance()
+      .record_run(&t, "success", None, 1234)
+      .await;
+
+    let reloaded = store.get_task("task-rec").unwrap();
+    assert_eq!(reloaded.last_run_status.as_deref(), Some("success"));
+    assert_eq!(reloaded.last_run_error, None);
+    assert_eq!(reloaded.last_run_duration_ms, Some(1234));
+    assert!(
+      reloaded.last_run_at.is_some(),
+      "last_run_at must be recorded"
+    );
+
+    let next = DateTime::parse_from_rfc3339(reloaded.next_run_at.as_deref().unwrap())
+      .unwrap()
+      .with_timezone(&Utc);
+    assert!(
+      next > Utc::now(),
+      "next_run_at must advance past the stale 2020 instant"
+    );
+  }
+
+  #[tokio::test]
+  async fn record_run_keeps_error_outcome() {
+    let tmp = tempfile::tempdir().unwrap();
+    let _guard = crate::app_dirs::set_test_data_dir(tmp.path().to_path_buf());
+    let store = SchedulerStore::instance();
+    let mut t = task("task-err", test_schedule("02:00", "04:00", "UTC"));
+    t.next_run_at = Some("2020-01-01T03:00:00+00:00".to_string());
+    store.persist(&[t.clone()]).unwrap();
+
+    JobRunner::instance()
+      .record_run(&t, "error", Some("boom".to_string()), 7)
+      .await;
+
+    let reloaded = store.get_task("task-err").unwrap();
+    assert_eq!(reloaded.last_run_status.as_deref(), Some("error"));
+    assert_eq!(reloaded.last_run_error.as_deref(), Some("boom"));
+    assert_eq!(reloaded.last_run_duration_ms, Some(7));
+  }
+
+  #[tokio::test]
+  async fn run_now_reports_error_outcome_for_unrunnable_macro_task() {
+    let tmp = tempfile::tempdir().unwrap();
+    let _guard = crate::app_dirs::set_test_data_dir(tmp.path().to_path_buf());
+    let store = SchedulerStore::instance();
+    let t = task("task-now", test_schedule("02:00", "04:00", "UTC"));
+    store.persist(&[t]).unwrap();
+
+    let outcome = JobRunner::instance().run_now("task-now").await.unwrap();
+    assert_eq!(outcome["id"], "task-now");
+    assert_eq!(outcome["status"], "error");
+    assert!(outcome["error"].as_str().unwrap().contains("profile"));
+    assert!(outcome["durationMs"].is_number());
+  }
+
+  #[tokio::test]
+  async fn run_now_returns_task_not_found() {
+    let tmp = tempfile::tempdir().unwrap();
+    let _guard = crate::app_dirs::set_test_data_dir(tmp.path().to_path_buf());
+    let error = JobRunner::instance()
+      .run_now("missing-task")
+      .await
+      .unwrap_err();
+    assert!(error.contains("TASK_NOT_FOUND"));
+  }
+
   #[test]
   fn store_roundtrip_persists_and_deletes() {
     let tmp = tempfile::tempdir().unwrap();
