@@ -330,7 +330,8 @@ mod tests {
   }
 
   #[test]
-  fn test_installed_xray_env_override() {
+  fn test_installed_xray_env_override_and_missing() {
+    // The env var is process-global, so serialize both assertions in one test.
     let mut path = std::env::temp_dir();
     path.push(format!("xray-env-test-{}", std::process::id()));
     std::fs::write(&path, b"#!/bin/sh\n").unwrap();
@@ -340,20 +341,17 @@ mod tests {
     std::env::remove_var(XRAY_PATH_ENV);
 
     std::fs::remove_file(&path).unwrap();
-    assert_eq!(found, Some(path));
-  }
+    assert_eq!(found, Some(path.clone()));
 
-  #[test]
-  fn test_env_override_ignores_missing_file() {
-    let mut path = std::env::temp_dir();
-    path.push(format!("xray-env-missing-{}", std::process::id()));
-    std::fs::remove_file(&path).ok();
+    let mut missing = std::env::temp_dir();
+    missing.push(format!("xray-env-missing-{}", std::process::id()));
+    std::fs::remove_file(&missing).ok();
 
-    std::env::set_var(XRAY_PATH_ENV, &path);
-    let found = installed_xray();
+    std::env::set_var(XRAY_PATH_ENV, &missing);
+    let not_found = installed_xray();
     std::env::remove_var(XRAY_PATH_ENV);
 
-    assert!(found.is_none());
+    assert!(not_found.is_none());
   }
 
   #[test]

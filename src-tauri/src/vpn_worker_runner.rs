@@ -137,7 +137,10 @@ pub async fn start_vpn_worker(vpn_id: &str) -> Result<VpnWorkerConfig, Box<dyn s
       .map_err(|e| format!("Failed to load VPN config: {e}"))?
   };
 
-  let vpn_type_str = "wireguard";
+  let vpn_type_str = match vpn_config.vpn_type {
+    crate::vpn::VpnType::WireGuard => "wireguard",
+    crate::vpn::VpnType::Vless => "vless",
+  };
 
   // Write decrypted config to a temp file
   let config_file_path = std::env::temp_dir()

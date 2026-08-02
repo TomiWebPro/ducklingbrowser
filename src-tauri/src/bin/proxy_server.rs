@@ -500,6 +500,24 @@ async fn main() {
             process::exit(1);
           }
         }
+        "vless" => {
+          let vless_config = match ducklingbrowser_lib::vpn::parse_vless_config(&vpn_config_data) {
+            Ok(c) => c,
+            Err(e) => {
+              log::error!("Failed to parse VLESS config: {}", e);
+              process::exit(1);
+            }
+          };
+
+          let worker = ducklingbrowser_lib::vpn::xray_worker::XrayWorker::new(vless_config, port);
+          if let Err(e) = worker
+            .run(id.clone(), config_path.map(std::path::PathBuf::from))
+            .await
+          {
+            log::error!("VPN worker failed: {}", e);
+            process::exit(1);
+          }
+        }
         other => {
           log::error!("Unknown VPN type: {}", other);
           process::exit(1);

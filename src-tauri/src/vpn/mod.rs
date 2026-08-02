@@ -13,6 +13,7 @@ mod tunnel;
 mod wireguard;
 pub mod xray;
 pub mod xray_vendor;
+pub mod xray_worker;
 
 pub use config::{
   detect_vpn_type, parse_wireguard_config, VpnConfig, VpnError, VpnImportResult, VpnStatus,
