@@ -59,6 +59,30 @@ const detectVpnType = (
   content: string,
   filename: string,
 ): { isVpn: boolean; type: VpnType | null; endpoint: string | null } => {
+  const trimmed = content.trim();
+  if (trimmed.startsWith("vless://")) {
+    // Extract host:port from the URI for the endpoint preview.
+    const afterScheme = trimmed.slice("vless://".length);
+    const authority = afterScheme.split(/[?#]/)[0] ?? "";
+    const endpoint = authority.split("@")[1] ?? authority;
+    return { isVpn: true, type: "Vless", endpoint: endpoint || null };
+  }
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      const hasVless =
+        parsed?.protocol === "vless" ||
+        (Array.isArray(parsed?.outbounds) &&
+          parsed.outbounds.some(
+            (o: { protocol?: string }) => o.protocol === "vless",
+          ));
+      if (hasVless) {
+        return { isVpn: true, type: "Vless", endpoint: null };
+      }
+    } catch {
+      // Not valid JSON; fall through.
+    }
+  }
   const lowerFilename = filename.toLowerCase();
   if (
     lowerFilename.endsWith(".conf") &&
@@ -87,6 +111,11 @@ export function VpnImportDialog({ isOpen, onClose }: VpnImportDialogProps) {
   const [vpnImportResult, setVpnImportResult] =
     useState<VpnImportResult | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [batchContent, setBatchContent] = useState("");
+  const [isBatchImporting, setIsBatchImporting] = useState(false);
+  const [batchResults, setBatchResults] = useState<VpnImportResult[] | null>(
+    null,
+  );
   const os = getCurrentOS();
   const modKey = os === "macos" ? "⌘" : "Ctrl";
 
@@ -97,6 +126,9 @@ export function VpnImportDialog({ isOpen, onClose }: VpnImportDialogProps) {
     setVpnName("");
     setVpnImportResult(null);
     setIsImporting(false);
+    setBatchContent("");
+    setIsBatchImporting(false);
+    setBatchResults(null);
   }, []);
 
   const handleClose = useCallback(() => {
@@ -206,6 +238,40 @@ export function VpnImportDialog({ isOpen, onClose }: VpnImportDialogProps) {
     }
   }, [vpnPreview, vpnName, t]);
 
+  const handleBatchImport = useCallback(async () => {
+    const content = batchContent.trim();
+    if (!content) {
+      toast.error(t("vpns.import.batch_empty"));
+      return;
+    }
+    setIsBatchImporting(true);
+    try {
+      const results = await invoke<VpnImportResult[]>(
+        "import_vpn_config_batch",
+        { content },
+      );
+      setBatchResults(results);
+      const ok = results.filter((r) => r.success).length;
+      const fail = results.length - ok;
+      if (fail === 0) {
+        toast.success(t("vpns.import.batch_all_succeeded", { count: ok }));
+      } else if (ok === 0) {
+        toast.error(t("vpns.import.batch_all_failed", { count: fail }));
+      } else {
+        toast.warning(t("vpns.import.batch_partial", { ok, fail }));
+      }
+      if (ok > 0) {
+        await emit("vpn-configs-changed");
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t("vpns.import.failedGeneric"),
+      );
+    } finally {
+      setIsBatchImporting(false);
+    }
+  }, [batchContent, t]);
+
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-lg">
@@ -276,6 +342,43 @@ export function VpnImportDialog({ isOpen, onClose }: VpnImportDialogProps) {
               <p className="text-center text-xs text-muted-foreground">
                 {t("vpns.import.pasteHint", { modKey })}
               </p>
+
+              <div className="space-y-2">
+                <Label htmlFor="vpn-batch">{t("vpns.import.batchLabel")}</Label>
+                <textarea
+                  id="vpn-batch"
+                  value={batchContent}
+                  onChange={(e) => setBatchContent(e.target.value)}
+                  placeholder={t("vpns.import.batchPlaceholder")}
+                  disabled={isBatchImporting}
+                  className="font-mono text-xs min-h-[120px] w-full rounded-md border border-input bg-transparent p-2 shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                />
+                <LoadingButton
+                  isLoading={isBatchImporting}
+                  onClick={() => void handleBatchImport()}
+                  disabled={!batchContent.trim()}
+                  variant="secondary"
+                >
+                  {t("vpns.import.batchButton")}
+                </LoadingButton>
+                {batchResults && (
+                  <ScrollArea className="h-[min(140px,25vh)] rounded-md border">
+                    <div className="p-2 font-mono text-xs space-y-1">
+                      {batchResults.map((r, i) => (
+                        <div
+                          key={`${r.vpn_id ?? "err"}-${i}`}
+                          className={
+                            r.success ? "text-success" : "text-destructive"
+                          }
+                        >
+                          {r.success ? "✓" : "✗"} {r.name}
+                          {!r.success && r.error ? ` — ${r.error}` : ""}
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                )}
+              </div>
             </div>
           )}
 

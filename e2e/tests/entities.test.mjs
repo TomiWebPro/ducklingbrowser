@@ -355,6 +355,22 @@ test("extensions, extension groups, VPN storage, DNS rules, and event-backed ass
     });
     assert.equal(importedVpn.success, true);
     await app.invoke("delete_vpn_config", { vpnId: importedVpn.vpn_id });
+
+    // Mass import of VLESS share links (one per line).
+    const batchResults = await app.invoke("import_vpn_config_batch", {
+      content:
+        "vless://5fd0aa4f-7ca0-4b67-b2f0-5f2d8cf6a1df@vpn.example.com:443?encryption=none&security=tls&sni=vpn.example.com&flow=xtls-rprx-vision#Batch VLESS One\n# a comment line that should be skipped\nvless://5fd0aa4f-7ca0-4b67-b2f0-5f2d8cf6a1df@vpn2.example.com:8443?encryption=none&security=tls&sni=vpn2.example.com&flow=xtls-rprx-vision#Batch VLESS Two",
+    });
+    assert.equal(batchResults.length, 2);
+    assert.equal(batchResults[0].success, true);
+    assert.equal(batchResults[0].vpn_type, "Vless");
+    assert.equal(batchResults[1].vpn_type, "Vless");
+    for (const r of batchResults) {
+      if (r.vpn_id) {
+        await app.invoke("delete_vpn_config", { vpnId: r.vpn_id });
+      }
+    }
+
     await app.invoke("delete_vpn_config", { vpnId: vpn.id });
 
     const dns = await app.invoke("set_custom_dns_config", {

@@ -907,6 +907,85 @@ async fn import_vpn_config(
 }
 
 #[tauri::command]
+async fn import_vpn_config_batch(content: String) -> Result<Vec<vpn::VpnImportResult>, String> {
+  // Mass import: one config per non-empty line. Each line is a `vless://`
+  // share link or a compact JSON object; comments (`#`, `//`) are skipped.
+  let mut results = Vec::new();
+  let mut scheduler = sync::get_global_scheduler();
+
+  for (idx, raw_line) in content.lines().enumerate() {
+    let line = raw_line.trim();
+    if line.is_empty() || line.starts_with('#') || line.starts_with("//") {
+      continue;
+    }
+
+    let filename = format!("batch-line-{}", idx + 1);
+    let display_name = if line.starts_with("vless://") {
+      // Drop the `#name` fragment if present, else use the whole link.
+      line
+        .split_once('#')
+        .map(|(_, name)| {
+          if name.is_empty() {
+            format!("VLESS {}", idx + 1)
+          } else {
+            name.to_string()
+          }
+        })
+        .unwrap_or_else(|| format!("VLESS {}", idx + 1))
+    } else {
+      format!("VLESS {}", idx + 1)
+    };
+
+    let storage = vpn::VPN_STORAGE
+      .lock()
+      .map_err(|e| format!("Failed to lock VPN storage: {e}"))?;
+
+    match storage.import_config(line, &filename, Some(display_name.clone())) {
+      Ok(config) => {
+        if config.sync_enabled {
+          // Refresh the scheduler handle in case it was initialized after
+          // the first config import started a sync task.
+          if scheduler.is_none() {
+            scheduler = sync::get_global_scheduler();
+          }
+          if let Some(sched) = &scheduler {
+            let id = config.id.clone();
+            let sched = sched.clone();
+            tauri::async_runtime::spawn(async move {
+              sched.queue_vpn_sync(id).await;
+            });
+          }
+        }
+        results.push(vpn::VpnImportResult {
+          success: true,
+          vpn_id: Some(config.id),
+          vpn_type: Some(config.vpn_type),
+          name: config.name,
+          error: None,
+        });
+      }
+      Err(e) => {
+        results.push(vpn::VpnImportResult {
+          success: false,
+          vpn_id: None,
+          vpn_type: None,
+          name: display_name,
+          error: Some(e.to_string()),
+        });
+      }
+    }
+
+    drop(storage);
+  }
+
+  if !results.is_empty() {
+    let _ = events::emit("vpn-configs-changed", ());
+  }
+
+  Ok(results)
+}
+
+#[tauri::command]
 async fn list_vpn_configs() -> Result<Vec<vpn::VpnConfig>, String> {
   let storage = vpn::VPN_STORAGE
     .lock()
@@ -2450,6 +2529,7 @@ pub fn run_with_builder(
       remove_mcp_from_agent,
       // VPN commands
       import_vpn_config,
+      import_vpn_config_batch,
       list_vpn_configs,
       get_vpn_config,
       delete_vpn_config,

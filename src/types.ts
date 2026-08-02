@@ -554,7 +554,24 @@ export type ProxyParseResult =
   | { status: "invalid"; line: string; reason: string };
 
 // VPN types
-export type VpnType = "WireGuard";
+export type VpnType = "WireGuard" | "Vless";
+
+/** The VLESS transport security, matching the Xray `security` field. */
+export type VlessSecurity = "reality" | "tls";
+
+/** The canonical VLESS config shape, serialized by the Rust `VlessConfig`. */
+export interface VlessConfig {
+  address: string;
+  port: number;
+  uuid: string;
+  security: VlessSecurity;
+  flow: string;
+  fingerprint?: string;
+  server_name?: string;
+  public_key?: string;
+  short_id?: string;
+  spider_x?: string;
+}
 
 export interface VpnConfig {
   id: string;

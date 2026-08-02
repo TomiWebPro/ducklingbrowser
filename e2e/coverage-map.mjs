@@ -102,6 +102,7 @@ export const commandCoverage = {
     level: "integration",
     commands: [
       "import_vpn_config",
+      "import_vpn_config_batch",
       "list_vpn_configs",
       "get_vpn_config",
       "delete_vpn_config",

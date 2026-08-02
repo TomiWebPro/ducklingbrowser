@@ -816,7 +816,11 @@ export function ProxyManagementDialog({
         size: 96,
         enableSorting: false,
         header: () => t("common.labels.type"),
-        cell: () => <Badge variant="outline">WG</Badge>,
+        cell: ({ row }) => (
+          <Badge variant="outline">
+            {row.original.vpn_type === "Vless" ? "VLESS" : "WG"}
+          </Badge>
+        ),
       },
       {
         id: "usage",
