@@ -170,7 +170,12 @@ impl VpnStorage {
     let mut value: serde_json::Value = serde_json::from_str(&content)
       .map_err(|e| VpnError::Storage(format!("Failed to parse storage file: {e}")))?;
     if let Some(arr) = value.get_mut("configs").and_then(|v| v.as_array_mut()) {
-      arr.retain(|c| c.get("vpn_type").and_then(|t| t.as_str()) == Some("WireGuard"));
+      arr.retain(|c| {
+        matches!(
+          c.get("vpn_type").and_then(|t| t.as_str()),
+          Some("WireGuard") | Some("Vless")
+        )
+      });
     }
 
     serde_json::from_value(value)
@@ -344,6 +349,9 @@ impl VpnStorage {
       VpnType::WireGuard => {
         super::parse_wireguard_config(config_data)?;
       }
+      VpnType::Vless => {
+        super::parse_vless_config(config_data)?;
+      }
     }
 
     let id = Uuid::new_v4().to_string();
@@ -405,6 +413,9 @@ impl VpnStorage {
     match vpn_type {
       VpnType::WireGuard => {
         super::parse_wireguard_config(content)?;
+      }
+      VpnType::Vless => {
+        super::parse_vless_config(content)?;
       }
     }
 
@@ -540,6 +551,72 @@ mod tests {
 
     storage.delete_config("delete-me").unwrap();
     assert!(storage.load_config("delete-me").is_err());
+  }
+
+  const VLESS_CONFIG_DATA: &str =
+  "vless://0af941e8-9b48-4dd8-a953-2e9c91f31b3a@example.com:443?security=tls&flow=xtls-rprx-vision";
+
+  #[test]
+  fn test_save_and_load_vless_config() {
+    let (storage, _temp) = create_test_storage();
+
+    let config = VpnConfig {
+      id: "vless-id-1".to_string(),
+      name: "VLESS VPN".to_string(),
+      vpn_type: VpnType::Vless,
+      config_data: VLESS_CONFIG_DATA.to_string(),
+      created_at: 1234567890,
+      last_used: None,
+      sync_enabled: false,
+      last_sync: None,
+      updated_at: None,
+    };
+
+    storage.save_config(&config).unwrap();
+    let loaded = storage.load_config("vless-id-1").unwrap();
+    assert_eq!(loaded.vpn_type, VpnType::Vless);
+    assert_eq!(loaded.config_data, VLESS_CONFIG_DATA);
+  }
+
+  #[test]
+  fn test_legacy_filter_keeps_wireguard_and_vless() {
+    let (storage, temp_dir) = create_test_storage();
+    let config = VpnConfig {
+      id: "keep-me".to_string(),
+      name: "Legacy".to_string(),
+      vpn_type: VpnType::Vless,
+      config_data: VLESS_CONFIG_DATA.to_string(),
+      created_at: 1234567890,
+      last_used: None,
+      sync_enabled: false,
+      last_sync: None,
+      updated_at: None,
+    };
+    storage.save_config(&config).unwrap();
+
+    // Simulate a storage file that also contains an unknown/legacy type that
+    // should be dropped on load.
+    let mut value: serde_json::Value =
+      serde_json::from_str(&std::fs::read_to_string(storage.storage_path.clone()).unwrap())
+        .unwrap();
+    value["configs"]
+      .as_array_mut()
+      .unwrap()
+      .push(serde_json::json!({
+        "id": "drop-me",
+        "name": "OpenVPN",
+        "vpn_type": "OpenVPN",
+        "encrypted_data": "x",
+        "nonce": "x",
+        "created_at": 1,
+        "last_used": null
+      }));
+    std::fs::write(&storage.storage_path, value.to_string()).unwrap();
+
+    let configs = storage.list_configs().unwrap();
+    assert_eq!(configs.len(), 1);
+    assert_eq!(configs[0].id, "keep-me");
+    let _ = temp_dir;
   }
 
   #[test]

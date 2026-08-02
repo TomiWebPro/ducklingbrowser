@@ -11,6 +11,8 @@ pub enum VpnError {
   UnknownFormat,
   #[error("Invalid WireGuard config: {0}")]
   InvalidWireGuard(String),
+  #[error("Invalid VLESS config: {0}")]
+  InvalidVless(String),
   #[error("Storage error: {0}")]
   Storage(String),
   #[error("Connection error: {0}")]
@@ -29,12 +31,14 @@ pub enum VpnError {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VpnType {
   WireGuard,
+  Vless,
 }
 
 impl std::fmt::Display for VpnType {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
       VpnType::WireGuard => write!(f, "WireGuard"),
+      VpnType::Vless => write!(f, "Vless"),
     }
   }
 }
@@ -96,6 +100,32 @@ pub struct VpnStatus {
 /// Detect the VPN type from file content and filename
 pub fn detect_vpn_type(content: &str, filename: &str) -> Result<VpnType, VpnError> {
   let filename_lower = filename.to_lowercase();
+  let trimmed = content
+    .trim()
+    .strip_prefix('\u{feff}')
+    .unwrap_or(content.trim());
+
+  // VLESS share links have no filename association; detect by content.
+  if trimmed.starts_with("vless://") {
+    return Ok(VpnType::Vless);
+  }
+
+  // VLESS configs can also be pasted as Xray JSON (`outbounds` / protocol).
+  if trimmed.starts_with('{') || trimmed.starts_with('[') {
+    if let Ok(v) = serde_json::from_str::<serde_json::Value>(trimmed) {
+      let is_vless_protocol =
+        |ob: &serde_json::Value| ob.get("protocol").and_then(|p| p.as_str()) == Some("vless");
+      let has_vless = v.get("protocol").and_then(|p| p.as_str()) == Some("vless")
+        || v
+          .get("outbounds")
+          .and_then(|o| o.as_array())
+          .map(|a| a.iter().any(is_vless_protocol))
+          .unwrap_or(false);
+      if has_vless {
+        return Ok(VpnType::Vless);
+      }
+    }
+  }
 
   if filename_lower.ends_with(".conf")
     && content.contains("[Interface]")
@@ -257,6 +287,21 @@ mod tests {
   fn test_detect_unknown_format() {
     let content = "random text that is not a vpn config";
     assert!(detect_vpn_type(content, "random.txt").is_err());
+  }
+
+  #[test]
+  fn test_detect_vless_uri() {
+    let content = "vless://0af941e8-9b48-4dd8-a953-2e9c91f31b3a@example.com:443?security=tls";
+    assert_eq!(detect_vpn_type(content, "vpn.txt").unwrap(), VpnType::Vless);
+  }
+
+  #[test]
+  fn test_detect_vless_xray_json() {
+    let content = r#"{"outbounds":[{"protocol":"vless","settings":{"vnext":[]}}]}"#;
+    assert_eq!(
+      detect_vpn_type(content, "xray.json").unwrap(),
+      VpnType::Vless
+    );
   }
 
   #[test]
