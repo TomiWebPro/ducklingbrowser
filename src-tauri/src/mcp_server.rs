@@ -1048,17 +1048,18 @@ impl McpServer {
       // VPN management tools
       McpTool {
         name: "import_vpn".to_string(),
-        description: "Import a WireGuard (.conf) configuration".to_string(),
+        description: "Import a WireGuard (.conf), VLESS (vless://), or Xray JSON VPN configuration"
+          .to_string(),
         input_schema: serde_json::json!({
           "type": "object",
           "properties": {
             "content": {
               "type": "string",
-              "description": "Raw WireGuard config file content"
+              "description": "Raw VPN config: WireGuard .conf, vless:// share link, or Xray JSON"
             },
             "filename": {
               "type": "string",
-              "description": "Original filename (.conf)"
+              "description": "Original filename (e.g. server.conf, link.txt, config.json)"
             },
             "name": {
               "type": "string",

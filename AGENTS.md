@@ -33,7 +33,7 @@ ducklingbrowser/
 │   │   ├── mcp_server.rs            # MCP protocol server
 │   │   ├── automation_rate_limiter.rs # Shared REST/MCP automation quota
 │   │   ├── sync/                    # Cloud sync (engine, encryption, manifest, scheduler)
-│   │   ├── vpn/                     # WireGuard tunnels
+│   │   ├── vpn/                     # WireGuard + VLESS (Reality/TLS via Xray-core) tunnels
 │   │   ├── chromium_manager.rs      # Chromium browser management
 │   │   ├── downloader.rs           # Browser binary downloader
 │   │   ├── extraction.rs           # Archive extraction (zip, tar, dmg, msi)

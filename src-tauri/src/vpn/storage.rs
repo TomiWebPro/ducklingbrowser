@@ -625,4 +625,94 @@ mod tests {
     let result = storage.load_config("nonexistent");
     assert!(result.is_err());
   }
+
+  #[test]
+  fn test_import_vless_uri_creates_config() {
+    let (storage, _temp) = create_test_storage();
+    let uri = "vless://5fd0aa4f-7ca0-4b67-b2f0-5f2d8cf6a1df@vpn.example.com:443?encryption=none&security=tls&sni=vpn.example.com";
+    let cfg = storage
+      .import_config(uri, "vpn.txt", Some("My VLESS".to_string()))
+      .expect("vless:// import should validate");
+    assert_eq!(cfg.vpn_type, VpnType::Vless);
+    assert_eq!(cfg.name, "My VLESS");
+    assert_eq!(cfg.config_data, uri);
+    assert!(!cfg.id.is_empty());
+  }
+
+  #[test]
+  fn test_import_vless_xray_json_creates_config() {
+    let (storage, _temp) = create_test_storage();
+    let json = r#"{
+      "outbounds": [{
+        "protocol": "vless",
+        "settings": { "vnext": [{
+          "address": "vless.example.com", "port": 443,
+          "users": [{"id": "5fd0aa4f-7ca0-4b67-b2f0-5f2d8cf6a1df", "encryption": "none"}]
+        }]},
+        "streamSettings": { "security": "tls", "tlsSettings": { "serverName": "vless.example.com" } }
+      }]
+    }"#;
+    let cfg = storage
+      .import_config(json, "xray.json", None)
+      .expect("xray json import should validate");
+    assert_eq!(cfg.vpn_type, VpnType::Vless);
+    assert!(
+      cfg.name.contains("Vless"),
+      "default name should mention Vless: {}",
+      cfg.name
+    );
+  }
+
+  #[test]
+  fn test_import_invalid_vless_uri_is_rejected() {
+    let (storage, _temp) = create_test_storage();
+    // Reality URI missing pbk/sid — detection succeeds (it starts with vless://
+    // and has a parseable shape) but validate() fails because Reality requires
+    // the keys. import_config must surface that error.
+    let uri = "vless://5fd0aa4f-7ca0-4b67-b2f0-5f2d8cf6a1df@vpn.example.com:443?encryption=none&security=reality";
+    let result = storage.import_config(uri, "vpn.txt", None);
+    assert!(
+      result.is_err(),
+      "Reality URI without pbk/sid must be rejected"
+    );
+  }
+
+  #[test]
+  fn test_import_rejects_non_vpn_content() {
+    let (storage, _temp) = create_test_storage();
+    let result = storage.import_config("hello world", "note.txt", None);
+    assert!(result.is_err());
+  }
+
+  #[test]
+  fn test_create_config_manual_vless_validates() {
+    let (storage, _temp) = create_test_storage();
+    let uri = "vless://5fd0aa4f-7ca0-4b67-b2f0-5f2d8cf6a1df@vpn.example.com:443?encryption=none&security=tls&sni=vpn.example.com";
+    let cfg = storage
+      .create_config_manual("Manual VLESS", VpnType::Vless, uri)
+      .expect("manual VLESS create should validate");
+    assert_eq!(cfg.vpn_type, VpnType::Vless);
+    assert_eq!(cfg.config_data, uri);
+
+    // WireGuard-via-Vless-type mismatch should be rejected by validation.
+    let wg_conf = "[Interface]\nPrivateKey = yAnB5uFj4n3JvjB5nE2Kq4FgR9k6pM8cZxVwQ1Yk2GU=\nAddress = 10.0.0.2/24\n";
+    assert!(storage
+      .create_config_manual("mix", VpnType::Vless, wg_conf)
+      .is_err());
+  }
+
+  #[test]
+  fn test_update_config_name_preserves_vless_type() {
+    let (storage, _temp) = create_test_storage();
+    let uri = "vless://5fd0aa4f-7ca0-4b67-b2f0-5f2d8cf6a1df@vpn.example.com:443?encryption=none&security=tls&sni=vpn.example.com";
+    let cfg = storage
+      .import_config(uri, "vpn.txt", Some("orig".to_string()))
+      .unwrap();
+    let renamed = storage
+      .update_config_name(&cfg.id, "renamed")
+      .expect("rename should succeed");
+    assert_eq!(renamed.name, "renamed");
+    assert_eq!(renamed.vpn_type, VpnType::Vless);
+    assert_eq!(renamed.config_data, uri);
+  }
 }

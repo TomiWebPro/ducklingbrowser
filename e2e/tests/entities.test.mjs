@@ -356,6 +356,54 @@ test("extensions, extension groups, VPN storage, DNS rules, and event-backed ass
     assert.equal(importedVpn.success, true);
     await app.invoke("delete_vpn_config", { vpnId: importedVpn.vpn_id });
 
+    // Single VLESS share link import via the same UI/CLI path.
+    const importedVless = await app.invoke("import_vpn_config", {
+      content:
+        "vless://5fd0aa4f-7ca0-4b67-b2f0-5f2d8cf6a1df@vpn.example.com:443?encryption=none&security=tls&sni=vpn.example.com&flow=xtls-rprx-vision#Plain VLESS",
+      filename: "vpn.txt",
+      name: "Plain VLESS",
+    });
+    assert.equal(importedVless.success, true);
+    assert.equal(importedVless.vpn_type, "Vless");
+    await app.invoke("delete_vpn_config", { vpnId: importedVless.vpn_id });
+
+    // Xray JSON import (full `outbounds` document) round-trips through the
+    // detect -> validate -> persist -> load chain.
+    const xrayJson = JSON.stringify({
+      outbounds: [
+        {
+          protocol: "vless",
+          settings: {
+            vnext: [
+              {
+                address: "vless.example.com",
+                port: 443,
+                users: [
+                  {
+                    id: "5fd0aa4f-7ca0-4b67-b2f0-5f2d8cf6a1df",
+                    encryption: "none",
+                    flow: "xtls-rprx-vision",
+                  },
+                ],
+              },
+            ],
+          },
+          streamSettings: {
+            security: "tls",
+            tlsSettings: { serverName: "vless.example.com" },
+          },
+        },
+      ],
+    });
+    const importedJson = await app.invoke("import_vpn_config", {
+      content: xrayJson,
+      filename: "xray.json",
+      name: "Imported JSON VLESS",
+    });
+    assert.equal(importedJson.success, true);
+    assert.equal(importedJson.vpn_type, "Vless");
+    await app.invoke("delete_vpn_config", { vpnId: importedJson.vpn_id });
+
     // Mass import of VLESS share links (one per line).
     const batchResults = await app.invoke("import_vpn_config_batch", {
       content:

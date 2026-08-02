@@ -148,7 +148,7 @@ struct UpdateProxyRequest {
 struct ApiVpnResponse {
   id: String,
   name: String,
-  /// Always "WireGuard"
+  /// "WireGuard" or "Vless"
   vpn_type: String,
   created_at: i64,
   last_used: Option<i64>,
@@ -158,15 +158,15 @@ struct ApiVpnResponse {
 struct ApiVpnExportResponse {
   id: String,
   name: String,
-  /// Always "WireGuard"
+  /// "WireGuard" or "Vless"
   vpn_type: String,
-  /// Raw `.conf` file content (decrypted)
+  /// Raw config content (decrypted): WireGuard `.conf` or VLESS share link/JSON
   config_data: String,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
 struct ImportVpnRequest {
-  /// Raw WireGuard `.conf` file content
+  /// Raw config content: WireGuard `.conf`, VLESS `vless://` link, or Xray JSON
   content: String,
   /// Original filename
   filename: String,
@@ -177,7 +177,7 @@ struct ImportVpnRequest {
 #[derive(Debug, Deserialize, ToSchema)]
 struct CreateVpnRequest {
   name: String,
-  /// Must be "WireGuard"
+  /// "WireGuard" or "Vless"
   vpn_type: String,
   config_data: String,
 }
@@ -1739,6 +1739,7 @@ fn vpn_to_api_response(c: &crate::vpn::VpnConfig) -> ApiVpnResponse {
 fn parse_vpn_type(s: &str) -> Option<crate::vpn::VpnType> {
   match s.to_ascii_lowercase().as_str() {
     "wireguard" | "wg" => Some(crate::vpn::VpnType::WireGuard),
+    "vless" | "reality" | "xray" => Some(crate::vpn::VpnType::Vless),
     _ => None,
   }
 }
@@ -2798,5 +2799,58 @@ mod tests {
         "automation route is missing its 429 response: {path}"
       );
     }
+  }
+
+  // VLESS + Reality are first-class VPN types alongside WireGuard; the REST API
+  // must accept them on create and surface `vpn_type` on responses/exports.
+  #[test]
+  fn parse_vpn_type_accepts_wireguard_and_vless() {
+    assert!(matches!(
+      parse_vpn_type("WireGuard"),
+      Some(crate::vpn::VpnType::WireGuard)
+    ));
+    assert!(matches!(
+      parse_vpn_type("wg"),
+      Some(crate::vpn::VpnType::WireGuard)
+    ));
+    assert!(matches!(
+      parse_vpn_type("Vless"),
+      Some(crate::vpn::VpnType::Vless)
+    ));
+    assert!(matches!(
+      parse_vpn_type("vless"),
+      Some(crate::vpn::VpnType::Vless)
+    ));
+    assert!(matches!(
+      parse_vpn_type("reality"),
+      Some(crate::vpn::VpnType::Vless)
+    ));
+    assert!(matches!(
+      parse_vpn_type("xray"),
+      Some(crate::vpn::VpnType::Vless)
+    ));
+    assert!(parse_vpn_type("openvpn").is_none());
+    assert!(parse_vpn_type("").is_none());
+  }
+
+  #[test]
+  fn openapi_vpn_schemas_surface_vpn_type() {
+    let spec = serde_json::to_value(ApiDoc::openapi()).expect("spec serializes");
+    for schema in ["ApiVpnResponse", "ApiVpnExportResponse", "CreateVpnRequest"] {
+      let required = schema_required(&spec, schema);
+      assert!(
+        required.iter().any(|f| f == "vpn_type"),
+        "{schema} must require vpn_type so callers cannot omit it, required: {required:?}"
+      );
+    }
+    // The served ApiVpnResponse description should no longer claim "Always WireGuard".
+    let desc = spec["components"]["schemas"]["ApiVpnResponse"]["properties"]["vpn_type"]
+      ["description"]
+      .as_str()
+      .unwrap_or("");
+    assert!(
+      !desc.contains("Always"),
+      "ApiVpnResponse.vpn_type description must be generic, got: {desc}"
+    );
   }
 }

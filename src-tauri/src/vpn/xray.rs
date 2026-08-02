@@ -677,4 +677,155 @@ mod tests {
     assert_eq!(cfg.address, "example.com");
     assert_eq!(cfg.uuid, "5fd0aa4f-7ca0-4b67-b2f0-5f2d8cf6a1df");
   }
+
+  #[test]
+  fn test_vless_config_to_xray_client_json_reality() {
+    let cfg = parse_vless_uri(REALITY_URI).unwrap();
+    let doc = vless_config_to_xray_client_json(&cfg, 1080).unwrap();
+    // SOCKS inbound on the requested loopback port
+    assert_eq!(doc["inbounds"][0]["protocol"], "socks");
+    assert_eq!(doc["inbounds"][0]["port"], 1080);
+    assert_eq!(doc["inbounds"][0]["listen"], "127.0.0.1");
+    // Sniffing routes layered over the inbound, not the outbound
+    assert_eq!(doc["inbounds"][0]["sniffing"]["enabled"], true);
+    assert_eq!(doc["inbounds"][0]["sniffing"]["routeOnly"], true);
+    // VLESS outbound mirrors parsed fields
+    assert_eq!(doc["outbounds"][0]["protocol"], "vless");
+    assert_eq!(
+      doc["outbounds"][0]["settings"]["vnext"][0]["address"],
+      "195.230.1.17"
+    );
+    assert_eq!(doc["outbounds"][0]["settings"]["vnext"][0]["port"], 443);
+    assert_eq!(
+      doc["outbounds"][0]["settings"]["vnext"][0]["users"][0]["id"],
+      "0af941e8-9b48-4dd8-a953-2e9c91f31b3a"
+    );
+    assert_eq!(
+      doc["outbounds"][0]["settings"]["vnext"][0]["users"][0]["flow"],
+      "xtls-rprx-vision"
+    );
+    // Reality stream settings carry pbk/sid/fp, no serverName implies fallback
+    assert_eq!(doc["outbounds"][0]["streamSettings"]["security"], "reality");
+    assert_eq!(
+      doc["outbounds"][0]["streamSettings"]["realitySettings"]["publicKey"],
+      "uz1jfVzZ04CZspLpNOrRPmv83a2X3pj37lq1yy0hA0A"
+    );
+    assert_eq!(
+      doc["outbounds"][0]["streamSettings"]["realitySettings"]["shortId"],
+      "d9f3ff0ed2b26d77"
+    );
+    assert_eq!(
+      doc["outbounds"][0]["streamSettings"]["realitySettings"]["fingerprint"],
+      "chrome"
+    );
+  }
+
+  #[test]
+  fn test_vless_config_to_xray_client_json_tls_picks_default_fingerprint() {
+    // No explicit fingerprint on the URI; the helper should omit the field
+    // rather than invent one (Xray defaults internally).
+    let uri = "vless://5fd0aa4f-7ca0-4b67-b2f0-5f2d8cf6a1df@vpn.example.com:443?encryption=none&security=tls&sni=vpn.example.com";
+    let cfg = parse_vless_uri(uri).unwrap();
+    let doc = vless_config_to_xray_client_json(&cfg, 1086).unwrap();
+    assert_eq!(doc["inbounds"][0]["port"], 1086);
+    assert_eq!(doc["outbounds"][0]["streamSettings"]["security"], "tls");
+    assert_eq!(
+      doc["outbounds"][0]["streamSettings"]["tlsSettings"]["serverName"],
+      "vpn.example.com"
+    );
+    // No fingerprint provided → the tlsSettings object should not carry one.
+    assert!(
+      doc["outbounds"][0]["streamSettings"]["tlsSettings"]
+        .get("fingerprint")
+        .is_none(),
+      "fingerprint must be absent when the URI did not specify one: {}",
+      doc["outbounds"][0]["streamSettings"]["tlsSettings"]
+    );
+  }
+
+  #[test]
+  fn test_parse_vless_config_dispatches_uri_and_json() {
+    // parse_vless_config should dispatch on the shape — share link here.
+    let uri_cfg = parse_vless_config(REALITY_URI).unwrap();
+    assert_eq!(uri_cfg.security, VlessSecurity::Reality);
+    assert_eq!(uri_cfg.address, "195.230.1.17");
+
+    // JSON shape dispatches to parse_xray_config_json.
+    let json = r#"{
+      "outbounds": [{
+        "protocol": "vless",
+        "settings": { "vnext": [{
+          "address": "j.json", "port": 8443,
+          "users": [{"id": "5fd0aa4f-7ca0-4b67-b2f0-5f2d8cf6a1df", "encryption": "none"}]
+        }]},
+        "streamSettings": { "security": "tls", "tlsSettings": { "serverName": "j.json" } }
+      }]
+    }"#;
+    let json_cfg = parse_vless_config(json).unwrap();
+    assert_eq!(json_cfg.address, "j.json");
+    assert_eq!(json_cfg.port, 8443);
+    assert_eq!(json_cfg.security, VlessSecurity::Tls);
+    assert_eq!(json_cfg.server_name.as_deref(), Some("j.json"));
+  }
+
+  #[test]
+  fn test_tls_uri_roundtrip_via_serve_vless_uri() {
+    let uri = "vless://5fd0aa4f-7ca0-4b67-b2f0-5f2d8cf6a1df@api.example.com:8443?encryption=none&security=tls&sni=api.example.com&fp=chrome&flow=xtls-rprx-vision&type=tcp";
+    let cfg = parse_vless_uri(uri).unwrap();
+    let served = serve_vless_uri(&cfg).unwrap();
+    let reparsed = parse_vless_uri(&served).unwrap();
+    assert_eq!(reparsed.address, cfg.address);
+    assert_eq!(reparsed.port, cfg.port);
+    assert_eq!(reparsed.uuid, cfg.uuid);
+    assert_eq!(reparsed.security, cfg.security);
+    assert_eq!(reparsed.server_name, cfg.server_name);
+    assert_eq!(reparsed.fingerprint, cfg.fingerprint);
+    assert_eq!(reparsed.flow, cfg.flow);
+  }
+
+  #[test]
+  fn test_validate_tls_rejects_missing_uuid() {
+    let mut cfg = parse_vless_uri(
+      "vless://5fd0aa4f-7ca0-4b67-b2f0-5f2d8cf6a1df@vpn.example.com:443?encryption=none&security=tls",
+    )
+    .unwrap();
+    cfg.uuid.clear();
+    let err = cfg.validate().unwrap_err().to_string();
+    assert!(
+      err.contains("uuid") || err.contains("UUID"),
+      "missing UUID must be rejected: {err}"
+    );
+  }
+
+  #[test]
+  fn test_validate_tls_rejects_empty_address() {
+    let mut cfg = parse_vless_uri(
+      "vless://5fd0aa4f-7ca0-4b67-b2f0-5f2d8cf6a1df@vpn.example.com:443?encryption=none&security=tls",
+    )
+    .unwrap();
+    cfg.address.clear();
+    assert!(cfg.validate().is_err());
+  }
+
+  #[test]
+  fn test_validate_reality_rejects_missing_short_id() {
+    let mut cfg = parse_vless_uri(REALITY_URI).unwrap();
+    cfg.short_id = None;
+    let err = cfg.validate().unwrap_err().to_string();
+    assert!(
+      err.contains("short ID"),
+      "missing short id must be rejected: {err}"
+    );
+  }
+
+  #[test]
+  fn test_xray_json_with_invalid_protocol_is_rejected() {
+    let json = r#"{
+      "outbounds": [{
+        "protocol": "shadowsocks",
+        "settings": { "vnext": [{ "address": "x", "port": 1, "users": [{"id": "u"}] }] }
+      }]
+    }"#;
+    assert!(parse_xray_config_json(json).is_err());
+  }
 }
