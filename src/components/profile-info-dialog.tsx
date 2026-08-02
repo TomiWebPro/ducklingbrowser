@@ -636,6 +636,7 @@ export function ProfileInfoDialog({
           ProfileIcon={ProfileIcon}
           isRunning={isRunning}
           isDisabled={isDisabled}
+          crossOsUnlocked={crossOsUnlocked}
           networkLabel={networkLabel}
           groupName={groupName}
           extensionGroupName={extensionGroupName}
@@ -663,6 +664,7 @@ interface ProfileInfoLayoutProps {
   ProfileIcon: React.ComponentType<{ className?: string }>;
   isRunning: boolean;
   isDisabled: boolean;
+  crossOsUnlocked: boolean;
   networkLabel: string;
   groupName: string | null;
   extensionGroupName: string | null;
@@ -706,6 +708,7 @@ function ProfileInfoLayout({
   ProfileIcon,
   isRunning,
   isDisabled,
+  crossOsUnlocked,
   networkLabel,
   groupName,
   extensionGroupName,
@@ -1050,12 +1053,7 @@ function ProfileInfoLayout({
             <FingerprintSectionInline
               profile={profile}
               isDisabled={isDisabled}
-              crossOsUnlocked={Boolean(
-                // Re-derive: parent passes crossOsUnlocked but the layout
-                // doesn't get it; we get it implicitly via fingerprintAction's
-                // proBadge state. Default to false if action missing.
-                fingerprintAction && !fingerprintAction.proBadge,
-              )}
+              crossOsUnlocked={crossOsUnlocked}
               onSaved={onClose}
               t={t}
             />
