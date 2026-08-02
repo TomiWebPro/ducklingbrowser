@@ -1393,7 +1393,8 @@
       "vlessPortRequired": "Требуется указать допустимый порт",
       "vlessUuidRequired": "UUID обязателен",
       "vlessPublicKeyRequired": "Публичный ключ Reality обязателен",
-      "vlessShortIdRequired": "Короткий ID Reality обязателен"
+      "vlessShortIdRequired": "Короткий ID Reality обязателен",
+      "vlessUuidInvalid": "Введите корректный UUID"
     },
     "import": {
       "title": "Импорт конфигурации VPN",

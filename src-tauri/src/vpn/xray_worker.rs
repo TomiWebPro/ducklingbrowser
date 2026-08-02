@@ -119,6 +119,13 @@ impl XrayWorker {
     cmd.stdout(Stdio::null());
     cmd.stderr(Stdio::from(log_file));
 
+    // Install the SIGTERM handler before spawning so a termination arriving
+    // right after spawn is still caught (otherwise the default handler kills
+    // this worker and orphans the xray child).
+    #[cfg(unix)]
+    let mut terminate =
+      tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).ok();
+
     #[cfg(unix)]
     {
       use std::os::unix::process::CommandExt;
@@ -140,15 +147,11 @@ impl XrayWorker {
       client_config_path.display()
     );
 
-    #[cfg(unix)]
-    let mut terminate =
-      tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).ok();
-
     // Supervise: poll the child; if it exits before the worker is killed the
     // tunnel is dead, so report the failure like the WireGuard worker does.
     // When the worker itself receives SIGTERM (from stop_vpn_worker), kill
     // the xray child so the tunnel is torn down with the worker.
-    loop {
+    let result: Result<(), VpnError> = loop {
       #[cfg(unix)]
       {
         let signal_fired = match &mut terminate {
@@ -167,7 +170,7 @@ impl XrayWorker {
           log::info!("[vpn-worker] Terminating xray child {}", child.id());
           let _ = child.kill();
           let _ = child.wait();
-          return Ok(());
+          break Ok(());
         }
       }
       #[cfg(not(unix))]
@@ -177,17 +180,23 @@ impl XrayWorker {
 
       match child.try_wait() {
         Ok(Some(status)) => {
-          return Err(VpnError::Connection(format!(
+          break Err(VpnError::Connection(format!(
             "xray process exited unexpectedly: {status}. Log: {}",
             log_path.display()
           )));
         }
         Ok(None) => {}
         Err(e) => {
-          return Err(VpnError::Connection(format!("Failed to wait on xray: {e}")));
+          break Err(VpnError::Connection(format!("Failed to wait on xray: {e}")));
         }
       }
-    }
+    };
+
+    // The client config carries the VLESS UUID + Reality keys; remove it now
+    // that the tunnel is torn down, whatever the outcome.
+    let _ = std::fs::remove_file(&client_config_path);
+
+    result
   }
 }
 

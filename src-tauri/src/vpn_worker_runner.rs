@@ -10,6 +10,27 @@ use std::process::Stdio;
 const VPN_WORKER_POLL_INTERVAL_MS: u64 = 100;
 const VPN_WORKER_STARTUP_TIMEOUT_MS: u64 = 30_000;
 
+/// Write a file with owner-only permissions from creation (no chmod window).
+fn write_owner_only(path: &str, contents: &[u8]) -> std::io::Result<()> {
+  #[cfg(unix)]
+  {
+    use std::io::Write;
+    use std::os::unix::fs::OpenOptionsExt;
+    let mut file = std::fs::OpenOptions::new()
+      .write(true)
+      .create(true)
+      .truncate(true)
+      .mode(0o600)
+      .open(path)?;
+    file.write_all(contents)?;
+    Ok(())
+  }
+  #[cfg(not(unix))]
+  {
+    std::fs::write(path, contents)
+  }
+}
+
 async fn vpn_worker_accepting_connections(config: &VpnWorkerConfig) -> bool {
   let Some(port) = config.local_port else {
     return false;
@@ -65,7 +86,9 @@ async fn wait_for_vpn_worker_ready(
 
       if !process_running && attempts > 2 {
         let log_output = read_worker_log(id);
+        let config_file_path = updated_config.config_file_path.clone();
         delete_vpn_worker_config(id);
+        let _ = std::fs::remove_file(&config_file_path);
         return Err(format!("VPN worker process crashed. Log output:\n{}", log_output).into());
       }
 
@@ -79,7 +102,14 @@ async fn wait_for_vpn_worker_ready(
       if let Some(config) = get_vpn_worker_config(id) {
         let process_running = config.pid.map(is_process_running).unwrap_or(false);
         let log_output = read_worker_log(id);
-        delete_vpn_worker_config(id);
+        // If the process is still alive, keep its config so a later
+        // stop_vpn_worker can find and kill it; only remove the tracked
+        // config (and the plaintext .conf) when it is confirmed dead.
+        if !process_running {
+          let config_file_path = config.config_file_path.clone();
+          delete_vpn_worker_config(id);
+          let _ = std::fs::remove_file(&config_file_path);
+        }
         return Err(
           format!(
             "VPN worker failed to start within {:.1}s. pid={:?}, process_running={}, local_url={:?}\n\nVPN worker log:\n{}",
@@ -142,19 +172,24 @@ pub async fn start_vpn_worker(vpn_id: &str) -> Result<VpnWorkerConfig, Box<dyn s
     crate::vpn::VpnType::Vless => "vless",
   };
 
-  // Write decrypted config to a temp file
+  // For VLESS, ensure the xray binary is installed in the parent before the
+  // detached worker spawns. The worker also calls ensure_xray_binary() (a
+  // no-op once installed), but downloading inside the worker would race the
+  // parent's startup timeout and orphan the worker on slow networks.
+  if vpn_config.vpn_type == crate::vpn::VpnType::Vless {
+    crate::vpn::xray_vendor::ensure_xray_binary()
+      .await
+      .map_err(|e| format!("Failed to install Xray binary: {e}"))?;
+  }
+
+  // Write decrypted config to a temp file, restricted to the owner from the
+  // moment of creation (no 0644->0600 chmod window leaking key material).
   let config_file_path = std::env::temp_dir()
     .join(format!("duckling_vpn_{}.conf", vpn_id))
     .to_string_lossy()
     .to_string();
 
-  std::fs::write(&config_file_path, &vpn_config.config_data)?;
-
-  #[cfg(unix)]
-  {
-    use std::os::unix::fs::PermissionsExt;
-    let _ = std::fs::set_permissions(&config_file_path, std::fs::Permissions::from_mode(0o600));
-  }
+  write_owner_only(&config_file_path, vpn_config.config_data.as_bytes())?;
 
   let id = generate_vpn_worker_id();
 
@@ -168,7 +203,7 @@ pub async fn start_vpn_worker(vpn_id: &str) -> Result<VpnWorkerConfig, Box<dyn s
     id.clone(),
     vpn_id.to_string(),
     vpn_type_str.to_string(),
-    config_file_path,
+    config_file_path.clone(),
   );
   save_vpn_worker_config(&config)?;
 
@@ -213,13 +248,18 @@ pub async fn start_vpn_worker(vpn_id: &str) -> Result<VpnWorkerConfig, Box<dyn s
       });
     }
 
-    let child = cmd.spawn()?;
+    let child = cmd.spawn().inspect_err(|_| {
+      delete_vpn_worker_config(&id);
+      let _ = std::fs::remove_file(&config_file_path);
+    })?;
     let pid = child.id();
 
     let mut config_with_pid = config.clone();
     config_with_pid.pid = Some(pid);
     config_with_pid.local_port = Some(local_port);
-    save_vpn_worker_config(&config_with_pid)?;
+    save_vpn_worker_config(&config_with_pid).inspect_err(|_| {
+      let _ = std::fs::remove_file(&config_file_path);
+    })?;
 
     drop(child);
   }
@@ -255,13 +295,18 @@ pub async fn start_vpn_worker(vpn_id: &str) -> Result<VpnWorkerConfig, Box<dyn s
     const CREATE_NO_WINDOW: u32 = 0x08000000;
     cmd.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW);
 
-    let child = cmd.spawn()?;
+    let child = cmd.spawn().inspect_err(|_| {
+      delete_vpn_worker_config(&id);
+      let _ = std::fs::remove_file(&config_file_path);
+    })?;
     let pid = child.id();
 
     let mut config_with_pid = config.clone();
     config_with_pid.pid = Some(pid);
     config_with_pid.local_port = Some(local_port);
-    save_vpn_worker_config(&config_with_pid)?;
+    save_vpn_worker_config(&config_with_pid).inspect_err(|_| {
+      let _ = std::fs::remove_file(&config_file_path);
+    })?;
 
     drop(child);
   }
@@ -294,10 +339,28 @@ pub async fn stop_vpn_worker(id: &str) -> Result<bool, Box<dyn std::error::Error
       }
 
       tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+      // Escalate to SIGKILL if the worker ignored SIGTERM, so a hung worker
+      // can't keep the port bound or linger as an untracked orphan.
+      if is_process_running(pid) {
+        #[cfg(unix)]
+        {
+          use std::process::Command;
+          let _ = Command::new("kill")
+            .arg("-KILL")
+            .arg(pid.to_string())
+            .output();
+        }
+        tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+      }
     }
 
-    // Clean up temp config file
+    // Clean up temp config file, the xray client JSON (contains the VLESS
+    // UUID + Reality keys), and the worker/xray logs.
     let _ = std::fs::remove_file(&config.config_file_path);
+    let _ = std::fs::remove_file(std::env::temp_dir().join(format!("duckling_xray_{id}.json")));
+    let _ = std::fs::remove_file(std::env::temp_dir().join(format!("duckling-xray-{id}.log")));
+    let _ = std::fs::remove_file(worker_log_path(id));
 
     delete_vpn_worker_config(id);
     return Ok(true);

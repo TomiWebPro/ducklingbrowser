@@ -1393,7 +1393,8 @@
       "vlessPortRequired": "Geçerli bir port zorunludur",
       "vlessUuidRequired": "UUID zorunludur",
       "vlessPublicKeyRequired": "Reality genel anahtarı zorunludur",
-      "vlessShortIdRequired": "Reality kısa kimliği zorunludur"
+      "vlessShortIdRequired": "Reality kısa kimliği zorunludur",
+      "vlessUuidInvalid": "Geçerli bir UUID girin"
     },
     "import": {
       "title": "VPN Yapılandırması İçe Aktar",

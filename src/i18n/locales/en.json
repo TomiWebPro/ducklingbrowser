@@ -1393,7 +1393,8 @@
       "vlessPortRequired": "A valid port is required",
       "vlessUuidRequired": "UUID is required",
       "vlessPublicKeyRequired": "Reality public key is required",
-      "vlessShortIdRequired": "Reality short ID is required"
+      "vlessShortIdRequired": "Reality short ID is required",
+      "vlessUuidInvalid": "Enter a valid UUID"
     },
     "import": {
       "title": "Import VPN Config",

@@ -12,10 +12,17 @@ use uuid::Uuid;
 use super::config::VpnError;
 
 /// The transport security for a VLESS connection.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum VlessSecurity {
   Reality,
   Tls,
+}
+
+impl<'de> Deserialize<'de> for VlessSecurity {
+  fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+    let s = String::deserialize(deserializer)?;
+    s.parse().map_err(serde::de::Error::custom)
+  }
 }
 
 impl VlessSecurity {
@@ -50,7 +57,7 @@ pub struct VlessConfig {
   #[serde(alias = "id")]
   pub uuid: String,
   pub security: VlessSecurity,
-  #[serde(default = "default_flow")]
+  #[serde(default)]
   pub flow: String,
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub fingerprint: Option<String>,
@@ -67,10 +74,6 @@ pub struct VlessConfig {
   pub short_id: Option<String>,
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub spider_x: Option<String>,
-}
-
-fn default_flow() -> String {
-  "xtls-rprx-vision".to_string()
 }
 
 impl VlessConfig {
@@ -215,9 +218,20 @@ pub fn parse_vless_uri(uri: &str) -> Result<VlessConfig, VpnError> {
   };
 
   if let Some(enc) = params.get("encryption") {
-    if enc != "none" {
+    if !enc.eq_ignore_ascii_case("none") {
       return Err(VpnError::InvalidVless(format!(
         "VLESS encryption must be 'none', got '{enc}'"
+      )));
+    }
+  }
+
+  // Only the tcp transport is supported. Rejecting other transports loudly is
+  // safer than importing a link that silently renders as plain TCP and dies at
+  // connect time (ws/grpc/kcp/quic links over CDNs are common).
+  if let Some(t) = params.get("type") {
+    if !t.eq_ignore_ascii_case("tcp") && !t.is_empty() {
+      return Err(VpnError::InvalidVless(format!(
+        "Unsupported VLESS transport '{t}' (only tcp is supported)"
       )));
     }
   }
@@ -227,7 +241,11 @@ pub fn parse_vless_uri(uri: &str) -> Result<VlessConfig, VpnError> {
     port,
     uuid,
     security,
-    flow: params.get("flow").cloned().unwrap_or_else(default_flow),
+    flow: params
+      .get("flow")
+      .cloned()
+      .filter(|s| !s.is_empty())
+      .unwrap_or_default(),
     fingerprint: params.get("fp").cloned().filter(|s| !s.is_empty()),
     server_name: params.get("sni").cloned().filter(|s| !s.is_empty()),
     public_key: params.get("pbk").cloned().filter(|s| !s.is_empty()),
@@ -242,11 +260,10 @@ pub fn parse_vless_uri(uri: &str) -> Result<VlessConfig, VpnError> {
 /// Serialize a `VlessConfig` back into a canonical `vless://` share link.
 pub fn serve_vless_uri(config: &VlessConfig) -> Result<String, VpnError> {
   config.validate()?;
-  let mut query = format!(
-    "?encryption=none&security={}&flow={}",
-    config.security.as_str(),
-    config.flow
-  );
+  let mut query = format!("?encryption=none&security={}", config.security.as_str());
+  if !config.flow.is_empty() {
+    query.push_str(&format!("&flow={}", config.flow));
+  }
   if let Some(fp) = &config.fingerprint {
     query.push_str(&format!("&fp={fp}"));
   }
@@ -328,6 +345,11 @@ pub fn parse_xray_config_json(content: &str) -> Result<VlessConfig, VpnError> {
     .get("port")
     .and_then(|p| p.as_u64())
     .ok_or_else(|| VpnError::InvalidVless("Missing vnext.port".to_string()))?;
+  if port == 0 || port > u16::MAX as u64 {
+    return Err(VpnError::InvalidVless(format!(
+      "Invalid server port {port} (expected 1-65535)"
+    )));
+  }
   let user = settings
     .get("users")
     .and_then(|u| u.as_array())
@@ -337,6 +359,16 @@ pub fn parse_xray_config_json(content: &str) -> Result<VlessConfig, VpnError> {
     .get("id")
     .and_then(|i| i.as_str())
     .ok_or_else(|| VpnError::InvalidVless("Missing user.id".to_string()))?;
+
+  // Only the tcp transport is supported; reject anything else loudly rather
+  // than silently rendering a dead tunnel.
+  if let Some(network) = stream.get("network").and_then(|n| n.as_str()) {
+    if !network.eq_ignore_ascii_case("tcp") {
+      return Err(VpnError::InvalidVless(format!(
+        "Unsupported VLESS transport '{network}' (only tcp is supported)"
+      )));
+    }
+  }
 
   let security_str = stream
     .get("security")
@@ -350,11 +382,13 @@ pub fn parse_xray_config_json(content: &str) -> Result<VlessConfig, VpnError> {
         .get("tlsSettings")
         .and_then(|s| s.get("fingerprint"))
         .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
         .map(|s| s.to_string()),
       stream
         .get("tlsSettings")
         .and_then(|s| s.get("serverName"))
         .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
         .map(|s| s.to_string()),
       None,
       None,
@@ -401,7 +435,7 @@ pub fn parse_xray_config_json(content: &str) -> Result<VlessConfig, VpnError> {
       .and_then(|f| f.as_str())
       .filter(|s| !s.is_empty())
       .map(|s| s.to_string())
-      .unwrap_or_else(default_flow),
+      .unwrap_or_default(),
     fingerprint,
     server_name,
     public_key,
@@ -413,17 +447,34 @@ pub fn parse_xray_config_json(content: &str) -> Result<VlessConfig, VpnError> {
   Ok(config)
 }
 
-/// Dispatch a raw content string (share link or Xray JSON) to a `VlessConfig`.
+/// Dispatch a raw content string (share link, flat form JSON, or Xray JSON)
+/// to a `VlessConfig`.
 pub fn parse_vless_config(content: &str) -> Result<VlessConfig, VpnError> {
   let trimmed = content
     .trim()
     .strip_prefix('\u{feff}')
     .unwrap_or(content.trim());
   if trimmed.starts_with("vless://") {
-    parse_vless_uri(trimmed)
-  } else {
-    parse_xray_config_json(trimmed)
+    return parse_vless_uri(trimmed);
   }
+
+  // The frontend's manual VLESS form submits a flat VlessConfig-shaped JSON
+  // object ({address, port, uuid, security, ...}). Try that shape first, but
+  // only when `address` sits at the top level (Xray docs nest it inside
+  // outbounds[].settings.vnext[]).
+  if trimmed.starts_with('{') {
+    let is_flat_form = serde_json::from_str::<serde_json::Value>(trimmed)
+      .map(|v| v.get("address").is_some())
+      .unwrap_or(false);
+    if is_flat_form {
+      let config = serde_json::from_str::<VlessConfig>(trimmed)
+        .map_err(|e| VpnError::InvalidVless(format!("Invalid VLESS config JSON: {e}")))?;
+      config.validate()?;
+      return Ok(config);
+    }
+  }
+
+  parse_xray_config_json(trimmed)
 }
 
 /// Render the Xray client config that `xray run -c` executes for a given
@@ -827,5 +878,158 @@ mod tests {
       }]
     }"#;
     assert!(parse_xray_config_json(json).is_err());
+  }
+
+  #[test]
+  fn test_parse_vless_config_accepts_flat_form_json() {
+    // The frontend's manual VLESS form submits a flat VlessConfig-shaped JSON
+    // object. It must parse into a valid VlessConfig (regression: this used to
+    // fail with "No VLESS outbound found in Xray config").
+    let json = r#"{
+      "address": "vpn.example.com",
+      "port": 443,
+      "uuid": "5fd0aa4f-7ca0-4b67-b2f0-5f2d8cf6a1df",
+      "security": "reality",
+      "flow": "xtls-rprx-vision",
+      "fingerprint": "chrome",
+      "server_name": "vpn.example.com",
+      "public_key": "uz1jfVzZ04CZspLpNOrRPmv83a2X3pj37lq1yy0hA0A",
+      "short_id": "d9f3ff0ed2b26d77",
+      "spider_x": "/"
+    }"#;
+    let cfg = parse_vless_config(json).expect("flat form JSON must parse");
+    assert_eq!(cfg.address, "vpn.example.com");
+    assert_eq!(cfg.port, 443);
+    assert_eq!(cfg.security, VlessSecurity::Reality);
+    assert_eq!(cfg.flow, "xtls-rprx-vision");
+    assert_eq!(
+      cfg.public_key.as_deref(),
+      Some("uz1jfVzZ04CZspLpNOrRPmv83a2X3pj37lq1yy0hA0A")
+    );
+  }
+
+  #[test]
+  fn test_parse_vless_config_flat_form_lowercase_security() {
+    // The frontend sends `security: "reality" | "tls"` (lowercase); serde must
+    // accept it even though Serialize emits PascalCase.
+    let json = r#"{
+      "address": "vpn.example.com",
+      "port": 8443,
+      "uuid": "5fd0aa4f-7ca0-4b67-b2f0-5f2d8cf6a1df",
+      "security": "tls"
+    }"#;
+    let cfg = parse_vless_config(json).expect("lowercase security must parse");
+    assert_eq!(cfg.security, VlessSecurity::Tls);
+    assert!(
+      cfg.flow.is_empty(),
+      "flow must default to none, got '{}'",
+      cfg.flow
+    );
+  }
+
+  #[test]
+  fn test_flat_form_json_with_bad_uuid_is_rejected_with_parse_error() {
+    let json = r#"{
+      "address": "vpn.example.com",
+      "port": 443,
+      "uuid": "not-a-uuid",
+      "security": "tls"
+    }"#;
+    let err = parse_vless_config(json).unwrap_err().to_string();
+    assert!(
+      err.contains("UUID"),
+      "flat-form validation errors must be surfaced, got: {err}"
+    );
+  }
+
+  #[test]
+  fn test_port_truncation_rejected_in_xray_json() {
+    let json = r#"{
+      "outbounds": [{
+        "protocol": "vless",
+        "settings": { "vnext": [{
+          "address": "vpn.example.com", "port": 65537,
+          "users": [{"id": "5fd0aa4f-7ca0-4b67-b2f0-5f2d8cf6a1df"}]
+        }]},
+        "streamSettings": { "security": "tls", "tlsSettings": { "serverName": "vpn.example.com" } }
+      }]
+    }"#;
+    let err = parse_xray_config_json(json).unwrap_err().to_string();
+    assert!(
+      err.contains("65537"),
+      "out-of-range port must be rejected: {err}"
+    );
+  }
+
+  #[test]
+  fn test_non_tcp_transport_rejected_in_uri() {
+    let uri = "vless://5fd0aa4f-7ca0-4b67-b2f0-5f2d8cf6a1df@cdn.example.com:443?encryption=none&security=tls&sni=cdn.example.com&type=ws&path=%2Fray&host=cdn.example.com";
+    let err = parse_vless_uri(uri).unwrap_err().to_string();
+    assert!(
+      err.contains("transport 'ws'"),
+      "ws transport must be rejected loudly: {err}"
+    );
+  }
+
+  #[test]
+  fn test_non_tcp_transport_rejected_in_xray_json() {
+    let json = r#"{
+      "outbounds": [{
+        "protocol": "vless",
+        "settings": { "vnext": [{
+          "address": "cdn.example.com", "port": 443,
+          "users": [{"id": "5fd0aa4f-7ca0-4b67-b2f0-5f2d8cf6a1df"}]
+        }]},
+        "streamSettings": { "network": "ws", "security": "tls" }
+      }]
+    }"#;
+    let err = parse_xray_config_json(json).unwrap_err().to_string();
+    assert!(
+      err.contains("transport 'ws'"),
+      "ws network must be rejected: {err}"
+    );
+  }
+
+  #[test]
+  fn test_flow_defaults_to_none_when_omitted() {
+    let uri = "vless://5fd0aa4f-7ca0-4b67-b2f0-5f2d8cf6a1df@vpn.example.com:443?encryption=none&security=tls&sni=vpn.example.com";
+    let cfg = parse_vless_uri(uri).unwrap();
+    assert!(
+      cfg.flow.is_empty(),
+      "flow must default to none (v2rayN semantics), got '{}'",
+      cfg.flow
+    );
+    // serve must not emit an empty flow= param.
+    let served = serve_vless_uri(&cfg).unwrap();
+    assert!(
+      !served.contains("flow="),
+      "serve must omit empty flow, got: {served}"
+    );
+  }
+
+  #[test]
+  fn test_encryption_is_case_insensitive() {
+    let uri = "vless://5fd0aa4f-7ca0-4b67-b2f0-5f2d8cf6a1df@vpn.example.com:443?encryption=NONE&security=tls";
+    assert!(parse_vless_uri(uri).is_ok());
+  }
+
+  #[test]
+  fn test_tls_json_empty_server_name_falls_back_to_address() {
+    let json = r#"{
+      "outbounds": [{
+        "protocol": "vless",
+        "settings": { "vnext": [{
+          "address": "vpn.example.com", "port": 443,
+          "users": [{"id": "5fd0aa4f-7ca0-4b67-b2f0-5f2d8cf6a1df"}]
+        }]},
+        "streamSettings": { "security": "tls", "tlsSettings": { "serverName": "", "fingerprint": "" } }
+      }]
+    }"#;
+    let cfg = parse_xray_config_json(json).unwrap();
+    assert!(
+      cfg.server_name.is_none(),
+      "empty serverName must become None"
+    );
+    assert_eq!(cfg.resolved_server_name(), "vpn.example.com");
   }
 }

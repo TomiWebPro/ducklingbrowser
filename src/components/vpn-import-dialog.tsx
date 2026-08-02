@@ -153,7 +153,9 @@ export function VpnImportDialog({ isOpen, onClose }: VpnImportDialogProps) {
         .replace(/\.conf$/i, "")
         .replace(/_/g, " ")
         .replace(/-/g, " ");
-      setVpnName(baseName || `${detection.type} VPN`);
+      setVpnName(
+        baseName || t("vpns.import.defaultName", { type: detection.type }),
+      );
       setStep("vpn-preview");
     },
     [t],
@@ -179,9 +181,11 @@ export function VpnImportDialog({ isOpen, onClose }: VpnImportDialogProps) {
       e.preventDefault();
       setIsDragOver(false);
       const files = Array.from(e.dataTransfer.files);
-      const validFile = files.find((f) => f.name.endsWith(".conf"));
-      if (validFile) {
-        handleFileRead(validFile);
+      // Any dropped file is worth a shot: detection is content-based
+      // (vless:// links, Xray JSON, WireGuard .conf).
+      const file = files.find((f) => f.name);
+      if (file) {
+        handleFileRead(file);
       } else {
         toast.error(t("vpns.import.wrongFileType"));
       }
@@ -330,7 +334,7 @@ export function VpnImportDialog({ isOpen, onClose }: VpnImportDialogProps) {
                 <input
                   id="vpn-file-input"
                   type="file"
-                  accept=".conf"
+                  accept=".conf,.json,.txt"
                   className="hidden"
                   onChange={(e) => {
                     const file = e.target.files?.[0];

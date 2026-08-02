@@ -1393,7 +1393,8 @@
       "vlessPortRequired": "유효한 포트가 필요합니다",
       "vlessUuidRequired": "UUID가 필요합니다",
       "vlessPublicKeyRequired": "Reality 공개 키가 필요합니다",
-      "vlessShortIdRequired": "Reality 짧은 ID가 필요합니다"
+      "vlessShortIdRequired": "Reality 짧은 ID가 필요합니다",
+      "vlessUuidInvalid": "유효한 UUID를 입력하세요"
     },
     "import": {
       "title": "VPN 구성 가져오기",

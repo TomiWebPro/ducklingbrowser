@@ -1393,7 +1393,8 @@
       "vlessPortRequired": "有効なポートが必要です",
       "vlessUuidRequired": "UUIDは必須です",
       "vlessPublicKeyRequired": "Reality公開鍵は必須です",
-      "vlessShortIdRequired": "RealityショートIDは必須です"
+      "vlessShortIdRequired": "RealityショートIDは必須です",
+      "vlessUuidInvalid": "有効なUUIDを入力してください"
     },
     "import": {
       "title": "VPN 設定をインポート",

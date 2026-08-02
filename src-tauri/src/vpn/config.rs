@@ -105,12 +105,17 @@ pub fn detect_vpn_type(content: &str, filename: &str) -> Result<VpnType, VpnErro
     .strip_prefix('\u{feff}')
     .unwrap_or(content.trim());
 
-  // VLESS share links have no filename association; detect by content.
-  if trimmed.starts_with("vless://") {
+  // VLESS share links have no filename association; detect by content. A
+  // subscription/notes text can carry a header line before the first link.
+  if trimmed
+    .lines()
+    .any(|line| line.trim().starts_with("vless://"))
+  {
     return Ok(VpnType::Vless);
   }
 
-  // VLESS configs can also be pasted as Xray JSON (`outbounds` / protocol).
+  // VLESS configs can also be pasted as Xray JSON (`outbounds` / protocol,
+  // possibly a bare array of outbounds as some tools export).
   if trimmed.starts_with('{') || trimmed.starts_with('[') {
     if let Ok(v) = serde_json::from_str::<serde_json::Value>(trimmed) {
       let is_vless_protocol =
@@ -119,6 +124,10 @@ pub fn detect_vpn_type(content: &str, filename: &str) -> Result<VpnType, VpnErro
         || v
           .get("outbounds")
           .and_then(|o| o.as_array())
+          .map(|a| a.iter().any(is_vless_protocol))
+          .unwrap_or(false)
+        || v
+          .as_array()
           .map(|a| a.iter().any(is_vless_protocol))
           .unwrap_or(false);
       if has_vless {
@@ -309,6 +318,24 @@ mod tests {
     let content = "client\ndev tun\nproto udp\nremote vpn.example.com 1194";
     assert!(detect_vpn_type(content, "test.ovpn").is_err());
     assert!(detect_vpn_type(content, "config").is_err());
+  }
+
+  #[test]
+  fn test_detect_vless_uri_with_leading_header_line() {
+    // Subscription/notes text with a header line before the first vless://
+    // link must still be detected as VLESS.
+    let content = "# my subscription\nexpires: 2099\nvless://0af941e8-9b48-4dd8-a953-2e9c91f31b3a@example.com:443?security=tls";
+    assert_eq!(detect_vpn_type(content, "sub.txt").unwrap(), VpnType::Vless);
+  }
+
+  #[test]
+  fn test_detect_vless_bare_outbounds_array() {
+    // Some tools export a bare JSON array of outbounds.
+    let content = r#"[{"protocol":"vless","settings":{"vnext":[]}}]"#;
+    assert_eq!(
+      detect_vpn_type(content, "xray.json").unwrap(),
+      VpnType::Vless
+    );
   }
 
   #[test]

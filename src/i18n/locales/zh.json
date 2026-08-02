@@ -1393,7 +1393,8 @@
       "vlessPortRequired": "需要有效的端口",
       "vlessUuidRequired": "UUID 为必填项",
       "vlessPublicKeyRequired": "Reality 公钥为必填项",
-      "vlessShortIdRequired": "Reality 短 ID 为必填项"
+      "vlessShortIdRequired": "Reality 短 ID 为必填项",
+      "vlessUuidInvalid": "请输入有效的UUID"
     },
     "import": {
       "title": "导入 VPN 配置",

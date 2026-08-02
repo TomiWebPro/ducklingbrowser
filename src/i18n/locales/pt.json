@@ -1393,7 +1393,8 @@
       "vlessPortRequired": "Uma porta válida é obrigatória",
       "vlessUuidRequired": "O UUID é obrigatório",
       "vlessPublicKeyRequired": "A chave pública Reality é obrigatória",
-      "vlessShortIdRequired": "O ID curto Reality é obrigatório"
+      "vlessShortIdRequired": "O ID curto Reality é obrigatório",
+      "vlessUuidInvalid": "Insira um UUID válido"
     },
     "import": {
       "title": "Importar Configuração VPN",

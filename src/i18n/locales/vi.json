@@ -1393,7 +1393,8 @@
       "vlessPortRequired": "Cần một cổng hợp lệ",
       "vlessUuidRequired": "UUID là bắt buộc",
       "vlessPublicKeyRequired": "Khóa công khai Reality là bắt buộc",
-      "vlessShortIdRequired": "ID ngắn Reality là bắt buộc"
+      "vlessShortIdRequired": "ID ngắn Reality là bắt buộc",
+      "vlessUuidInvalid": "Nhập UUID hợp lệ"
     },
     "import": {
       "title": "Nhập cấu hình VPN",

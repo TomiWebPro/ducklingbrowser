@@ -232,12 +232,26 @@ export function VpnFormDialog({
         toast.error(t("vpns.form.vlessAddressRequired"));
         return;
       }
-      if (!port.trim() || Number(port) <= 0) {
+      const portNumber = Number(port);
+      if (
+        !port.trim() ||
+        !Number.isInteger(portNumber) ||
+        portNumber <= 0 ||
+        portNumber > 65535
+      ) {
         toast.error(t("vpns.form.vlessPortRequired"));
         return;
       }
       if (!uuid.trim()) {
         toast.error(t("vpns.form.vlessUuidRequired"));
+        return;
+      }
+      if (
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          uuid.trim(),
+        )
+      ) {
+        toast.error(t("vpns.form.vlessUuidInvalid"));
         return;
       }
       if (vlessForm.security === "reality") {
