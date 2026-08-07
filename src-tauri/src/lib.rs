@@ -71,6 +71,8 @@ mod group_manager;
 mod human_typing;
 mod ip_utils;
 mod llm;
+mod llm_completion;
+mod llm_rate_limiter;
 mod log_redaction;
 mod macro_step;
 mod platform_browser;
@@ -401,6 +403,13 @@ async fn rotate_profile_proxy(
     .rotate_profile_proxy(&app_handle, &profile_id)
     .await
     .map_err(|e| wrap_backend_error(e, "Failed to rotate profile proxy"))
+}
+
+#[tauri::command]
+async fn llm_completion(
+  request: crate::llm_completion::LlmCompletionRequest,
+) -> Result<crate::llm_completion::LlmCompletionResult, String> {
+  crate::llm_completion::run_llm_completion(request).await
 }
 
 #[tauri::command]
@@ -2514,6 +2523,7 @@ pub fn run_with_builder(
       delete_proxy_pool,
       assign_profiles_to_pool,
       rotate_profile_proxy,
+      llm_completion,
       get_cached_proxy_check,
       export_proxies,
       import_proxies_json,
@@ -2723,6 +2733,7 @@ mod tests {
       "delete_proxy_pool",
       "assign_profiles_to_pool",
       "rotate_profile_proxy",
+      "llm_completion",
     ];
 
     // Extract command names from the generate_handler! macro in this file

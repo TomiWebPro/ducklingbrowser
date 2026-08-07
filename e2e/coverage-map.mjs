@@ -306,6 +306,11 @@ export const commandCoverage = {
     level: "integration",
     commands: ["agent_chat", "agent_chat_confirm", "agent_chat_decline"],
   },
+  llmCompletion: {
+    suite: "integrations",
+    level: "integration",
+    commands: ["llm_completion"],
+  },
   hostMutating: {
     suite: "full",
     level: "host-mutating",

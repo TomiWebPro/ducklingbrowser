@@ -350,6 +350,60 @@ struct RotateProfileProxyResponse {
   proxy_settings: ProxySettings,
 }
 
+/// REST request for the LLM completion endpoint.
+#[derive(Debug, Deserialize, ToSchema)]
+struct ApiLlmCompletionRequest {
+  /// Saved key id from the key vault. When omitted, the first saved key is used.
+  key_id: Option<String>,
+  /// Provider override. When omitted, the key's own provider is used.
+  provider: Option<String>,
+  /// Model override. When omitted, the key's configured model is used.
+  model: Option<String>,
+  /// Chat history (roles: system/user/assistant).
+  messages: Vec<crate::llm::ChatMessage>,
+  /// Optional function-calling tools.
+  #[serde(default)]
+  tools: Option<Vec<crate::llm::ToolSpec>>,
+  /// Retries on transient failures (429/5xx/transport). Defaults to 3.
+  #[serde(default)]
+  max_retries: Option<u32>,
+}
+
+impl From<ApiLlmCompletionRequest> for crate::llm_completion::LlmCompletionRequest {
+  fn from(request: ApiLlmCompletionRequest) -> Self {
+    Self {
+      key_id: request.key_id,
+      provider: request.provider,
+      model: request.model,
+      messages: request.messages,
+      tools: request.tools,
+      max_retries: request.max_retries,
+    }
+  }
+}
+
+/// REST response for the LLM completion endpoint.
+#[derive(Debug, Serialize, ToSchema)]
+struct ApiLlmCompletionResponse {
+  reply: String,
+  usage: Option<crate::llm::ChatUsage>,
+  /// Provider actually used (after overrides).
+  provider: String,
+  /// Model actually used (after overrides).
+  model: String,
+}
+
+impl From<crate::llm_completion::LlmCompletionResult> for ApiLlmCompletionResponse {
+  fn from(result: crate::llm_completion::LlmCompletionResult) -> Self {
+    Self {
+      reply: result.reply,
+      usage: result.usage,
+      provider: result.provider,
+      model: result.model,
+    }
+  }
+}
+
 #[derive(Debug, Deserialize, ToSchema)]
 struct BatchCreateProfilesRequest {
   /// Explicit profile names. When non-empty, `name_prefix`/`count` are ignored.
@@ -465,6 +519,7 @@ struct ImportProxiesResponse {
     delete_proxy_pool_api,
     assign_profiles_to_pool_api,
     rotate_profile_proxy_api,
+    llm_completion_api,
     detect_import_profiles,
     import_profiles_api,
     import_profile_cookies,
@@ -532,6 +587,8 @@ struct ImportProxiesResponse {
     PoolAssignItem,
     AssignProfilesToPoolResponse,
     RotateProfileProxyResponse,
+    ApiLlmCompletionRequest,
+    ApiLlmCompletionResponse,
     OpenUrlRequest,
     ImportCookiesRequest,
     ImportCookiesResponse,
@@ -552,6 +609,7 @@ struct ImportProxiesResponse {
     (name = "tags", description = "Tag management endpoints"),
     (name = "proxies", description = "Proxy management endpoints"),
     (name = "proxy-pools", description = "Proxy pool management endpoints"),
+    (name = "llm", description = "LLM completion endpoints (retry + per-provider concurrency)"),
     (name = "vpns", description = "VPN management endpoints"),
     (name = "extensions", description = "Extension management endpoints"),
     (name = "browsers", description = "Browser management endpoints"),
@@ -653,6 +711,7 @@ impl ApiServer {
         assign_profiles_to_pool_api,
         rotate_profile_proxy_api
       ))
+      .routes(routes!(llm_completion_api))
       .routes(routes!(detect_import_profiles))
       .routes(routes!(import_profiles_api))
       .routes(routes!(import_profile_cookies))
@@ -2845,6 +2904,65 @@ async fn rotate_profile_proxy_api(
     proxy_id: rotated.id,
     proxy_settings: rotated.proxy_settings,
   }))
+}
+
+/// Map structured LLM completion errors onto HTTP status codes:
+/// validation failures are client errors, provider failures are 502.
+fn llm_completion_error_response(message: String) -> (StatusCode, String) {
+  let code = serde_json::from_str::<serde_json::Value>(&message)
+    .ok()
+    .and_then(|value| value.get("code").and_then(|c| c.as_str()).map(String::from));
+  let status = match code.as_deref() {
+    Some("LLM_RETRY_EXHAUSTED" | "LLM_REQUEST_FAILED") => StatusCode::BAD_GATEWAY,
+    Some(_) => StatusCode::BAD_REQUEST,
+    None => StatusCode::INTERNAL_SERVER_ERROR,
+  };
+  (status, message)
+}
+
+// API Handler - Fire a single LLM completion through the app's own key vault,
+// with retry + per-provider concurrency. The key never leaves the machine.
+#[utoipa::path(
+  post,
+  path = "/v1/llm/completion",
+  request_body = ApiLlmCompletionRequest,
+  responses(
+    (status = 200, description = "Completion generated", body = ApiLlmCompletionResponse),
+    (status = 400, description = "Validation error (empty messages, unknown provider, missing key)"),
+    (status = 401, description = "Unauthorized"),
+    (status = 429, description = "Hourly LLM completion quota exceeded (Retry-After header included)"),
+    (status = 502, description = "Provider failed after retries"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "llm"
+)]
+async fn llm_completion_api(
+  State(_state): State<ApiServerState>,
+  Json(request): Json<ApiLlmCompletionRequest>,
+) -> Result<Json<ApiLlmCompletionResponse>, axum::response::Response> {
+  if let crate::automation_rate_limiter::RateLimitOutcome::Limited { retry_after_secs } =
+    crate::llm_rate_limiter::check_llm_rate_limit()
+  {
+    return Err(
+      (
+        StatusCode::TOO_MANY_REQUESTS,
+        [(header::RETRY_AFTER, retry_after_secs.to_string())],
+        format!("LLM request quota exceeded; retry after {retry_after_secs}s"),
+      )
+        .into_response(),
+    );
+  }
+
+  match crate::llm_completion::run_llm_completion(request.into()).await {
+    Ok(result) => Ok(Json(result.into())),
+    Err(message) => {
+      let (status, body) = llm_completion_error_response(message);
+      Err((status, body).into_response())
+    }
+  }
 }
 
 // API Handler - Detect importable browser profiles on this machine, or scan a

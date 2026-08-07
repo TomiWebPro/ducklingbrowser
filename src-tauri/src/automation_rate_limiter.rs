@@ -13,6 +13,13 @@ pub enum RateLimitOutcome {
   Limited { retry_after_secs: u64 },
 }
 
+impl RateLimitOutcome {
+  /// Whether the call was rejected by the quota.
+  pub fn is_limited(&self) -> bool {
+    matches!(self, RateLimitOutcome::Limited { .. })
+  }
+}
+
 #[derive(Default)]
 struct AutomationRateLimiter {
   requests: HashMap<String, VecDeque<Instant>>,

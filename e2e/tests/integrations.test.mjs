@@ -87,6 +87,8 @@ test("authenticated REST API serves its complete OpenAPI contract and CRUD lifec
       "/v1/vpns/{id}/export",
       "/v1/extensions",
       "/v1/browsers/{browser}/versions",
+      "/v1/proxy-pools",
+      "/v1/llm/completion",
     ]) {
       assert.ok(paths.includes(required), `OpenAPI is missing ${required}`);
     }
@@ -523,4 +525,102 @@ test("offline cloud, update, team-lock, trial, and synchronizer contracts are de
     },
     { chromiumTermsAccepted: false },
   );
+});
+
+test("llm_completion validates without network and REST quota returns 429 with Retry-After", async () => {
+  await withApp("integrations-llm", async (app) => {
+    await seedTerms(app);
+
+    // No key in the vault -> structured LLM_NO_KEY error.
+    await assertCommandErrorCode(app, "llm_completion", "LLM_NO_KEY", {
+      messages: [{ role: "user", content: "hello" }],
+    });
+    // Explicit missing key id -> AI_KEY_NOT_FOUND.
+    const missingKey = await app.invokeError("llm_completion", {
+      key_id: "missing-key-id",
+      messages: [{ role: "user", content: "hello" }],
+    });
+    assert.match(missingKey, /"code":"AI_KEY_NOT_FOUND"/);
+    // Unknown provider override -> LLM_UNKNOWN_PROVIDER.
+    const unknownProvider = await app.invokeError("llm_completion", {
+      provider: "watson",
+      messages: [{ role: "user", content: "hello" }],
+    });
+    assert.match(unknownProvider, /"code":"LLM_UNKNOWN_PROVIDER"/);
+    // Empty messages are rejected before any request is fired.
+    await assertCommandErrorCode(app, "llm_completion", "LLM_EMPTY_MESSAGES", {
+      messages: [],
+    });
+
+    // REST surface: validation maps to 400; quota produces 429 + Retry-After.
+    const settings = await app.invoke("get_app_settings");
+    const saved = await app.invoke("save_app_settings", {
+      settings: {
+        ...settings,
+        api_enabled: true,
+        api_port: 0,
+        api_token: null,
+        llm_requests_per_hour: 2,
+      },
+    });
+    const port = await app.invoke("start_api_server", { port: 0 });
+    const base = `http://127.0.0.1:${port}`;
+
+    const validation = await jsonRequest(`${base}/v1/llm/completion`, {
+      method: "POST",
+      token: saved.api_token,
+      body: { messages: [] },
+    });
+    assert.equal(validation.response.status, 400);
+    assert.match(validation.value, /LLM_EMPTY_MESSAGES/);
+
+    // Budget of 1: this call consumes it, the next is limited.
+    const first = await jsonRequest(`${base}/v1/llm/completion`, {
+      method: "POST",
+      token: saved.api_token,
+      body: { messages: [{ role: "user", content: "hello" }] },
+    });
+    assert.equal(first.response.status, 400);
+    assert.match(first.value, /LLM_NO_KEY/);
+
+    const limited = await jsonRequest(`${base}/v1/llm/completion`, {
+      method: "POST",
+      token: saved.api_token,
+      body: { messages: [{ role: "user", content: "hello" }] },
+    });
+    assert.equal(limited.response.status, 429);
+    assert.ok(limited.response.headers.get("retry-after"));
+
+    // MCP surface: the tool is advertised with a schema after initialization.
+    const mcpPort = await app.invoke("start_mcp_server");
+    const mcpConfig = await app.invoke("get_mcp_config");
+    const mcpBase = `http://127.0.0.1:${mcpPort}`;
+    const initialized = await jsonRequest(`${mcpBase}/mcp/${mcpConfig.token}`, {
+      method: "POST",
+      body: {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-11-25",
+          capabilities: {},
+          clientInfo: { name: "duckling-e2e", version: "1" },
+        },
+      },
+    });
+    const sessionId = initialized.response.headers.get("mcp-session-id");
+    assert.ok(sessionId);
+    const mcpHeaders = { "mcp-session-id": sessionId };
+    const tools = await jsonRequest(`${mcpBase}/mcp/${mcpConfig.token}`, {
+      method: "POST",
+      headers: mcpHeaders,
+      body: { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} },
+    });
+    const toolNames = tools.value.result.tools.map((tool) => tool.name);
+    assert.ok(
+      toolNames.includes("llm_completion"),
+      "MCP advertises llm_completion",
+    );
+    await app.invoke("stop_mcp_server");
+  });
 });

@@ -1149,6 +1149,122 @@ impl McpServer {
           "required": ["profile_id"]
         }),
       },
+      // LLM tools
+      McpTool {
+        name: "llm_completion".to_string(),
+        description: "Fire a single LLM completion through the app's own key vault, with retry and per-provider concurrency. The key never leaves the machine.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "key_id": {
+              "type": "string",
+              "description": "Saved key id from the key vault. Omit to use the first saved key."
+            },
+            "provider": {
+              "type": "string",
+              "enum": ["anthropic", "openai", "groq", "google", "openrouter"],
+              "description": "Provider override. Omit to use the key's own provider."
+            },
+            "model": {
+              "type": "string",
+              "description": "Model override. Omit to use the key's configured model."
+            },
+            "messages": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "role": {
+                    "type": "string",
+                    "enum": ["system", "user", "assistant"]
+                  },
+                  "content": { "type": "string" }
+                },
+                "required": ["role", "content"]
+              },
+              "description": "Chat history (roles: system/user/assistant)"
+            },
+            "tools": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string" },
+                  "description": { "type": "string" },
+                  "input_schema": { "type": "object" }
+                },
+                "required": ["name", "description", "input_schema"]
+              },
+              "description": "Optional function-calling tools"
+            },
+            "max_retries": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10,
+              "description": "Retries on transient failures (429/5xx/transport). Defaults to 3."
+            }
+          },
+          "required": ["messages"]
+        }),
+      },
+      // Agent tools
+      McpTool {
+        name: "agent_chat".to_string(),
+        description: "Run the in-app AI agent against a saved key from the key vault. The agent can browse profiles, execute browser tools, and returns change cards for confirmation.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "key_id": {
+              "type": "string",
+              "description": "Saved key id from the key vault. Omit to use the first saved key."
+            },
+            "model": {
+              "type": "string",
+              "description": "Model override. Omit to use the key's configured model."
+            },
+            "message": {
+              "type": "string",
+              "description": "The task or question for the agent"
+            },
+            "use_agent": {
+              "type": "string",
+              "enum": ["agent", "chat"],
+              "description": "Run with the full agent (tools) or as a plain chat"
+            }
+          },
+          "required": ["message"]
+        }),
+      },
+      McpTool {
+        name: "agent_chat_confirm".to_string(),
+        description: "Confirm and execute the pending change cards produced by agent_chat".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "card_ids": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Change card ids to confirm"
+            }
+          },
+          "required": ["card_ids"]
+        }),
+      },
+      McpTool {
+        name: "agent_chat_decline".to_string(),
+        description: "Decline and discard pending change cards produced by agent_chat".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "card_ids": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Change card ids to decline"
+            }
+          },
+          "required": ["card_ids"]
+        }),
+      },
       // VPN management tools
       McpTool {
         name: "import_vpn".to_string(),
@@ -1925,6 +2041,12 @@ impl McpServer {
       "delete_proxy_pool" => self.handle_delete_proxy_pool(arguments).await,
       "assign_profiles_to_pool" => self.handle_assign_profiles_to_pool(arguments).await,
       "rotate_profile_proxy" => self.handle_rotate_profile_proxy(arguments).await,
+      // LLM completion
+      "llm_completion" => self.handle_llm_completion(arguments).await,
+      // Agent tools
+      "agent_chat" => self.handle_agent_chat(arguments).await,
+      "agent_chat_confirm" => self.handle_agent_chat_confirm(arguments).await,
+      "agent_chat_decline" => self.handle_agent_chat_decline(arguments).await,
       // VPN management
       "import_vpn" => self.handle_import_vpn(arguments).await,
       "list_vpn_configs" => self.handle_list_vpn_configs().await,
@@ -3692,6 +3814,159 @@ impl McpServer {
     }))
   }
 
+  async fn handle_llm_completion(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    if crate::llm_rate_limiter::check_llm_rate_limit().is_limited() {
+      return Err(McpError {
+        code: -32000,
+        message: "LLM request quota exceeded; try again later".to_string(),
+      });
+    }
+
+    let request = crate::llm_completion::LlmCompletionRequest {
+      key_id: arguments
+        .get("key_id")
+        .and_then(|v| v.as_str())
+        .map(String::from),
+      provider: arguments
+        .get("provider")
+        .and_then(|v| v.as_str())
+        .map(String::from),
+      model: arguments
+        .get("model")
+        .and_then(|v| v.as_str())
+        .map(String::from),
+      messages: arguments
+        .get("messages")
+        .cloned()
+        .and_then(|v| serde_json::from_value(v).ok())
+        .ok_or_else(|| McpError {
+          code: -32602,
+          message: "Missing or invalid messages".to_string(),
+        })?,
+      tools: arguments
+        .get("tools")
+        .cloned()
+        .and_then(|v| serde_json::from_value(v).ok()),
+      max_retries: arguments
+        .get("max_retries")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u32),
+    };
+
+    let result = crate::llm_completion::run_llm_completion(request)
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("LLM completion failed: {e}"),
+      })?;
+
+    let usage = result
+      .usage
+      .map(|u| {
+        format!(
+          " ({} prompt + {} completion tokens)",
+          u.prompt_tokens, u.completion_tokens
+        )
+      })
+      .unwrap_or_default();
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": format!(
+          "Provider: {}\nModel: {}\n\n{}{}",
+          result.provider, result.model, result.reply, usage
+        )
+      }]
+    }))
+  }
+
+  async fn handle_agent_chat(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let message = arguments
+      .get("message")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing message".to_string(),
+      })?
+      .to_string();
+    let key_id = arguments
+      .get("key_id")
+      .and_then(|v| v.as_str())
+      .map(String::from);
+    let model = arguments
+      .get("model")
+      .and_then(|v| v.as_str())
+      .map(String::from);
+    let use_agent = arguments
+      .get("use_agent")
+      .and_then(|v| v.as_str())
+      .map(String::from);
+
+    // Boxed to break the async recursion cycle (agent_chat -> run_tool_call ->
+    // dispatch_tool_call -> handle_agent_chat). The in-app agent rejects
+    // agent_chat via agent_tools(), so only external MCP clients reach here.
+    let future = Box::pin(crate::agent_engine::agent_chat_inner(
+      key_id, model, message, use_agent,
+    ));
+    let result = future.await.map_err(|e| McpError {
+      code: -32000,
+      message: format!("Agent chat failed: {e}"),
+    })?;
+    Ok(
+      serde_json::json!({ "content": [{ "type": "text", "text": serde_json::to_string(&result).unwrap_or_default() }] }),
+    )
+  }
+
+  async fn handle_agent_chat_confirm(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let card_ids: Vec<String> = arguments
+      .get("card_ids")
+      .cloned()
+      .and_then(|v| serde_json::from_value(v).ok())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing or invalid card_ids".to_string(),
+      })?;
+    // Boxed: same recursion-break rationale as handle_agent_chat.
+    let future = Box::pin(crate::agent_engine::agent_chat_confirm(card_ids));
+    let result = future.await.map_err(|e| McpError {
+      code: -32000,
+      message: format!("Agent confirm failed: {e}"),
+    })?;
+    Ok(
+      serde_json::json!({ "content": [{ "type": "text", "text": serde_json::to_string(&result).unwrap_or_default() }] }),
+    )
+  }
+
+  async fn handle_agent_chat_decline(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let card_ids: Vec<String> = arguments
+      .get("card_ids")
+      .cloned()
+      .and_then(|v| serde_json::from_value(v).ok())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing or invalid card_ids".to_string(),
+      })?;
+    let result = crate::agent_engine::agent_chat_decline(card_ids).map_err(|e| McpError {
+      code: -32000,
+      message: format!("Agent decline failed: {e}"),
+    })?;
+    Ok(
+      serde_json::json!({ "content": [{ "type": "text", "text": serde_json::to_string(&result).unwrap_or_default() }] }),
+    )
+  }
+
   // VPN management handlers
   async fn handle_import_vpn(
     &self,
@@ -5316,6 +5591,12 @@ mod tests {
     assert!(tool_names.contains(&"delete_proxy_pool"));
     assert!(tool_names.contains(&"assign_profiles_to_pool"));
     assert!(tool_names.contains(&"rotate_profile_proxy"));
+    // LLM tools
+    assert!(tool_names.contains(&"llm_completion"));
+    // Agent tools
+    assert!(tool_names.contains(&"agent_chat"));
+    assert!(tool_names.contains(&"agent_chat_confirm"));
+    assert!(tool_names.contains(&"agent_chat_decline"));
     // VPN tools
     assert!(tool_names.contains(&"import_vpn"));
     assert!(tool_names.contains(&"list_vpn_configs"));

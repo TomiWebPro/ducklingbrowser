@@ -67,6 +67,20 @@ pub struct AppSettings {
   /// quitting, so scheduled AI tasks keep running 24/7.
   #[serde(default = "default_true")]
   pub keep_running_in_background: bool,
+  /// Max concurrent in-flight LLM requests per provider (min 1). 0 resets to the default.
+  #[serde(default = "default_llm_max_concurrency")]
+  pub llm_max_concurrency: usize,
+  /// Hourly LLM completion budget for REST/MCP (0 = unlimited).
+  #[serde(default = "default_llm_requests_per_hour")]
+  pub llm_requests_per_hour: u64,
+}
+
+fn default_llm_max_concurrency() -> usize {
+  crate::llm::LLM_MAX_CONCURRENCY
+}
+
+fn default_llm_requests_per_hour() -> u64 {
+  crate::llm::LLM_DEFAULT_REQUESTS_PER_HOUR
 }
 
 fn default_true() -> bool {
@@ -108,6 +122,8 @@ impl Default for AppSettings {
       disable_auto_updates: false,
       keep_decrypted_profiles_in_ram: false,
       keep_running_in_background: true,
+      llm_max_concurrency: default_llm_max_concurrency(),
+      llm_requests_per_hour: default_llm_requests_per_hour(),
     }
   }
 }
@@ -1203,6 +1219,8 @@ mod tests {
       disable_auto_updates: false,
       keep_decrypted_profiles_in_ram: false,
       keep_running_in_background: true,
+      llm_max_concurrency: default_llm_max_concurrency(),
+      llm_requests_per_hour: default_llm_requests_per_hour(),
     };
 
     let save_result = manager.save_settings(&test_settings);

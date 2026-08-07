@@ -76,6 +76,7 @@ fn is_read_only_tool(name: &str) -> bool {
       | "get_page_content"
       | "get_page_info"
       | "get_interactive_elements"
+      | "llm_completion"
   )
 }
 
@@ -440,6 +441,8 @@ pub async fn agent_chat_inner(
     provider,
     api_key: record.key.clone(),
     model: model.clone(),
+    client: None,
+    endpoint_override: None,
   };
 
   let mut messages = vec![ChatMessage {
@@ -456,7 +459,7 @@ pub async fn agent_chat_inner(
     let raw = client
       .chat(&messages, None)
       .await
-      .map_err(|e| agent_error(&e.0))?;
+      .map_err(|e| agent_error(&e.message))?;
     messages.push(ChatMessage {
       role: "assistant".to_string(),
       content: raw.clone(),

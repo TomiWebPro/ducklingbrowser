@@ -727,6 +727,8 @@ Implemented in `src-tauri/src/proxy_pool.rs` (`ProxyPoolManager` singleton +
 
 ### 10.4 S3 — LLM automation surface (REST/MCP + queue + retry)
 
+✅ DONE 2026-08-08
+
 Goal: external systems can fire automated LLM requests through the browser's
 own key vault, with sane concurrency and retry.
 
@@ -749,6 +751,58 @@ own key vault, with sane concurrency and retry.
 6. Coverage: groups `llmCompletion` (suite `integrations`), `aiAgentMcp`
    (suite `ai`) + evidence.
 7. Commit: `Expose LLM completion over REST/MCP with queue and retry (S3)`.
+
+Implementation notes:
+
+- `llm.rs`: `LlmError` is now `{ message, retryable }` (structured instead of
+  the tuple wrapper); `chat()` → `send()` returning `LlmResponse { text,
+  usage }` with per-provider usage extraction (Anthropic input/output tokens,
+  Google usageMetadata, OpenAI-compatible usage); `chat()` kept as a thin
+  text-only wrapper. `LlmClient` gains test seams: `client:
+  Option<reqwest::Client>` (HTTP layer injection) and `endpoint_override:
+  Option<String>` (URL injection, used by all wiremock tests). Callers
+  (`agent_engine`, `llm_completion`) pass `None` for both.
+- Retry policy: `status_is_retryable` = 429 ∪ 5xx; transport errors are
+  retryable; `backoff_delay_ms` = exponential with deterministic jitter,
+  hard-capped at 60s (`MAX_BACKOFF_MS`). `chat_with_retry` holds the
+  per-provider semaphore for the whole call (acquisition + all attempts).
+- Semaphore registry: `LLM_SEMAPHORES` (provider name → `Arc<Semaphore>`)
+  created with the cap read fresh from `SettingsManager::instance()`
+  (`llm_max_concurrency`, min 1) — a settings change applies to new providers
+  and never shrinks an existing cap below the default.
+- `llm_rate_limiter.rs` (new): rolling 60-min window per-process, limit read
+  fresh from settings on every call (`llm_requests_per_hour`, 0 = unlimited).
+  REST handler returns 429 + `Retry-After` (matching the automation
+  middleware); MCP handler maps quota to `-32000` "quota exceeded".
+  Validation runs AFTER the quota check, so invalid requests still consume
+  budget (documented behavior).
+- Error codes (structured JSON, reused by Tauri/REST/MCP):
+  `AI_KEY_NOT_FOUND` (existing), `LLM_NO_KEY`, `LLM_UNKNOWN_PROVIDER`,
+  `LLM_EMPTY_MESSAGES`, `LLM_REQUEST_FAILED` (non-retryable → REST 400),
+  `LLM_RETRY_EXHAUSTED` (retryable exhaustion → REST 502).
+- REST endpoint lives in tag `llm` (OpenAPI'd, bearer-secured, NOT in the
+  automation quota bucket). Response = `{ reply, usage, provider, model }`.
+- MCP: `llm_completion` tool + `agent_chat` / `agent_chat_confirm` /
+  `agent_chat_decline` tools (registry, schema, dispatch, handlers).
+  `is_automation_tool_call` was already name-based, so LLM + agent tools are
+  excluded from the automation bucket with no change. The agent tools are
+  NOT in `agent_engine::agent_tools()`, so the in-app agent cannot recursively
+  invoke itself (returns `AGENT_TOOL_UNKNOWN`); the MCP handlers box their
+  futures (`Box::pin`) to break the async recursion cycle the compiler
+  detects through `dispatch_tool_call`.
+- Coverage deviations from the plan: the coverage map requires exactly one
+  owner per Tauri command, so `aiAgentMcp` (suite `ai`) was NOT created as a
+  second group — `agent_chat*` already live in `aiAgent`, and their MCP tool
+  exposure is unit-asserted in `mcp_server` tests. `llmCompletion` (suite
+  `integrations`) covers the new command with validation-path evidence plus
+  REST 400/429 + Retry-After and MCP tool advertisement.
+- Tests: 15 new — retry/backoff/semaphore/usage/`send` parsing and
+  retryable-classification via wiremock (injected client + endpoint override),
+  `llm_rate_limiter` window math, `llm_completion` structured error codes
+  (temp data dir + `set_test_data_dir` guard), MCP tool registry assertions.
+- Settings: `AppSettings` gains `llm_max_concurrency` (default 8) and
+  `llm_requests_per_hour` (default 1000); serde defaults keep old settings
+  files loadable. GUI toggle deferred to S6 per plan.
 
 ### 10.5 S4 — Concurrency manager + scale hardening
 
@@ -822,7 +876,7 @@ profile store) without the GUI, so fleets run on headless hosts.
 | `delete_proxy_pool` | S2 | pools UI (S6) | `proxyPools` / `entities` |
 | `assign_profiles_to_pool` | S2 | pools UI (S6) | `proxyPools` / `entities` |
 | `rotate_profile_proxy` | S2 | pools UI (S6) | `proxyPools` / `entities` |
-| `llm_completion` (REST/MCP) | S3 | — | `llmCompletion` / `integrations` |
+| `llm_completion` (REST/MCP) | S3 ✅ | — | `llmCompletion` / `integrations` |
 
 Same rule as Phase 1: coverage-map additions + e2e evidence go in the SAME
 commit as the commands (exact-equality test breaks otherwise).
