@@ -567,3 +567,202 @@ test("cookie import/copy/export, profile encryption, and traffic-stat read/clear
     });
   });
 });
+
+test("batch profile creation: shared fingerprint template, per-item results", async () => {
+  await withApp("entities-batch-create", async (app) => {
+    // A request with no names and no prefix/count must fail with the
+    // structured BATCH_CREATE_NO_NAMES error before anything is created.
+    const noNames = await app.invokeError("batch_create_browser_profiles", {
+      names: [],
+      browser: "chromium",
+      version: "150.0.7871.100",
+      releaseType: "stable",
+    });
+    assert.match(noNames, /BATCH_CREATE_NO_NAMES/);
+
+    // Over-cap requests must fail up front (BATCH_CREATE_TOO_MANY).
+    const tooMany = await app.invokeError("batch_create_browser_profiles", {
+      names: Array.from({ length: 501 }, (_, i) => `Over ${i}`),
+      browser: "chromium",
+      version: "150.0.7871.100",
+      releaseType: "stable",
+    });
+    assert.match(tooMany, /BATCH_CREATE_TOO_MANY/);
+
+    // Valid batch: deterministic stored fingerprint shared by every profile,
+    // mirroring the single-create CRUD pattern (no real Chromium needed).
+    const results = await app.invoke("batch_create_browser_profiles", {
+      names: ["Batch Alpha", "Batch Beta", "Batch Alpha"],
+      browser: "chromium",
+      version: "150.0.7871.100",
+      releaseType: "stable",
+      proxyId: null,
+      vpnId: null,
+      chromiumConfig: { fingerprint: "{}" },
+      groupId: null,
+      ephemeral: false,
+      dnsBlocklist: null,
+      launchHook: null,
+    });
+    assert.equal(results.length, 3);
+    const ok = results.filter((result) => result.ok);
+    const failed = results.filter((result) => !result.ok);
+    assert.equal(
+      ok.length,
+      2,
+      "duplicate name inside the batch must not abort the rest",
+    );
+    assert.equal(failed.length, 1);
+    assert.match(failed[0].error, /already exists/i);
+    for (const result of ok) {
+      assert.ok(result.profile?.id);
+      assert.equal(result.profile.browser, "chromium");
+      assert.equal(
+        result.profile.chromium_config.fingerprint,
+        "{}",
+        "every profile shares the batch fingerprint",
+      );
+    }
+
+    // Prefix + count naming also works.
+    const generated = await app.invoke("batch_create_browser_profiles", {
+      names: [],
+      namePrefix: "Generated",
+      count: 2,
+      browser: "chromium",
+      version: "150.0.7871.100",
+      releaseType: "stable",
+      chromiumConfig: { fingerprint: "{}" },
+      ephemeral: true,
+    });
+    assert.equal(generated.length, 2);
+    assert.ok(generated.every((result) => result.ok));
+    assert.deepEqual(
+      generated.map((result) => result.name),
+      ["Generated 1", "Generated 2"],
+    );
+
+    const all = await app.invoke("list_browser_profiles");
+    const batchIds = ok
+      .map((result) => result.profile.id)
+      .concat(generated.map((result) => result.profile.id));
+    assert.ok(
+      batchIds.every((id) => all.some((profile) => profile.id === id)),
+      "batch-created profiles must appear in list_browser_profiles",
+    );
+    await app.invoke("delete_selected_profiles", { profileIds: batchIds });
+    assert.deepEqual(
+      (await app.invoke("list_browser_profiles")).filter((profile) =>
+        batchIds.includes(profile.id),
+      ),
+      [],
+    );
+  });
+});
+
+test("proxy pools: CRUD, round-robin assignment, and rotation", async () => {
+  await withApp("entities-proxy-pools", async (app) => {
+    // Validation errors surface as structured codes before anything persists.
+    const noName = await app.invokeError("create_proxy_pool", {
+      name: "  ",
+      proxyIds: [],
+    });
+    assert.match(noName, /POOL_EMPTY_NAME/);
+
+    const badProxy = await app.invokeError("create_proxy_pool", {
+      name: "Bad Pool",
+      proxyIds: ["does-not-exist"],
+    });
+    assert.match(badProxy, /POOL_INVALID_PROXY/);
+
+    // Seed stored proxies, then build a pool from them.
+    const makeProxy = async (name) => {
+      const proxy = await app.invoke("create_stored_proxy", {
+        name,
+        proxySettings: {
+          proxy_type: "http",
+          host: "127.0.0.1",
+          port: 9,
+          username: null,
+          password: null,
+        },
+      });
+      return proxy.id;
+    };
+    const poolIds = [await makeProxy("Pool A"), await makeProxy("Pool B")];
+
+    const pool = await app.invoke("create_proxy_pool", {
+      name: "Farm Pool",
+      proxyIds: poolIds,
+    });
+    assert.ok(pool.id);
+    assert.deepEqual(pool.proxy_ids, poolIds);
+
+    const listed = await app.invoke("list_proxy_pools");
+    assert.ok(listed.some((entry) => entry.id === pool.id));
+
+    // Update: drop member B, add member C.
+    const extraId = await makeProxy("Pool C");
+    const updated = await app.invoke("update_proxy_pool", {
+      poolId: pool.id,
+      name: "Farm Pool 2",
+      proxyIds: [poolIds[0], extraId],
+    });
+    assert.equal(updated.name, "Farm Pool 2");
+    assert.deepEqual(updated.proxy_ids, [poolIds[0], extraId]);
+
+    // Round-robin assignment across profiles.
+    const created = await app.invoke("batch_create_browser_profiles", {
+      names: ["Pool Profile One", "Pool Profile Two"],
+      browser: "chromium",
+      version: "150.0.7871.100",
+      releaseType: "stable",
+      chromiumConfig: { fingerprint: "{}" },
+      ephemeral: true,
+    });
+    const profileIds = created.map((result) => result.profile.id);
+    const assigned = await app.invoke("assign_profiles_to_pool", {
+      poolId: pool.id,
+      profileIds,
+    });
+    assert.ok(
+      assigned.every((result) => result.ok),
+      JSON.stringify(assigned),
+    );
+    const assignedIds = new Set(assigned.map((result) => result.proxy_id));
+    assert.equal(
+      assignedIds.size,
+      2,
+      "round-robin distributes distinct members across profiles",
+    );
+    assert.ok(
+      [...assignedIds].every((id) => updated.proxy_ids.includes(id)),
+      "assigned proxies must be pool members",
+    );
+
+    // Rotation moves a profile off its current member to another pool member.
+    const rotated = await app.invoke("rotate_profile_proxy", {
+      profileId: profileIds[0],
+    });
+    assert.ok(rotated.id);
+    assert.notEqual(rotated.id, assigned[0].proxy_id);
+    assert.ok(updated.proxy_ids.includes(rotated.id));
+    const profile = (await app.invoke("list_browser_profiles")).find(
+      (entry) => entry.id === profileIds[0],
+    );
+    assert.equal(profile.proxy_id, rotated.id);
+
+    // Cleanup: pool delete, then profiles and proxies.
+    await app.invoke("delete_proxy_pool", { poolId: pool.id });
+    assert.deepEqual(
+      (await app.invoke("list_proxy_pools")).filter(
+        (entry) => entry.id === pool.id,
+      ),
+      [],
+    );
+    await app.invoke("delete_selected_profiles", { profileIds });
+    for (const id of [poolIds[0], extraId]) {
+      await app.invoke("delete_stored_proxy", { proxyId: id });
+    }
+  });
+});

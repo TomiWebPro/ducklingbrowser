@@ -5,6 +5,7 @@ use crate::downloaded_browsers_registry::DownloadedBrowsersRegistry;
 use crate::events;
 use crate::profile::types::{get_host_os, BrowserProfile, SyncMode};
 use crate::proxy_manager::PROXY_MANAGER;
+use serde::{Deserialize, Serialize};
 use std::fs::{self, create_dir_all};
 use std::path::{Path, PathBuf};
 use sysinfo::{Pid, ProcessRefreshKind, RefreshKind, System};
@@ -22,6 +23,63 @@ fn atomic_write(path: &Path, data: &[u8]) -> std::io::Result<()> {
     f.sync_all()?;
   }
   fs::rename(&tmp, path)
+}
+
+fn default_release_type() -> String {
+  "stable".to_string()
+}
+
+/// One profile entry in a batch-create request/response. Per-item so a single
+/// failure (e.g. a duplicate name) never aborts the rest of the batch.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BatchCreateResult {
+  pub name: String,
+  pub ok: bool,
+  pub profile: Option<BrowserProfile>,
+  pub error: Option<String>,
+}
+
+/// Shared template for creating many profiles in one call. `names` wins when
+/// non-empty; otherwise `name_prefix` + `count` generates `"{prefix} {i}"`
+/// names. A provided `chromium_config.fingerprint` skips fingerprint
+/// generation entirely; otherwise one fingerprint is generated for the batch
+/// and shared by every profile.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BatchCreateProfilesRequest {
+  pub names: Vec<String>,
+  pub name_prefix: Option<String>,
+  pub count: Option<u32>,
+  pub browser: String,
+  pub version: String,
+  pub release_type: String,
+  pub proxy_id: Option<String>,
+  pub vpn_id: Option<String>,
+  pub chromium_config: Option<ChromiumConfig>,
+  pub group_id: Option<String>,
+  pub ephemeral: bool,
+  pub dns_blocklist: Option<String>,
+  pub launch_hook: Option<String>,
+}
+
+impl Default for BatchCreateProfilesRequest {
+  fn default() -> Self {
+    Self {
+      names: Vec::new(),
+      name_prefix: None,
+      count: None,
+      browser: String::new(),
+      version: String::new(),
+      release_type: default_release_type(),
+      proxy_id: None,
+      vpn_id: None,
+      chromium_config: None,
+      group_id: None,
+      ephemeral: false,
+      dns_blocklist: None,
+      launch_hook: None,
+    }
+  }
 }
 
 pub struct ProfileManager {
@@ -326,7 +384,323 @@ impl ProfileManager {
     Ok(profile)
   }
 
+  /// Hard cap on profiles created per batch request. Keeps one request from
+  /// overwhelming the host; callers loop for larger fleets.
+  pub const MAX_BATCH_CREATE_PROFILES: usize = 500;
+
+  /// Resolve the final profile-name list for a batch request. Explicit
+  /// `names` win when non-empty; otherwise `name_prefix` + `count` generates
+  /// `"{prefix} {i}"` names. Whitespace-only names are dropped.
+  pub(crate) fn resolve_batch_names(
+    names: &[String],
+    name_prefix: Option<&str>,
+    count: Option<u32>,
+  ) -> Result<Vec<String>, String> {
+    let mut resolved: Vec<String> = Vec::new();
+    if !names.is_empty() {
+      resolved.extend(
+        names
+          .iter()
+          .map(|n| n.trim().to_string())
+          .filter(|n| !n.is_empty()),
+      );
+    } else if let (Some(prefix), Some(count)) = (name_prefix, count) {
+      let prefix = prefix.trim().to_string();
+      if prefix.is_empty() {
+        return Err(serde_json::json!({ "code": "BATCH_CREATE_EMPTY_PREFIX" }).to_string());
+      }
+      resolved = (1..=count).map(|i| format!("{prefix} {i}")).collect();
+    }
+    if resolved.is_empty() {
+      return Err(serde_json::json!({ "code": "BATCH_CREATE_NO_NAMES" }).to_string());
+    }
+    if resolved.len() > Self::MAX_BATCH_CREATE_PROFILES {
+      return Err(
+        serde_json::json!({
+          "code": "BATCH_CREATE_TOO_MANY",
+          "params": {
+            "max": Self::MAX_BATCH_CREATE_PROFILES,
+            "requested": resolved.len()
+          }
+        })
+        .to_string(),
+      );
+    }
+    Ok(resolved)
+  }
+
+  /// Create many profiles from one shared template. The expensive steps —
+  /// fingerprint generation and the geolocation lookup — happen exactly once
+  /// per batch; per-profile work is directory + metadata writes only. Results
+  /// are per-name so one failure never aborts the rest of the batch.
+  pub async fn batch_create_profiles(
+    &self,
+    app_handle: &tauri::AppHandle,
+    req: &BatchCreateProfilesRequest,
+  ) -> Result<Vec<BatchCreateResult>, Box<dyn std::error::Error + Send + Sync>> {
+    let names = Self::resolve_batch_names(&req.names, req.name_prefix.as_deref(), req.count)?;
+
+    if req.browser == "camoufox" {
+      return Err(
+        serde_json::json!({ "code": "CAMOUFOX_REMOVED" })
+          .to_string()
+          .into(),
+      );
+    }
+    if req.proxy_id.is_some() && req.vpn_id.is_some() {
+      return Err("Cannot set both proxy_id and vpn_id".into());
+    }
+
+    let launch_hook = Self::normalize_launch_hook(req.launch_hook.clone())
+      .map_err(|e| Box::<dyn std::error::Error + Send + Sync>::from(e.to_string()))?;
+
+    // Resolve the shared Chromium config once for the whole batch. A provided
+    // fingerprint skips generation entirely; otherwise one fingerprint (with a
+    // single geolocation lookup through the profile's proxy) is reused for
+    // every profile in the batch.
+    let base_config = if req.browser == "chromium" {
+      let mut config = req.chromium_config.clone().unwrap_or_else(|| {
+        log::info!("Creating default browser config for batch");
+        crate::chromium_manager::ChromiumConfig::default()
+      });
+
+      if let Some(proxy_id_ref) = &req.proxy_id {
+        if let Some(proxy_settings) = PROXY_MANAGER.get_proxy_settings_by_id(proxy_id_ref) {
+          let proxy_url = if let (Some(username), Some(password)) =
+            (&proxy_settings.username, &proxy_settings.password)
+          {
+            format!(
+              "{}://{}:{}@{}:{}",
+              proxy_settings.proxy_type.to_lowercase(),
+              username,
+              password,
+              proxy_settings.host,
+              proxy_settings.port
+            )
+          } else {
+            format!(
+              "{}://{}:{}",
+              proxy_settings.proxy_type.to_lowercase(),
+              proxy_settings.host,
+              proxy_settings.port
+            )
+          };
+          config.proxy = Some(proxy_url);
+        }
+      }
+
+      let mut geolocation_applied = true;
+      if config.fingerprint.is_none() {
+        log::info!(
+          "Generating one shared fingerprint for batch of {} profiles",
+          names.len()
+        );
+        let temp_profile = BrowserProfile {
+          id: uuid::Uuid::new_v4(),
+          name: "batch-fingerprint-template".to_string(),
+          browser: req.browser.clone(),
+          version: req.version.clone(),
+          proxy_id: req.proxy_id.clone(),
+          vpn_id: None,
+          launch_hook: launch_hook.clone(),
+          process_id: None,
+          last_launch: None,
+          release_type: req.release_type.clone(),
+          chromium_config: None,
+          group_id: req.group_id.clone(),
+          tags: Vec::new(),
+          note: None,
+          window_color: None,
+          sync_mode: SyncMode::Disabled,
+          encryption_salt: None,
+          last_sync: None,
+          host_os: None,
+          ephemeral: false,
+          extension_group_id: None,
+          proxy_bypass_rules: Vec::new(),
+          created_by_id: None,
+          created_by_email: None,
+          dns_blocklist: None,
+          password_protected: false,
+          clear_on_close: false,
+          created_at: None,
+          updated_at: None,
+        };
+        match self
+          .chromium_manager
+          .generate_fingerprint_config(app_handle, &temp_profile, &config)
+          .await
+        {
+          Ok((generated_fingerprint, geo_applied)) => {
+            config.fingerprint = Some(generated_fingerprint);
+            geolocation_applied = geo_applied;
+          }
+          Err(e) => {
+            return Err(format!("Failed to generate fingerprint for batch: {e}").into());
+          }
+        }
+      } else {
+        log::info!("Using provided fingerprint for batch");
+      }
+
+      config.geo_proxy_signature = if geolocation_applied {
+        Some(crate::chromium_manager::ChromiumManager::geo_signature(
+          req
+            .proxy_id
+            .as_ref()
+            .and_then(|id| PROXY_MANAGER.get_proxy_settings_by_id(id))
+            .as_ref(),
+          None,
+          config.geoip.as_ref(),
+        ))
+      } else {
+        None
+      };
+
+      config.proxy = None;
+      Some(config)
+    } else {
+      req.chromium_config.clone()
+    };
+
+    let existing_profiles = self
+      .list_profiles()
+      .map_err(|e| format!("Failed to list existing profiles: {e}"))?;
+    let mut existing_names: std::collections::HashSet<String> = existing_profiles
+      .iter()
+      .map(|p| p.name.to_lowercase())
+      .collect();
+
+    let results = self.create_batch_many(names, req, base_config, launch_hook, &mut existing_names);
+
+    // One tag-index rebuild and one event for the whole batch instead of one
+    // per profile (the O(n) scan and rebuild dominate at hundreds of profiles).
+    let _ = crate::tag_manager::TAG_MANAGER.lock().map(|tm| {
+      let _ = tm.rebuild_from_profiles(&self.list_profiles().unwrap_or_default());
+    });
+    if let Err(e) = events::emit_empty("profiles-changed") {
+      log::warn!("Warning: Failed to emit profiles-changed event: {e}");
+    }
+
+    Ok(results)
+  }
+
+  fn create_batch_many(
+    &self,
+    names: Vec<String>,
+    req: &BatchCreateProfilesRequest,
+    base_config: Option<ChromiumConfig>,
+    launch_hook: Option<String>,
+    existing_names: &mut std::collections::HashSet<String>,
+  ) -> Vec<BatchCreateResult> {
+    let mut results = Vec::with_capacity(names.len());
+    for name in names {
+      let lower = name.to_lowercase();
+      if existing_names.contains(&lower) {
+        results.push(BatchCreateResult {
+          name: name.clone(),
+          ok: false,
+          profile: None,
+          error: Some(serde_json::json!({ "code": "PROFILE_NAME_ALREADY_EXISTS" }).to_string()),
+        });
+        continue;
+      }
+
+      let profile_id = uuid::Uuid::new_v4();
+      let profiles_dir = self.get_profiles_dir();
+      let profile_uuid_dir = profiles_dir.join(profile_id.to_string());
+
+      let created = (|| -> Result<BrowserProfile, Box<dyn std::error::Error>> {
+        create_dir_all(&profile_uuid_dir)?;
+        if !req.ephemeral {
+          create_dir_all(profile_uuid_dir.join("profile"))?;
+        }
+
+        let profile = BrowserProfile {
+          id: profile_id,
+          name: name.clone(),
+          browser: req.browser.clone(),
+          version: req.version.clone(),
+          proxy_id: req.proxy_id.clone(),
+          vpn_id: req.vpn_id.clone(),
+          launch_hook: launch_hook.clone(),
+          process_id: None,
+          last_launch: None,
+          release_type: req.release_type.clone(),
+          chromium_config: base_config.clone(),
+          group_id: req.group_id.clone(),
+          tags: Vec::new(),
+          note: None,
+          window_color: Some(crate::chromium_manager::derive_profile_color(&profile_id)),
+          sync_mode: SyncMode::Disabled,
+          encryption_salt: None,
+          last_sync: None,
+          host_os: Some(get_host_os()),
+          ephemeral: req.ephemeral,
+          extension_group_id: None,
+          proxy_bypass_rules: Vec::new(),
+          created_by_id: None,
+          created_by_email: None,
+          dns_blocklist: req.dns_blocklist.clone(),
+          password_protected: false,
+          clear_on_close: false,
+          created_at: Some(
+            std::time::SystemTime::now()
+              .duration_since(std::time::UNIX_EPOCH)
+              .map(|d| d.as_secs())
+              .unwrap_or(0),
+          ),
+          updated_at: Some(crate::proxy_manager::now_secs()),
+        };
+
+        self.save_profile_raw(&profile)?;
+        if !profile_uuid_dir.join("metadata.json").exists() {
+          return Err("Failed to write profile metadata".into());
+        }
+        Ok(profile)
+      })();
+
+      match created {
+        Ok(profile) => {
+          existing_names.insert(lower);
+          log::info!("Batch profile '{name}' created with ID: {}", profile.id);
+          results.push(BatchCreateResult {
+            name,
+            ok: true,
+            profile: Some(profile),
+            error: None,
+          });
+        }
+        Err(e) => {
+          log::warn!("Batch profile '{name}' failed: {e}");
+          results.push(BatchCreateResult {
+            name,
+            ok: false,
+            profile: None,
+            error: Some(e.to_string()),
+          });
+        }
+      }
+    }
+
+    results
+  }
+
   pub fn save_profile(&self, profile: &BrowserProfile) -> Result<(), Box<dyn std::error::Error>> {
+    self.save_profile_raw(profile)?;
+
+    // Update tag suggestions after any save
+    let _ = crate::tag_manager::TAG_MANAGER.lock().map(|tm| {
+      let _ = tm.rebuild_from_profiles(&self.list_profiles().unwrap_or_default());
+    });
+
+    Ok(())
+  }
+
+  /// Write `metadata.json` without the O(n) tag-index rebuild. Batch paths
+  /// (e.g. `batch_create_profiles`) call this per profile and rebuild the tag
+  /// index once at the end.
+  fn save_profile_raw(&self, profile: &BrowserProfile) -> Result<(), Box<dyn std::error::Error>> {
     let profiles_dir = self.get_profiles_dir();
     let profile_uuid_dir = profiles_dir.join(profile.id.to_string());
     let profile_file = profile_uuid_dir.join("metadata.json");
@@ -336,11 +710,6 @@ impl ProfileManager {
 
     let json = serde_json::to_string_pretty(profile)?;
     atomic_write(&profile_file, json.as_bytes())?;
-
-    // Update tag suggestions after any save
-    let _ = crate::tag_manager::TAG_MANAGER.lock().map(|tm| {
-      let _ = tm.rebuild_from_profiles(&self.list_profiles().unwrap_or_default());
-    });
 
     Ok(())
   }
@@ -1669,6 +2038,139 @@ mod tests {
     let result_none = super::validate_launch_hook(None).unwrap();
     assert!(result_none.is_none());
   }
+
+  #[test]
+  fn test_resolve_batch_names_explicit_list() {
+    let names = super::ProfileManager::resolve_batch_names(
+      &["Alpha".to_string(), "  Beta  ".to_string(), "".to_string()],
+      None,
+      None,
+    )
+    .unwrap();
+    assert_eq!(names, vec!["Alpha", "Beta"]);
+  }
+
+  #[test]
+  fn test_resolve_batch_names_prefix_and_count() {
+    let names = super::ProfileManager::resolve_batch_names(&[], Some("Account"), Some(3)).unwrap();
+    assert_eq!(names, vec!["Account 1", "Account 2", "Account 3"]);
+  }
+
+  #[test]
+  fn test_resolve_batch_names_rejects_empty_prefix() {
+    let err = super::ProfileManager::resolve_batch_names(&[], Some("  "), Some(3)).unwrap_err();
+    let parsed: serde_json::Value = serde_json::from_str(&err).unwrap();
+    assert_eq!(parsed["code"], "BATCH_CREATE_EMPTY_PREFIX");
+  }
+
+  #[test]
+  fn test_resolve_batch_names_rejects_no_names() {
+    let err = super::ProfileManager::resolve_batch_names(&[], None, None).unwrap_err();
+    let parsed: serde_json::Value = serde_json::from_str(&err).unwrap();
+    assert_eq!(parsed["code"], "BATCH_CREATE_NO_NAMES");
+  }
+
+  #[test]
+  fn test_resolve_batch_names_rejects_over_cap() {
+    let names: Vec<String> = (0..(super::ProfileManager::MAX_BATCH_CREATE_PROFILES + 1))
+      .map(|i| format!("P{i}"))
+      .collect();
+    let err = super::ProfileManager::resolve_batch_names(&names, None, None).unwrap_err();
+    let parsed: serde_json::Value = serde_json::from_str(&err).unwrap();
+    assert_eq!(parsed["code"], "BATCH_CREATE_TOO_MANY");
+    assert_eq!(
+      parsed["params"]["requested"],
+      super::ProfileManager::MAX_BATCH_CREATE_PROFILES + 1
+    );
+  }
+
+  #[test]
+  fn test_create_batch_many_creates_profiles_with_shared_fingerprint() {
+    let temp_dir = TempDir::new().unwrap();
+    let _guard = crate::app_dirs::set_test_data_dir(temp_dir.path().to_path_buf());
+    let manager = ProfileManager::instance();
+    let fingerprint = r#"{"timezone":"UTC","language":"en-US"}"#.to_string();
+    let req = super::BatchCreateProfilesRequest {
+      names: vec!["Batch One".to_string(), "Batch Two".to_string()],
+      browser: "chromium".to_string(),
+      version: "150.0.7871.100".to_string(),
+      release_type: "stable".to_string(),
+      chromium_config: Some(crate::chromium_manager::ChromiumConfig {
+        fingerprint: Some(fingerprint.clone()),
+        ..Default::default()
+      }),
+      ..Default::default()
+    };
+
+    let results = manager.create_batch_many(
+      vec!["Batch One".to_string(), "Batch Two".to_string()],
+      &req,
+      req.chromium_config.clone(),
+      None,
+      &mut std::collections::HashSet::new(),
+    );
+
+    assert_eq!(results.len(), 2);
+    assert!(results.iter().all(|r| r.ok), "{:?}", results);
+    let profiles_dir = manager.get_profiles_dir();
+    for result in &results {
+      let profile = result.profile.as_ref().unwrap();
+      assert_eq!(
+        profile
+          .chromium_config
+          .as_ref()
+          .unwrap()
+          .fingerprint
+          .as_deref(),
+        Some(fingerprint.as_str())
+      );
+      assert_eq!(profile.browser, "chromium");
+      assert!(
+        profiles_dir
+          .join(profile.id.to_string())
+          .join("metadata.json")
+          .exists(),
+        "metadata.json must exist for {}",
+        profile.name
+      );
+    }
+
+    let listed = manager.list_profiles().unwrap();
+    assert_eq!(listed.len(), 2);
+  }
+
+  #[test]
+  fn test_create_batch_many_reports_duplicate_names_per_item() {
+    let temp_dir = TempDir::new().unwrap();
+    let _guard = crate::app_dirs::set_test_data_dir(temp_dir.path().to_path_buf());
+    let manager = ProfileManager::instance();
+    let req = super::BatchCreateProfilesRequest {
+      names: vec!["Taken".to_string()],
+      browser: "chromium".to_string(),
+      version: "150.0.7871.100".to_string(),
+      release_type: "stable".to_string(),
+      chromium_config: Some(crate::chromium_manager::ChromiumConfig {
+        fingerprint: Some(r#"{"timezone":"UTC"}"#.to_string()),
+        ..Default::default()
+      }),
+      ..Default::default()
+    };
+
+    let mut existing = std::collections::HashSet::new();
+    existing.insert("taken".to_string());
+    let results = manager.create_batch_many(
+      vec!["Taken".to_string(), "Fresh".to_string()],
+      &req,
+      req.chromium_config.clone(),
+      None,
+      &mut existing,
+    );
+
+    assert_eq!(results.len(), 2);
+    assert!(!results[0].ok);
+    assert!(results[0].error.is_some());
+    assert!(results[1].ok);
+  }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1914,6 +2416,21 @@ pub async fn create_browser_profile_new(
     launch_hook,
   )
   .await
+}
+
+#[tauri::command]
+pub async fn batch_create_browser_profiles(
+  app_handle: tauri::AppHandle,
+  request: BatchCreateProfilesRequest,
+) -> Result<Vec<BatchCreateResult>, String> {
+  // A dead/unreachable proxy or VPN cancels the batch before any profile is
+  // created (mirrors create_browser_profile_new; validated once, not per name).
+  crate::validate_profile_network(request.proxy_id.as_deref(), request.vpn_id.as_deref()).await?;
+
+  ProfileManager::instance()
+    .batch_create_profiles(&app_handle, &request)
+    .await
+    .map_err(|e| crate::wrap_backend_error(e, "Failed to batch create profiles"))
 }
 
 #[tauri::command]

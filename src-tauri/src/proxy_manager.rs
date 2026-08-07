@@ -2284,6 +2284,38 @@ lazy_static::lazy_static! {
     pub static ref PROXY_MANAGER: ProxyManager = ProxyManager::new();
 }
 
+impl ProxyManager {
+  /// Test seam: insert a stored proxy directly into the in-memory map and persist
+  /// it without needing a Tauri AppHandle.
+  #[cfg(test)]
+  pub fn insert_proxy_for_tests(&self, proxy: StoredProxy) -> String {
+    let id = proxy.id.clone();
+    {
+      let mut stored_proxies = self.stored_proxies.lock().unwrap();
+      stored_proxies.insert(id.clone(), proxy.clone());
+    }
+    if let Err(e) = self.save_proxy(&proxy) {
+      log::warn!("Failed to save test proxy: {e}");
+    }
+    id
+  }
+
+  /// Test seam: remove a stored proxy from the in-memory map and delete its file.
+  #[cfg(test)]
+  pub fn delete_stored_proxy_for_tests(&self, proxy_id: &str) -> bool {
+    let removed = self
+      .stored_proxies
+      .lock()
+      .unwrap()
+      .remove(proxy_id)
+      .is_some();
+    if removed {
+      let _ = self.delete_proxy_file(proxy_id);
+    }
+    removed
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;

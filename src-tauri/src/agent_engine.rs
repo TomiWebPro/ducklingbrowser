@@ -69,6 +69,7 @@ fn is_read_only_tool(name: &str) -> bool {
       | "get_vpn_status"
       | "list_extensions"
       | "list_extension_groups"
+      | "list_proxy_pools"
       | "get_dns_blocklist_status"
       | "get_profile_fingerprint"
       | "screenshot"
@@ -90,7 +91,8 @@ fn card_kind_for(name: &str) -> &'static str {
     | "update_profile_proxy_bypass_rules"
     | "update_profile_dns_blocklist"
     | "assign_extension_group_to_profile" => "profile_update",
-    "update_proxy" | "create_proxy" | "delete_proxy" | "import_proxies" | "import_vpn" => "proxy",
+    "update_proxy" | "create_proxy" | "delete_proxy" | "import_proxies" | "import_vpn"
+    | "create_proxy_pool" | "update_proxy_pool" | "delete_proxy_pool" => "proxy",
     _ => "custom",
   }
 }

@@ -62,6 +62,23 @@ export const commandCoverage = {
       "delete_selected_profiles",
     ],
   },
+  batchCreateProfiles: {
+    suite: "entities",
+    level: "integration",
+    commands: ["batch_create_browser_profiles"],
+  },
+  proxyPools: {
+    suite: "entities",
+    level: "integration",
+    commands: [
+      "create_proxy_pool",
+      "list_proxy_pools",
+      "update_proxy_pool",
+      "delete_proxy_pool",
+      "assign_profiles_to_pool",
+      "rotate_profile_proxy",
+    ],
+  },
   proxyEntities: {
     suite: "entities",
     level: "integration",

@@ -7,6 +7,7 @@ use axum::{
   routing::{get, post},
   Json, Router,
 };
+use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -121,6 +122,10 @@ impl From<crate::cdp_session::CdpError> for McpError {
 }
 
 const DEFAULT_MCP_PORT: u16 = 51080;
+
+/// How many profile launches run concurrently inside one MCP batch_run call.
+/// Mirrors the REST batch window (`BATCH_RUN_CONCURRENCY` in api_server.rs).
+const MCP_BATCH_RUN_CONCURRENCY: usize = 8;
 
 struct McpSession {
   initialized: bool,
@@ -1045,6 +1050,105 @@ impl McpServer {
           "required": ["content", "format"]
         }),
       },
+      // Proxy pool tools
+      McpTool {
+        name: "create_proxy_pool".to_string(),
+        description: "Create a proxy pool from existing stored proxies".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Pool name"
+            },
+            "proxy_ids": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Stored proxy IDs that make up the pool"
+            }
+          },
+          "required": ["name", "proxy_ids"]
+        }),
+      },
+      McpTool {
+        name: "list_proxy_pools".to_string(),
+        description: "List all proxy pools".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {},
+          "required": []
+        }),
+      },
+      McpTool {
+        name: "update_proxy_pool".to_string(),
+        description: "Update a proxy pool's name and/or members".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "pool_id": {
+              "type": "string",
+              "description": "The UUID of the pool to update"
+            },
+            "name": {
+              "type": "string",
+              "description": "New pool name"
+            },
+            "proxy_ids": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "New member proxy IDs"
+            }
+          },
+          "required": ["pool_id", "name", "proxy_ids"]
+        }),
+      },
+      McpTool {
+        name: "delete_proxy_pool".to_string(),
+        description: "Delete a proxy pool. Profiles keep their current proxy.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "pool_id": {
+              "type": "string",
+              "description": "The UUID of the pool to delete"
+            }
+          },
+          "required": ["pool_id"]
+        }),
+      },
+      McpTool {
+        name: "assign_profiles_to_pool".to_string(),
+        description: "Assign pool proxies to profiles using round-robin distribution".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "pool_id": {
+              "type": "string",
+              "description": "The UUID of the pool to distribute from"
+            },
+            "profile_ids": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Profile UUIDs to assign a pool member to"
+            }
+          },
+          "required": ["pool_id", "profile_ids"]
+        }),
+      },
+      McpTool {
+        name: "rotate_profile_proxy".to_string(),
+        description: "Rotate a profile to the next member of its proxy pool".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": {
+              "type": "string",
+              "description": "The UUID of the profile to rotate"
+            }
+          },
+          "required": ["profile_id"]
+        }),
+      },
       // VPN management tools
       McpTool {
         name: "import_vpn".to_string(),
@@ -1814,6 +1918,13 @@ impl McpServer {
       // Proxy import/export
       "export_proxies" => self.handle_export_proxies(arguments).await,
       "import_proxies" => self.handle_import_proxies(arguments).await,
+      // Proxy pool management
+      "create_proxy_pool" => self.handle_create_proxy_pool(arguments).await,
+      "list_proxy_pools" => self.handle_list_proxy_pools().await,
+      "update_proxy_pool" => self.handle_update_proxy_pool(arguments).await,
+      "delete_proxy_pool" => self.handle_delete_proxy_pool(arguments).await,
+      "assign_profiles_to_pool" => self.handle_assign_profiles_to_pool(arguments).await,
+      "rotate_profile_proxy" => self.handle_rotate_profile_proxy(arguments).await,
       // VPN management
       "import_vpn" => self.handle_import_vpn(arguments).await,
       "list_vpn_configs" => self.handle_list_vpn_configs().await,
@@ -1995,7 +2106,8 @@ impl McpServer {
 
     // Launch a fresh instance, honoring the requested headless mode. The CDP
     // port is self-allocated and discovered later via get_cdp_port_for_profile.
-    crate::browser_runner::launch_browser_profile_impl(
+    // Pool members fail over to the next live member on launch failure.
+    crate::proxy_pool::launch_browser_profile_with_pool_failover(
       app_handle.clone(),
       profile.clone(),
       url.map(|s| s.to_string()),
@@ -2123,41 +2235,44 @@ impl McpServer {
         .clone()
     };
 
-    let mut launched = 0usize;
-    let mut lines: Vec<String> = Vec::with_capacity(profile_ids.len());
-    for profile_id in &profile_ids {
-      let Some(profile) = profiles.iter().find(|p| p.id.to_string() == *profile_id) else {
-        lines.push(format!("{profile_id}: not found"));
-        continue;
-      };
-      if profile.browser != "chromium" {
-        lines.push(format!(
-          "{profile_id}: unsupported browser (MCP supports Chromium)"
-        ));
-        continue;
-      }
-      if let Err(e) = crate::team_lock::acquire_team_lock_if_needed(profile).await {
-        lines.push(format!("{profile_id}: {e}"));
-        continue;
-      }
-      match crate::browser_runner::launch_browser_profile_impl(
-        app_handle.clone(),
-        profile.clone(),
-        url.map(|s| s.to_string()),
-        None,
-        headless,
-        true,
-      )
-      .await
-      {
-        Ok(_) => {
-          launched += 1;
-          lines.push(format!("{}: launched", profile.name));
+    let lines: Vec<String> = futures_util::stream::iter(profile_ids.clone())
+      .map(|profile_id| {
+        let profiles = profiles.clone();
+        let app_handle = app_handle.clone();
+        let url = url.map(|s| s.to_string());
+        async move {
+          let Some(profile) = profiles.iter().find(|p| p.id.to_string() == *profile_id) else {
+            return format!("{profile_id}: not found");
+          };
+          if profile.browser != "chromium" {
+            return format!("{profile_id}: unsupported browser (MCP supports Chromium)");
+          }
+          if let Err(e) = crate::team_lock::acquire_team_lock_if_needed(profile).await {
+            return format!("{profile_id}: {e}");
+          }
+          match crate::proxy_pool::launch_browser_profile_with_pool_failover(
+            app_handle,
+            profile.clone(),
+            url,
+            None,
+            headless,
+            true,
+          )
+          .await
+          {
+            Ok(_) => format!("{}: launched", profile.name),
+            Err(e) => format!("{}: launch failed: {e}", profile.name),
+          }
         }
-        Err(e) => lines.push(format!("{}: launch failed: {e}", profile.name)),
-      }
-    }
+      })
+      .buffered(MCP_BATCH_RUN_CONCURRENCY)
+      .collect()
+      .await;
 
+    let launched = lines
+      .iter()
+      .filter(|line| line.ends_with(": launched"))
+      .count();
     Ok(serde_json::json!({
       "content": [{
         "type": "text",
@@ -3314,6 +3429,264 @@ impl McpServer {
           result.cookies_imported,
           result.cookies_replaced,
           result.errors.len()
+        )
+      }]
+    }))
+  }
+
+  // Proxy pool management handlers
+  async fn handle_create_proxy_pool(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let name = arguments
+      .get("name")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing name".to_string(),
+      })?
+      .to_string();
+    let proxy_ids: Vec<String> = arguments
+      .get("proxy_ids")
+      .and_then(|v| v.as_array())
+      .map(|a| {
+        a.iter()
+          .filter_map(|v| v.as_str().map(|s| s.to_string()))
+          .collect()
+      })
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing proxy_ids array".to_string(),
+      })?;
+    let pool = crate::proxy_pool::PROXY_POOL_MANAGER
+      .create_pool(name, proxy_ids)
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to create proxy pool: {e}"),
+      })?;
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": format!(
+          "Proxy pool '{}' created with {} member(s): {}",
+          pool.name,
+          pool.proxy_ids.len(),
+          pool.proxy_ids.join(", ")
+        )
+      }]
+    }))
+  }
+
+  async fn handle_list_proxy_pools(&self) -> Result<serde_json::Value, McpError> {
+    let pools = crate::proxy_pool::PROXY_POOL_MANAGER.list_pools();
+    let text = if pools.is_empty() {
+      "No proxy pools defined".to_string()
+    } else {
+      pools
+        .iter()
+        .map(|p| {
+          format!(
+            "{} (id: {}, {} member(s): {})",
+            p.name,
+            p.id,
+            p.proxy_ids.len(),
+            p.proxy_ids.join(", ")
+          )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+    };
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": text }]
+    }))
+  }
+
+  async fn handle_update_proxy_pool(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let pool_id = arguments
+      .get("pool_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing pool_id".to_string(),
+      })?
+      .to_string();
+    let name = arguments
+      .get("name")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing name".to_string(),
+      })?
+      .to_string();
+    let proxy_ids: Vec<String> = arguments
+      .get("proxy_ids")
+      .and_then(|v| v.as_array())
+      .map(|a| {
+        a.iter()
+          .filter_map(|v| v.as_str().map(|s| s.to_string()))
+          .collect()
+      })
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing proxy_ids array".to_string(),
+      })?;
+    let pool = crate::proxy_pool::PROXY_POOL_MANAGER
+      .update_pool(pool_id, name, proxy_ids)
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to update proxy pool: {e}"),
+      })?;
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": format!(
+          "Proxy pool '{}' updated with {} member(s)",
+          pool.name,
+          pool.proxy_ids.len()
+        )
+      }]
+    }))
+  }
+
+  async fn handle_delete_proxy_pool(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let pool_id = arguments
+      .get("pool_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing pool_id".to_string(),
+      })?
+      .to_string();
+    crate::proxy_pool::PROXY_POOL_MANAGER
+      .delete_pool(&pool_id)
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to delete proxy pool: {e}"),
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": format!("Proxy pool {pool_id} deleted") }]
+    }))
+  }
+
+  async fn handle_assign_profiles_to_pool(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let pool_id = arguments
+      .get("pool_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing pool_id".to_string(),
+      })?
+      .to_string();
+    let profile_ids: Vec<String> = arguments
+      .get("profile_ids")
+      .and_then(|v| v.as_array())
+      .map(|a| {
+        a.iter()
+          .filter_map(|v| v.as_str().map(|s| s.to_string()))
+          .collect()
+      })
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing profile_ids array".to_string(),
+      })?;
+
+    let app_handle = {
+      let inner = self.inner.lock().await;
+      inner
+        .app_handle
+        .as_ref()
+        .ok_or_else(|| McpError {
+          code: -32000,
+          message: "MCP server not properly initialized".to_string(),
+        })?
+        .clone()
+    };
+
+    let results = crate::proxy_pool::PROXY_POOL_MANAGER
+      .assign_profiles_to_pool(&app_handle, pool_id, profile_ids)
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to assign profiles: {e}"),
+      })?;
+
+    let lines: Vec<String> = results
+      .iter()
+      .map(|r| {
+        if r.ok {
+          format!(
+            "{}: assigned proxy {}",
+            r.profile_id,
+            r.proxy_id.clone().unwrap_or_default()
+          )
+        } else {
+          format!(
+            "{}: failed ({})",
+            r.profile_id,
+            r.error
+              .clone()
+              .unwrap_or_else(|| "unknown error".to_string())
+          )
+        }
+      })
+      .collect();
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": lines.join("\n") }]
+    }))
+  }
+
+  async fn handle_rotate_profile_proxy(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = arguments
+      .get("profile_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing profile_id".to_string(),
+      })?
+      .to_string();
+
+    let app_handle = {
+      let inner = self.inner.lock().await;
+      inner
+        .app_handle
+        .as_ref()
+        .ok_or_else(|| McpError {
+          code: -32000,
+          message: "MCP server not properly initialized".to_string(),
+        })?
+        .clone()
+    };
+
+    let rotated = crate::proxy_pool::PROXY_POOL_MANAGER
+      .rotate_profile_proxy(&app_handle, &profile_id)
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to rotate profile proxy: {e}"),
+      })?;
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": format!(
+          "Profile {} rotated to proxy {} ({}://{}:{})",
+          profile_id,
+          rotated.id,
+          rotated.proxy_settings.proxy_type,
+          rotated.proxy_settings.host,
+          rotated.proxy_settings.port
         )
       }]
     }))
@@ -4936,6 +5309,13 @@ mod tests {
     // Proxy import/export tools
     assert!(tool_names.contains(&"export_proxies"));
     assert!(tool_names.contains(&"import_proxies"));
+    // Proxy pool tools
+    assert!(tool_names.contains(&"create_proxy_pool"));
+    assert!(tool_names.contains(&"list_proxy_pools"));
+    assert!(tool_names.contains(&"update_proxy_pool"));
+    assert!(tool_names.contains(&"delete_proxy_pool"));
+    assert!(tool_names.contains(&"assign_profiles_to_pool"));
+    assert!(tool_names.contains(&"rotate_profile_proxy"));
     // VPN tools
     assert!(tool_names.contains(&"import_vpn"));
     assert!(tool_names.contains(&"list_vpn_configs"));

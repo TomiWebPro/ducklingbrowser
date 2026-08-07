@@ -77,6 +77,7 @@ mod platform_browser;
 mod profile;
 mod profile_importer;
 mod proxy_manager;
+mod proxy_pool;
 pub mod proxy_runner;
 pub mod proxy_server;
 pub mod proxy_storage;
@@ -106,11 +107,11 @@ use browser_runner::{
 };
 
 use profile::manager::{
-  check_browser_status, clone_profile, create_browser_profile_new, delete_profile,
-  list_browser_profiles, rename_profile, update_chromium_config, update_profile_clear_on_close,
-  update_profile_dns_blocklist, update_profile_launch_hook, update_profile_note,
-  update_profile_proxy, update_profile_proxy_bypass_rules, update_profile_tags, update_profile_vpn,
-  update_profile_window_color,
+  batch_create_browser_profiles, check_browser_status, clone_profile, create_browser_profile_new,
+  delete_profile, list_browser_profiles, rename_profile, update_chromium_config,
+  update_profile_clear_on_close, update_profile_dns_blocklist, update_profile_launch_hook,
+  update_profile_note, update_profile_proxy, update_profile_proxy_bypass_rules,
+  update_profile_tags, update_profile_vpn, update_profile_window_color,
 };
 
 use profile::password::{
@@ -344,6 +345,62 @@ async fn delete_stored_proxy(app_handle: tauri::AppHandle, proxy_id: String) -> 
   crate::proxy_manager::PROXY_MANAGER
     .delete_stored_proxy(&app_handle, &proxy_id)
     .map_err(|e| format!("Failed to delete stored proxy: {e}"))
+}
+
+#[tauri::command]
+async fn create_proxy_pool(
+  name: String,
+  proxy_ids: Vec<String>,
+) -> Result<crate::proxy_pool::ProxyPool, String> {
+  crate::proxy_pool::PROXY_POOL_MANAGER
+    .create_pool(name, proxy_ids)
+    .map_err(|e| wrap_backend_error(e, "Failed to create proxy pool"))
+}
+
+#[tauri::command]
+async fn list_proxy_pools() -> Result<Vec<crate::proxy_pool::ProxyPool>, String> {
+  Ok(crate::proxy_pool::PROXY_POOL_MANAGER.list_pools())
+}
+
+#[tauri::command]
+async fn update_proxy_pool(
+  pool_id: String,
+  name: String,
+  proxy_ids: Vec<String>,
+) -> Result<crate::proxy_pool::ProxyPool, String> {
+  crate::proxy_pool::PROXY_POOL_MANAGER
+    .update_pool(pool_id, name, proxy_ids)
+    .map_err(|e| wrap_backend_error(e, "Failed to update proxy pool"))
+}
+
+#[tauri::command]
+async fn delete_proxy_pool(pool_id: String) -> Result<(), String> {
+  crate::proxy_pool::PROXY_POOL_MANAGER
+    .delete_pool(&pool_id)
+    .map_err(|e| wrap_backend_error(e, "Failed to delete proxy pool"))
+}
+
+#[tauri::command]
+async fn assign_profiles_to_pool(
+  app_handle: tauri::AppHandle,
+  pool_id: String,
+  profile_ids: Vec<String>,
+) -> Result<Vec<crate::proxy_pool::PoolAssignResult>, String> {
+  crate::proxy_pool::PROXY_POOL_MANAGER
+    .assign_profiles_to_pool(&app_handle, pool_id, profile_ids)
+    .await
+    .map_err(|e| wrap_backend_error(e, "Failed to assign profiles to pool"))
+}
+
+#[tauri::command]
+async fn rotate_profile_proxy(
+  app_handle: tauri::AppHandle,
+  profile_id: String,
+) -> Result<crate::proxy_pool::ProxySettingsDto, String> {
+  crate::proxy_pool::PROXY_POOL_MANAGER
+    .rotate_profile_proxy(&app_handle, &profile_id)
+    .await
+    .map_err(|e| wrap_backend_error(e, "Failed to rotate profile proxy"))
 }
 
 #[tauri::command]
@@ -2391,6 +2448,7 @@ pub fn run_with_builder(
       clone_profile,
       check_browser_exists,
       create_browser_profile_new,
+      batch_create_browser_profiles,
       list_browser_profiles,
       launch_browser_profile,
       fetch_browser_versions_with_count,
@@ -2450,6 +2508,12 @@ pub fn run_with_builder(
       update_stored_proxy,
       delete_stored_proxy,
       check_proxy_validity,
+      create_proxy_pool,
+      list_proxy_pools,
+      update_proxy_pool,
+      delete_proxy_pool,
+      assign_profiles_to_pool,
+      rotate_profile_proxy,
       get_cached_proxy_check,
       export_proxies,
       import_proxies_json,
@@ -2652,6 +2716,13 @@ mod tests {
       "check_chromium_downloaded",
       "accept_chromium_terms",
       "scheduler_run_now",
+      "batch_create_browser_profiles",
+      "create_proxy_pool",
+      "list_proxy_pools",
+      "update_proxy_pool",
+      "delete_proxy_pool",
+      "assign_profiles_to_pool",
+      "rotate_profile_proxy",
     ];
 
     // Extract command names from the generate_handler! macro in this file

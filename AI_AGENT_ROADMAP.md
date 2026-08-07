@@ -1,6 +1,12 @@
 # AI Agent + AI Scheduled Tasks — Implementation Roadmap
 
 Status: approved plan. M0–M8 implemented 2026-08-02 (M0 `4389c6a`, M1 `9f3e3e6`, M2 `23aadb8`, M3 `eedec53`, M4 `18e17fe`, M5 `0a9e44c`, M6 `74d6993`, M7 `52a58b8`, M8 `d8f1896`; all pushed). Native e2e suites cannot run on this machine (missing webdriver sibling repo) — verification is `cargo test --lib` + `pnpm lint`; e2e evidence files are maintained for CI.
+
+Phase 2 (Fleet Scale, S-series) approved 2026-08-07 — gap analysis of the M0–M8
+codebase: per-profile isolation is solid, but batch creation, proxy pools/rotation,
+LLM API exposure, a concurrency manager, and a headless daemon do not exist. See
+§10. When a session resumes: read this file first, then continue S-series work in
+order (S1 next).
 When a session resumes: read this file first, then execute M1 onward in order.
 
 ---
@@ -596,3 +602,234 @@ separately with `git add -u` (formatting-only).
 3. M3 keys tab UI → M4 agent chat (llm.rs + agent_engine.rs + dialog) → M5 tasks
    tab calendar → M6 executor (macro_step.rs + task_runner.rs + CdpSessionTrait)
    → M7 background → M8 polish.
+4. **Phase 2 (post-M8, S-series): see §10. Next up: S1 (batch creation).**
+
+---
+
+## 10. Phase 2 — Fleet Scale (S-series) implementation roadmap
+
+Status: approved 2026-08-07. Mission: give Duckling Browser the aggregation
+layers missing for large-scale, mass account farming — batch creation, parallel
+launches, proxy pools/rotation/failover, an LLM automation surface, a concurrency
+manager, and a headless daemon. Each milestone ships backend-first (REST + Tauri
++ MCP as applicable) so automated callers get value before any UI.
+
+### 10.1 Locked decisions (Phase 2)
+
+- **Automation surfaces are first-class**: every new capability must be reachable
+  from REST (`api_server.rs`, OpenAPI-spec'd), Tauri commands, and — where it is
+  browser/profile automation — the MCP server. UI comes after, not before.
+- **No new OS processes per profile beyond what exists** (S1–S4); the daemon
+  (S5) is the exception and is explicitly in scope now (replaces the "future
+  work" note in §2).
+- Batch create: **one fingerprint per batch by default** (client-side generation
+  per §4.6 is cheap; geolocation is the only network round-trip, done once).
+  Callers may pass a provided `chromium_config.fingerprint` to skip generation.
+  Per-launch variety stays available via `randomize_fingerprint_on_launch`.
+- Batch size cap: `MAX_BATCH_CREATE_PROFILES = 500` per request (structured
+  error beyond that). No profile-count global limit (farming must scale), but
+  batch ops are capped to keep one request from killing the host.
+- Proxy pools: `StoredProxy` gains optional `pool_id`; pools are round-robin
+  with health-based failover on launch; rotation is launch-time v1 (re-roll per
+  launch), session-time re-IP via REST v2.
+- LLM automation surface: expose `agent_chat` + a new `llm_completion` over
+  REST and MCP with a per-key concurrency semaphore and retry/backoff; NO
+  streaming in S3 (non-streaming stays per §2.1; streaming is S4+).
+- The shared automation rate limit stays the guardrail for browser automation;
+  LLM calls get their own bucket (LLM traffic must not eat the browser quota).
+
+### 10.2 S1 — Batch profile creation + parallel batch run (backend + REST) — IN PROGRESS
+
+Goal: create hundreds of profiles in one call (shared fingerprint, no
+per-profile list scans, one tag rebuild) and launch batches concurrently.
+
+1. `profile/manager.rs`:
+   - `BatchCreateProfilesRequest { names: Vec<String>, name_prefix: Option<String>,
+     count: Option<u32>, browser, version, release_type, proxy_id, vpn_id,
+     chromium_config, group_id, ephemeral, dns_blocklist, launch_hook,
+     concurrency }`. `names` wins if non-empty; else `name_prefix`+`count`
+     generates `"{prefix} {i}"`. Cap 500 (`MAX_BATCH_CREATE_PROFILES`) →
+     `BATCH_CREATE_TOO_MANY` error.
+   - `BatchCreateResult { name, ok, profile: Option<BrowserProfile>, error:
+     Option<String> }` — per-item results, whole-batch never aborts mid-way
+     (except request validation).
+   - `batch_create_profiles(app_handle, req) -> Result<Vec<BatchCreateResult>, String>`:
+     resolve names → single fingerprint generation (or provided fingerprint) →
+     one `list_profiles()` for duplicate-name set → create each profile with
+     the shared config (mirroring `create_profile_with_group`'s struct
+     construction) via a new `save_profile_raw` (no per-save tag rebuild) →
+     one `TAG_MANAGER.rebuild_from_profiles` + one `profiles-changed` emit.
+   - `save_profile` refactored to call `save_profile_raw` + rebuild (behavior
+     unchanged).
+   - Tauri command `batch_create_browser_profiles` → registered in
+     `generate_handler!` + added to `non_frontend_commands` allowlist (backend
+     surface; frontend bulk-create UI is S6 polish).
+2. `api_server.rs`: `POST /v1/profiles/batch/create` (request/response DTOs +
+   `#[utoipa::path]` + `ApiDoc` paths/schemas + openapi regression tests). Not
+   automation-rate-limited (creation was never in the automation bucket; keep
+   it out — see api_server.rs:696–713 list).
+3. Parallelize `batch_run_profiles` and `batch_stop_profiles`:
+   `futures_util::stream::iter(...).buffered(CONCURRENCY)` (bounded, preserves
+   result order), `BATCH_RUN_CONCURRENCY = 8`. Per-profile error isolation stays.
+4. Tests: name resolution (explicit/prefix+count/cap/empty), duplicate-name
+   per-item errors, batch create roundtrip with provided fingerprint (no
+   network, no app handle in the pure path), results ordering.
+5. Coverage: group `batchCreateProfiles` (suite `entities`) + evidence in
+   `e2e/tests/entities.test.mjs` in the SAME commit.
+6. Commit: `Add batch profile creation and parallel batch run/stop (S1)`.
+
+### 10.3 S2 — Proxy pools, rotation, failover ✅ DONE 2026-08-07
+
+Goal: profiles stop being bound to a single proxy; pools give round-robin
+assignment + health-based failover.
+
+Implemented in `src-tauri/src/proxy_pool.rs` (`ProxyPoolManager` singleton +
+`launch_browser_profile_with_pool_failover`):
+
+1. `ProxyPool { id, name, proxy_ids, updated_at }` persisted to
+   `settings_dir()/proxy_pools.json` (atomic rename write, legacy files load
+   via `#[serde(default)]`). **Deviation from the original spec:** membership
+   lives only in `proxy_ids` — `StoredProxy` was NOT given a `pool_id` field,
+   so the synced proxy schema is untouched and no storage-version backfill is
+   needed. Pools are local-only; sync integration deferred (S6 polish).
+2. Selection: `next_member` (round-robin, per-pool atomic counter),
+   `rotate_member` (never returns the current member), `live_members` skips
+   the cloud proxy and deleted proxies lazily (no delete hook needed).
+   **Failover on launch:** `launch_with_pool_failover` retries the next untried
+   live member on launch failure (max pool-len attempts) and persists the new
+   `proxy_id` via `update_profile_proxy`; wired into REST `run_profile` +
+   `batch_run_profiles` and MCP `run_profile` + `batch_run_profiles`.
+   Test seam added to `proxy_manager.rs`: `insert_proxy_for_tests` /
+   `delete_stored_proxy_for_tests` (no AppHandle needed).
+3. Rotation v1 (launch-time): `rotate_profile_proxy` + `resolve_rotate_target`
+   re-rolls `profile.proxy_id` to the next pool member. Session-time re-IP
+   (mid-session) = v2.
+4. Surfaces (all in one change): Tauri commands `create_proxy_pool`,
+   `list_proxy_pools`, `update_proxy_pool`, `delete_proxy_pool`,
+   `assign_profiles_to_pool`, `rotate_profile_proxy` (+ `non_frontend_commands`
+   allowlist, agent_engine card mapping); REST `POST/GET/PUT/DELETE
+   /v1/proxy-pools(/{id})`, `POST /v1/profiles/assign-pool`,
+   `POST /v1/profiles/{id}/rotate-proxy` (OpenAPI'd, not automation-quota'd);
+   MCP tools with the same names.
+5. Tests (11, all unit-level): round-robin distribution, deleted-member skip,
+   rotate-never-current, CRUD roundtrip + persistence, legacy-file serde
+   defaults, validation codes (`POOL_EMPTY_NAME`, `POOL_DUPLICATE_NAME`,
+   `POOL_NO_MEMBERS`, `POOL_INVALID_PROXY`, `POOL_NOT_FOUND`,
+   `POOL_SINGLE_MEMBER`, `PROFILE_NOT_IN_POOL`), failover switch + exhaustion
+   via injected launch/update closures (no real browser), direct-launch for
+   single-member/no-pool profiles.
+6. Coverage: group `proxyPools` (suite `entities`, integration) with e2e
+   evidence test "proxy pools: CRUD, round-robin assignment, and rotation" in
+   `e2e/tests/entities.test.mjs`. Note: full `e2e:network` failover proof needs
+   Docker + residential proxies (only run when the requirement is real).
+7. Commit: `Add proxy pools with round-robin and launch failover (S2)` — NOT
+   yet committed (AGENTS.md git rule: awaiting per-command authorization).
+
+### 10.4 S3 — LLM automation surface (REST/MCP + queue + retry)
+
+Goal: external systems can fire automated LLM requests through the browser's
+own key vault, with sane concurrency and retry.
+
+1. `llm.rs`: add `pub async fn chat_with_retry(&self, messages, tools,
+   max_retries: u32)` (exponential backoff on 429/5xx/connect errors, jitter);
+   per-provider concurrency semaphore (`LLM_MAX_CONCURRENCY = 8` default,
+   configurable via settings) shared across all callers; keep the existing
+   non-streaming shapes.
+2. REST: `POST /v1/llm/completion` (provider + key_id + model + messages +
+   tools) → `{ reply, usage }`; errors as structured JSON. NOT in the
+   automation bucket — its own limiter (`requests_per_hour` setting,
+   `LLM_DEFAULT_REQUESTS_PER_HOUR = 1000`, 0 = unlimited). OpenAPI'd.
+3. MCP: `llm_completion` tool (same inputs/outputs, registry + schema +
+   dispatch + `is_automation_tool_call` exclusion — LLM tools are not browser
+   automation). Expose existing agent tools over MCP: `agent_chat`,
+   `agent_chat_confirm`, `agent_chat_decline` become MCP tools too.
+4. Frontend: optional later; S3 is backend-only (keys tab already exists).
+5. Tests: retry/backoff (mock http layer via injected `reqwest::Client`),
+   semaphore cap, structured error codes.
+6. Coverage: groups `llmCompletion` (suite `integrations`), `aiAgentMcp`
+   (suite `ai`) + evidence.
+7. Commit: `Expose LLM completion over REST/MCP with queue and retry (S3)`.
+
+### 10.5 S4 — Concurrency manager + scale hardening
+
+Goal: bounded, observable resource usage at hundreds of concurrent profiles;
+kill the O(n)/O(n²) profile-store hot spots.
+
+1. `launch_scheduler.rs` (new): global launch semaphore (default
+   `MAX_CONCURRENT_LAUNCHES = 8`, setting `max_concurrent_launches`),
+   `try_launch`/`queue_launch` API, per-launch metrics (queue time, launch
+   time) surfaced via REST `/v1/system/status`. REST batch run and MCP
+   `batch_run_profiles` route through it (replacing the S1 `.buffered`).
+2. Profile store: `list_profiles` gains a cached index (name→id, id→path)
+   invalidated on save/delete; `save_profile` keeps the single tag rebuild but
+   `list_profiles` stops re-reading metadata.json when the index is fresh.
+   `get_profile_by_id` fast path (no full scan). Keeps O(n) on first load only.
+3. Rate limit configurability: `automation_rate_limiter.rs` reads
+   `requests_per_hour` from settings (per-identity override stays), so REST
+   callers can raise/zero the automation quota for fleets. Settings UI toggle
+   later (S6).
+4. CDP pooling: `CdpSession` keeps one persistent WS per (profile, tab) with a
+   request multiplexer (id counter + pending map) instead of per-command
+   connects; MCP browser tools and task runner use it. Fallback to
+   per-call connect when the pool is stale.
+5. Tests: semaphore fairness, index invalidation, rate-limit override,
+   CDP multiplexer ordering.
+6. Coverage: groups `launchScheduler` (suite `browser`), `rateLimitSettings`
+   (suite `integrations`) + evidence.
+7. Commit: `Add launch concurrency manager and scale-hardened profile store (S4)`.
+
+### 10.6 S5 — Headless daemon mode
+
+Goal: run the whole control plane (REST + MCP + scheduler + LLM surface +
+profile store) without the GUI, so fleets run on headless hosts.
+
+1. `duckling-browser-daemon` (replace the 0-byte placeholders): a Tauri-less
+   binary built on the existing lib crate modules. `daemon start --api-port
+   --mcp-port --headless`; no WebView, no tray; the scheduler `JobRunner` and
+   sync engine run in-process; single-instance lock replaced by a PID file +
+   lock.
+2. Split GUI-only glue from reusable backend: move the API/MCP server startup,
+   scheduler loop, and proxy/VPN worker managers into a `control_plane` module
+   both the GUI app and the daemon consume. `keep_running_in_background` stays
+   GUI-only.
+3. Daemon auth: same bearer-token scheme (generated token file in
+   `settings_dir`, `daemon.token`), plus MCP path-token. `--token` flag to
+   override. Documented in README.
+4. Commands: none new for the GUI; `e2e` harness gains a daemon fixture
+   (spawn daemon, hit REST, assert profile lifecycle).
+5. Tests: daemon boot + REST roundtrip in CI (no webview); scheduler ticks
+   with window absent.
+6. Commit: `Add headless daemon mode for fleet operation (S5)`.
+
+### 10.7 S6 — Fleet polish (nice-to-have, after S1–S5)
+
+- Frontend bulk-create dialog (name prefix + count + shared config/proxy pool)
+  with i18n in all 10 locales.
+- Session-time proxy re-IP (v2 rotation): rotate the worker's upstream without
+  killing the browser (duckling-proxy worker restart + CDP reload).
+- Streaming LLM responses over REST/SSE.
+- Distributed control plane (multi-host fleet API + job queue) — explicitly
+  out of scope for S1–S5; revisit after S5 lands.
+
+### 10.8 Phase 2 new commands + coverage plan
+
+| Command | Milestone | Frontend use | coverage-map group / suite |
+|---|---|---|---|
+| `batch_create_browser_profiles` | S1 | none (REST/MCP) | `batchCreateProfiles` / `entities` |
+| `create_proxy_pool` | S2 | pools UI (S6) | `proxyPools` / `entities` |
+| `list_proxy_pools` | S2 | pools UI (S6) | `proxyPools` / `entities` |
+| `update_proxy_pool` | S2 | pools UI (S6) | `proxyPools` / `entities` |
+| `delete_proxy_pool` | S2 | pools UI (S6) | `proxyPools` / `entities` |
+| `assign_profiles_to_pool` | S2 | pools UI (S6) | `proxyPools` / `entities` |
+| `rotate_profile_proxy` | S2 | pools UI (S6) | `proxyPools` / `entities` |
+| `llm_completion` (REST/MCP) | S3 | — | `llmCompletion` / `integrations` |
+
+Same rule as Phase 1: coverage-map additions + e2e evidence go in the SAME
+commit as the commands (exact-equality test breaks otherwise).
+
+### 10.9 Phase 2 verification
+
+Same playbook as §8 (`cargo fmt/clippy/test`, `pnpm lint`, `pnpm e2e:smoke`
+before feature commits; coverage exact-equality per commit). Native e2e stays
+unavailable on this machine — evidence files maintained for CI. Commit + push
+only when the user authorizes each git command (AGENTS.md absolute rule).

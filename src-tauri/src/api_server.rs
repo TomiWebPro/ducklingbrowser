@@ -12,6 +12,7 @@ use axum::{
   routing::get,
   Router,
 };
+use futures_util::stream::{self, StreamExt};
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -22,6 +23,13 @@ use utoipa::{OpenApi, ToSchema};
 use utoipa_axum::{router::OpenApiRouter, routes};
 
 // API Types
+
+/// How many profile launches/stops run concurrently inside one batch request.
+/// Each launch spawns a Chromium process tree plus a proxy worker, so the
+/// window is deliberately modest; S4 replaces this with a global launch
+/// scheduler.
+const BATCH_RUN_CONCURRENCY: usize = 8;
+
 #[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
 pub struct ApiProfile {
   pub id: String,
@@ -286,6 +294,111 @@ struct BatchStopResponse {
   results: Vec<BatchStopResult>,
 }
 
+#[derive(Debug, Deserialize, ToSchema)]
+struct CreateProxyPoolRequest {
+  /// Pool name.
+  name: String,
+  /// Stored proxy IDs that make up the pool.
+  proxy_ids: Vec<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+struct ApiProxyPoolResponse {
+  id: String,
+  name: String,
+  proxy_ids: Vec<String>,
+  #[serde(default)]
+  updated_at: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+struct UpdateProxyPoolRequest {
+  /// New pool name.
+  name: String,
+  /// New member proxy IDs (order is significant for round-robin).
+  proxy_ids: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+struct AssignProfilesToPoolRequest {
+  /// Pool to distribute proxies from.
+  pool_id: String,
+  /// Profiles to assign a pool member to (round-robin).
+  profile_ids: Vec<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+struct PoolAssignItem {
+  profile_id: String,
+  /// Whether the profile was assigned successfully.
+  ok: bool,
+  /// Assigned proxy ID when successful.
+  proxy_id: Option<String>,
+  /// Failure reason when not assigned.
+  error: Option<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+struct AssignProfilesToPoolResponse {
+  results: Vec<PoolAssignItem>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+struct RotateProfileProxyResponse {
+  /// The proxy the profile now points at.
+  proxy_id: String,
+  proxy_settings: ProxySettings,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+struct BatchCreateProfilesRequest {
+  /// Explicit profile names. When non-empty, `name_prefix`/`count` are ignored.
+  #[serde(default)]
+  names: Vec<String>,
+  /// Generate `"{prefix} {i}"` names for i in 1..=count. Used when `names` is empty.
+  name_prefix: Option<String>,
+  /// Number of profiles to create when using `name_prefix`.
+  count: Option<u32>,
+  /// Browser engine. Must be `"chromium"`.
+  browser: String,
+  /// Omit (or pass `"latest"`) to use the newest already-downloaded version.
+  #[serde(default)]
+  version: Option<String>,
+  /// Defaults to "stable".
+  release_type: Option<String>,
+  proxy_id: Option<String>,
+  vpn_id: Option<String>,
+  launch_hook: Option<String>,
+  /// Shared browser config for every profile in the batch. Omit to have one
+  /// fingerprint generated once and shared; provide a `fingerprint` field to
+  /// pin one for the whole batch.
+  #[schema(value_type = Option<Object>)]
+  chromium_config: Option<serde_json::Value>,
+  group_id: Option<String>,
+  #[serde(default)]
+  ephemeral: bool,
+  dns_blocklist: Option<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+struct BatchCreateProfileResult {
+  name: String,
+  /// Whether this profile was created successfully.
+  ok: bool,
+  /// The created profile, when successful.
+  #[schema(value_type = Option<ApiProfile>)]
+  profile: Option<ApiProfile>,
+  /// Failure reason when not created.
+  error: Option<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+struct BatchCreateProfilesResponse {
+  results: Vec<BatchCreateProfileResult>,
+  /// Number of requested profiles (not successes).
+  total: usize,
+}
+
 #[derive(Debug, Serialize, ToSchema)]
 struct DetectedProfilesResponse {
   profiles: Vec<crate::profile_importer::DetectedProfile>,
@@ -345,6 +458,13 @@ struct ImportProxiesResponse {
     kill_profile,
     batch_run_profiles,
     batch_stop_profiles,
+    batch_create_profiles_api,
+    create_proxy_pool_api,
+    list_proxy_pools_api,
+    update_proxy_pool_api,
+    delete_proxy_pool_api,
+    assign_profiles_to_pool_api,
+    rotate_profile_proxy_api,
     detect_import_profiles,
     import_profiles_api,
     import_profile_cookies,
@@ -402,6 +522,16 @@ struct ImportProxiesResponse {
     BatchStopRequest,
     BatchStopResult,
     BatchStopResponse,
+    BatchCreateProfilesRequest,
+    BatchCreateProfileResult,
+    BatchCreateProfilesResponse,
+    CreateProxyPoolRequest,
+    ApiProxyPoolResponse,
+    UpdateProxyPoolRequest,
+    AssignProfilesToPoolRequest,
+    PoolAssignItem,
+    AssignProfilesToPoolResponse,
+    RotateProfileProxyResponse,
     OpenUrlRequest,
     ImportCookiesRequest,
     ImportCookiesResponse,
@@ -421,6 +551,7 @@ struct ImportProxiesResponse {
     (name = "groups", description = "Group management endpoints"),
     (name = "tags", description = "Tag management endpoints"),
     (name = "proxies", description = "Proxy management endpoints"),
+    (name = "proxy-pools", description = "Proxy pool management endpoints"),
     (name = "vpns", description = "VPN management endpoints"),
     (name = "extensions", description = "Extension management endpoints"),
     (name = "browsers", description = "Browser management endpoints"),
@@ -515,6 +646,13 @@ impl ApiServer {
       .routes(routes!(kill_profile))
       .routes(routes!(batch_run_profiles))
       .routes(routes!(batch_stop_profiles))
+      .routes(routes!(batch_create_profiles_api))
+      .routes(routes!(create_proxy_pool_api, list_proxy_pools_api))
+      .routes(routes!(update_proxy_pool_api, delete_proxy_pool_api))
+      .routes(routes!(
+        assign_profiles_to_pool_api,
+        rotate_profile_proxy_api
+      ))
       .routes(routes!(detect_import_profiles))
       .routes(routes!(import_profiles_api))
       .routes(routes!(import_profile_cookies))
@@ -1105,6 +1243,152 @@ async fn create_profile(
       format!("Failed to create profile: {e}"),
     )),
   }
+}
+
+/// Resolve the version for batch creation: concrete value, or the newest
+/// already-downloaded version when omitted/empty/"latest". Mirrors
+/// `create_profile`'s resolution (the create path generates the fingerprint
+/// from a locally available binary, so nothing is downloaded here).
+fn resolve_batch_version(
+  request: &BatchCreateProfilesRequest,
+) -> Result<String, (StatusCode, String)> {
+  match request.version.as_deref() {
+    Some(v) if !v.is_empty() && v != "latest" => Ok(v.to_string()),
+    _ => {
+      let registry = crate::downloaded_browsers_registry::DownloadedBrowsersRegistry::instance();
+      let mut versions = registry.get_downloaded_versions(&request.browser);
+      versions.sort_by(|a, b| crate::api_client::compare_versions(b, a));
+      match versions.into_iter().next() {
+        Some(v) => Ok(v),
+        None => Err((
+          StatusCode::BAD_REQUEST,
+          format!(
+            "No downloaded version of \"{}\" is available. Download the browser in Duckling Browser first — this endpoint does not download browsers.",
+            request.browser
+          ),
+        )),
+      }
+    }
+  }
+}
+
+// API Handler - Create many profiles from one shared template in a single
+// call. Creation is not browser automation, so this route is NOT in the
+// automation rate-limit bucket (mirrors POST /v1/profiles).
+#[utoipa::path(
+  post,
+  path = "/v1/profiles/batch/create",
+  request_body = BatchCreateProfilesRequest,
+  responses(
+    (status = 200, description = "Batch creation completed; inspect per-profile results", body = BatchCreateProfilesResponse),
+    (status = 400, description = "Invalid browser, no downloaded version available, or no names"),
+    (status = 401, description = "Unauthorized"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "profiles"
+)]
+async fn batch_create_profiles_api(
+  State(state): State<ApiServerState>,
+  Json(request): Json<BatchCreateProfilesRequest>,
+) -> Result<Json<BatchCreateProfilesResponse>, (StatusCode, String)> {
+  let profile_manager = ProfileManager::instance();
+
+  if request.browser != "chromium" {
+    return Err((
+      StatusCode::BAD_REQUEST,
+      format!(
+        "Invalid browser \"{}\". Must be \"Chromium\" (Chromium-based).",
+        request.browser
+      ),
+    ));
+  }
+
+  let version = resolve_batch_version(&request)?;
+
+  let chromium_config = if let Some(config) = &request.chromium_config {
+    serde_json::from_value(config.clone()).ok()
+  } else {
+    None
+  };
+
+  // A dead/unreachable proxy or VPN cancels the whole batch before any
+  // profile is created (validated once, not per name).
+  if let Err(err) =
+    crate::validate_profile_network(request.proxy_id.as_deref(), request.vpn_id.as_deref()).await
+  {
+    return Err(if err.contains("PROXY_PAYMENT_REQUIRED") {
+      (
+        StatusCode::PAYMENT_REQUIRED,
+        "The selected proxy requires an active subscription.".to_string(),
+      )
+    } else {
+      (
+        StatusCode::BAD_REQUEST,
+        format!("Profile network validation failed: {err}"),
+      )
+    });
+  }
+
+  let manager_request = crate::profile::manager::BatchCreateProfilesRequest {
+    names: request.names,
+    name_prefix: request.name_prefix,
+    count: request.count,
+    browser: request.browser,
+    version,
+    release_type: request.release_type.unwrap_or_else(|| "stable".to_string()),
+    proxy_id: request.proxy_id,
+    vpn_id: request.vpn_id,
+    chromium_config,
+    group_id: request.group_id,
+    ephemeral: request.ephemeral,
+    dns_blocklist: request.dns_blocklist,
+    launch_hook: request.launch_hook,
+  };
+
+  let results = match profile_manager
+    .batch_create_profiles(&state.app_handle, &manager_request)
+    .await
+  {
+    Ok(results) => results,
+    Err(e) => {
+      return Err((
+        StatusCode::BAD_REQUEST,
+        format!("Failed to batch create profiles: {e}"),
+      ));
+    }
+  };
+
+  let total = results.len();
+  let results: Vec<BatchCreateProfileResult> = results
+    .into_iter()
+    .map(|result| BatchCreateProfileResult {
+      name: result.name,
+      ok: result.ok,
+      profile: result.profile.map(|p| ApiProfile {
+        id: p.id.to_string(),
+        name: p.name,
+        browser: p.browser,
+        version: p.version,
+        proxy_id: p.proxy_id,
+        launch_hook: p.launch_hook,
+        process_id: p.process_id,
+        last_launch: p.last_launch,
+        release_type: p.release_type,
+        group_id: p.group_id,
+        tags: p.tags,
+        is_running: false,
+        proxy_bypass_rules: p.proxy_bypass_rules,
+        vpn_id: p.vpn_id,
+        clear_on_close: p.clear_on_close,
+      }),
+      error: result.error,
+    })
+    .collect();
+
+  Ok(Json(BatchCreateProfilesResponse { results, total }))
 }
 
 #[utoipa::path(
@@ -2115,7 +2399,8 @@ async fn run_profile(
 
   // Use the same launch path as the main app, but force a fresh instance with
   // remote debugging enabled so the returned port is the one the browser binds.
-  match crate::browser_runner::launch_browser_profile_impl(
+  // Pool members fail over to the next live member on launch failure.
+  match crate::proxy_pool::launch_browser_profile_with_pool_failover(
     state.app_handle.clone(),
     profile.clone(),
     url,
@@ -2214,8 +2499,9 @@ async fn kill_profile(
   Ok(StatusCode::NO_CONTENT)
 }
 
-// API Handler - Batch run profiles. Never breaks the batch on a single
-// profile's failure — each profile gets its own result entry.
+// API Handler - Batch run profiles. Launches run concurrently with a bounded
+// window (`BATCH_RUN_CONCURRENCY`) so a large fleet ramps up in parallel
+// without launching every profile at once; results stay in request order.
 #[utoipa::path(
   post,
   path = "/v1/profiles/batch/run",
@@ -2236,69 +2522,69 @@ async fn batch_run_profiles(
   Json(request): Json<BatchRunRequest>,
 ) -> Result<Json<BatchRunResponse>, StatusCode> {
   let headless = request.headless.unwrap_or(false);
+  let url = request.url.clone();
   let profile_manager = ProfileManager::instance();
   let profiles = profile_manager
     .list_profiles()
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-  let mut results = Vec::with_capacity(request.profile_ids.len());
-  for profile_id in &request.profile_ids {
-    let fail = |error: &str| BatchRunResult {
-      profile_id: profile_id.clone(),
-      ok: false,
-      remote_debugging_port: None,
-      error: Some(error.to_string()),
-    };
+  let results: Vec<BatchRunResult> = stream::iter(request.profile_ids)
+    .map(|profile_id| {
+      let profiles = profiles.clone();
+      let app_handle = state.app_handle.clone();
+      let url = url.clone();
+      async move {
+        let fail = |error: &str| BatchRunResult {
+          profile_id: profile_id.clone(),
+          ok: false,
+          remote_debugging_port: None,
+          error: Some(error.to_string()),
+        };
 
-    let Some(profile) = profiles.iter().find(|p| p.id.to_string() == *profile_id) else {
-      results.push(fail("profile not found"));
-      continue;
-    };
-    if profile.is_cross_os() {
-      results.push(fail("cross-OS profiles cannot be launched"));
-      continue;
-    }
-    if crate::team_lock::acquire_team_lock_if_needed(profile)
-      .await
-      .is_err()
-    {
-      results.push(fail("profile is locked by another team member"));
-      continue;
-    }
-
-    let port = match tokio::net::TcpListener::bind("127.0.0.1:0").await {
-      Ok(listener) => match listener.local_addr() {
-        Ok(addr) => addr.port(),
-        Err(_) => {
-          results.push(fail("failed to allocate debugging port"));
-          continue;
+        let Some(profile) = profiles.iter().find(|p| p.id.to_string() == *profile_id) else {
+          return fail("profile not found");
+        };
+        if profile.is_cross_os() {
+          return fail("cross-OS profiles cannot be launched");
         }
-      },
-      Err(_) => {
-        results.push(fail("failed to allocate debugging port"));
-        continue;
-      }
-    };
+        if crate::team_lock::acquire_team_lock_if_needed(profile)
+          .await
+          .is_err()
+        {
+          return fail("profile is locked by another team member");
+        }
 
-    match crate::browser_runner::launch_browser_profile_impl(
-      state.app_handle.clone(),
-      profile.clone(),
-      request.url.clone(),
-      Some(port),
-      headless,
-      true,
-    )
-    .await
-    {
-      Ok(_) => results.push(BatchRunResult {
-        profile_id: profile_id.clone(),
-        ok: true,
-        remote_debugging_port: Some(port),
-        error: None,
-      }),
-      Err(e) => results.push(fail(&format!("launch failed: {e}"))),
-    }
-  }
+        let port = match tokio::net::TcpListener::bind("127.0.0.1:0").await {
+          Ok(listener) => match listener.local_addr() {
+            Ok(addr) => addr.port(),
+            Err(_) => return fail("failed to allocate debugging port"),
+          },
+          Err(_) => return fail("failed to allocate debugging port"),
+        };
+
+        match crate::proxy_pool::launch_browser_profile_with_pool_failover(
+          app_handle,
+          profile.clone(),
+          url,
+          Some(port),
+          headless,
+          true,
+        )
+        .await
+        {
+          Ok(_) => BatchRunResult {
+            profile_id,
+            ok: true,
+            remote_debugging_port: Some(port),
+            error: None,
+          },
+          Err(e) => fail(&format!("launch failed: {e}")),
+        }
+      }
+    })
+    .buffered(BATCH_RUN_CONCURRENCY)
+    .collect()
+    .await;
 
   Ok(Json(BatchRunResponse { results }))
 }
@@ -2329,38 +2615,236 @@ async fn batch_stop_profiles(
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
   let browser_runner = crate::browser_runner::BrowserRunner::instance();
 
-  let mut results = Vec::with_capacity(request.profile_ids.len());
-  for profile_id in &request.profile_ids {
-    let Some(profile) = profiles.iter().find(|p| p.id.to_string() == *profile_id) else {
-      results.push(BatchStopResult {
-        profile_id: profile_id.clone(),
-        ok: false,
-        error: Some("profile not found".to_string()),
-      });
-      continue;
-    };
+  let results: Vec<BatchStopResult> = stream::iter(request.profile_ids)
+    .map(|profile_id| {
+      let profiles = profiles.clone();
+      let app_handle = state.app_handle.clone();
+      async move {
+        let Some(profile) = profiles.iter().find(|p| p.id.to_string() == *profile_id) else {
+          return BatchStopResult {
+            profile_id,
+            ok: false,
+            error: Some("profile not found".to_string()),
+          };
+        };
 
-    match browser_runner
-      .kill_browser_process(state.app_handle.clone(), profile)
-      .await
-    {
-      Ok(_) => {
-        crate::team_lock::release_team_lock_if_needed(profile).await;
-        results.push(BatchStopResult {
-          profile_id: profile_id.clone(),
-          ok: true,
-          error: None,
-        });
+        match browser_runner
+          .kill_browser_process(app_handle, profile)
+          .await
+        {
+          Ok(_) => {
+            crate::team_lock::release_team_lock_if_needed(profile).await;
+            BatchStopResult {
+              profile_id,
+              ok: true,
+              error: None,
+            }
+          }
+          Err(e) => BatchStopResult {
+            profile_id,
+            ok: false,
+            error: Some(format!("stop failed: {e}")),
+          },
+        }
       }
-      Err(e) => results.push(BatchStopResult {
-        profile_id: profile_id.clone(),
-        ok: false,
-        error: Some(format!("stop failed: {e}")),
-      }),
-    }
-  }
+    })
+    .buffered(BATCH_RUN_CONCURRENCY)
+    .collect()
+    .await;
 
   Ok(Json(BatchStopResponse { results }))
+}
+
+fn pool_to_response(pool: crate::proxy_pool::ProxyPool) -> ApiProxyPoolResponse {
+  ApiProxyPoolResponse {
+    id: pool.id,
+    name: pool.name,
+    proxy_ids: pool.proxy_ids,
+    updated_at: pool.updated_at,
+  }
+}
+
+// API Handler - Create a proxy pool.
+#[utoipa::path(
+  post,
+  path = "/v1/proxy-pools",
+  request_body = CreateProxyPoolRequest,
+  responses(
+    (status = 200, description = "Proxy pool created", body = ApiProxyPoolResponse),
+    (status = 400, description = "Validation error (empty/duplicate name, no members, invalid proxy)"),
+    (status = 401, description = "Unauthorized"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "proxy-pools"
+)]
+async fn create_proxy_pool_api(
+  State(_state): State<ApiServerState>,
+  Json(request): Json<CreateProxyPoolRequest>,
+) -> Result<Json<ApiProxyPoolResponse>, (StatusCode, String)> {
+  crate::proxy_pool::PROXY_POOL_MANAGER
+    .create_pool(request.name, request.proxy_ids)
+    .map(pool_to_response)
+    .map(Json)
+    .map_err(manager_error_response)
+}
+
+// API Handler - List proxy pools.
+#[utoipa::path(
+  get,
+  path = "/v1/proxy-pools",
+  responses(
+    (status = 200, description = "All proxy pools", body = Vec<ApiProxyPoolResponse>),
+    (status = 401, description = "Unauthorized"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "proxy-pools"
+)]
+async fn list_proxy_pools_api(
+  State(_state): State<ApiServerState>,
+) -> Result<Json<Vec<ApiProxyPoolResponse>>, StatusCode> {
+  Ok(Json(
+    crate::proxy_pool::PROXY_POOL_MANAGER
+      .list_pools()
+      .into_iter()
+      .map(pool_to_response)
+      .collect(),
+  ))
+}
+
+// API Handler - Update a proxy pool (name and/or members).
+#[utoipa::path(
+  put,
+  path = "/v1/proxy-pools/{id}",
+  params(
+    ("id" = String, Path, description = "Proxy pool ID")
+  ),
+  request_body = UpdateProxyPoolRequest,
+  responses(
+    (status = 200, description = "Proxy pool updated", body = ApiProxyPoolResponse),
+    (status = 400, description = "Validation error (empty/duplicate name, no members, invalid proxy)"),
+    (status = 401, description = "Unauthorized"),
+    (status = 404, description = "Proxy pool not found"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "proxy-pools"
+)]
+async fn update_proxy_pool_api(
+  Path(id): Path<String>,
+  State(_state): State<ApiServerState>,
+  Json(request): Json<UpdateProxyPoolRequest>,
+) -> Result<Json<ApiProxyPoolResponse>, (StatusCode, String)> {
+  crate::proxy_pool::PROXY_POOL_MANAGER
+    .update_pool(id, request.name, request.proxy_ids)
+    .map(pool_to_response)
+    .map(Json)
+    .map_err(manager_error_response)
+}
+
+// API Handler - Delete a proxy pool. Profiles keep their current proxy.
+#[utoipa::path(
+  delete,
+  path = "/v1/proxy-pools/{id}",
+  params(
+    ("id" = String, Path, description = "Proxy pool ID")
+  ),
+  responses(
+    (status = 204, description = "Proxy pool deleted"),
+    (status = 401, description = "Unauthorized"),
+    (status = 404, description = "Proxy pool not found"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "proxy-pools"
+)]
+async fn delete_proxy_pool_api(
+  Path(id): Path<String>,
+  State(_state): State<ApiServerState>,
+) -> Result<StatusCode, (StatusCode, String)> {
+  crate::proxy_pool::PROXY_POOL_MANAGER
+    .delete_pool(&id)
+    .map(|_| StatusCode::NO_CONTENT)
+    .map_err(manager_error_response)
+}
+
+// API Handler - Assign pool proxies to profiles (round-robin distribution).
+#[utoipa::path(
+  post,
+  path = "/v1/profiles/assign-pool",
+  request_body = AssignProfilesToPoolRequest,
+  responses(
+    (status = 200, description = "Assignment completed; inspect per-profile results", body = AssignProfilesToPoolResponse),
+    (status = 400, description = "Pool not found or has no live members"),
+    (status = 401, description = "Unauthorized"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "profiles"
+)]
+async fn assign_profiles_to_pool_api(
+  State(state): State<ApiServerState>,
+  Json(request): Json<AssignProfilesToPoolRequest>,
+) -> Result<Json<AssignProfilesToPoolResponse>, (StatusCode, String)> {
+  let results = crate::proxy_pool::PROXY_POOL_MANAGER
+    .assign_profiles_to_pool(&state.app_handle, request.pool_id, request.profile_ids)
+    .await
+    .map_err(manager_error_response)?;
+  Ok(Json(AssignProfilesToPoolResponse {
+    results: results
+      .into_iter()
+      .map(|r| PoolAssignItem {
+        profile_id: r.profile_id,
+        ok: r.ok,
+        proxy_id: r.proxy_id,
+        error: r.error,
+      })
+      .collect(),
+  }))
+}
+
+// API Handler - Rotate a profile to the next pool member (launch-time rotation v1).
+#[utoipa::path(
+  post,
+  path = "/v1/profiles/{id}/rotate-proxy",
+  params(
+    ("id" = String, Path, description = "Profile ID")
+  ),
+  responses(
+    (status = 200, description = "Profile rotated to the next pool member", body = RotateProfileProxyResponse),
+    (status = 400, description = "Profile has no pool or the pool has a single member"),
+    (status = 401, description = "Unauthorized"),
+    (status = 404, description = "Profile not found"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "profiles"
+)]
+async fn rotate_profile_proxy_api(
+  Path(id): Path<String>,
+  State(state): State<ApiServerState>,
+) -> Result<Json<RotateProfileProxyResponse>, (StatusCode, String)> {
+  let rotated = crate::proxy_pool::PROXY_POOL_MANAGER
+    .rotate_profile_proxy(&state.app_handle, &id)
+    .await
+    .map_err(manager_error_response)?;
+  Ok(Json(RotateProfileProxyResponse {
+    proxy_id: rotated.id,
+    proxy_settings: rotated.proxy_settings,
+  }))
 }
 
 // API Handler - Detect importable browser profiles on this machine, or scan a
@@ -2684,6 +3168,12 @@ mod tests {
       (Method::GET, "/v1/profiles/profile-id/run"),
       (Method::POST, "/v1/profiles"),
       (Method::POST, "/v1/profiles/import"),
+      (Method::POST, "/v1/profiles/assign-pool"),
+      (Method::POST, "/v1/profiles/profile-id/rotate-proxy"),
+      (Method::POST, "/v1/proxy-pools"),
+      (Method::GET, "/v1/proxy-pools"),
+      (Method::PUT, "/v1/proxy-pools/pool-id"),
+      (Method::DELETE, "/v1/proxy-pools/pool-id"),
       (Method::GET, "/v1/profiles"),
       (Method::GET, "/openapi.json"),
     ] {
@@ -2778,6 +3268,10 @@ mod tests {
       "/v1/profiles/import",
       "/v1/profiles/import/detect",
       "/v1/proxies/import",
+      "/v1/proxy-pools",
+      "/v1/proxy-pools/{id}",
+      "/v1/profiles/assign-pool",
+      "/v1/profiles/{id}/rotate-proxy",
     ] {
       assert!(paths.contains_key(path), "missing from ApiDoc: {path}");
     }
@@ -2852,5 +3346,76 @@ mod tests {
       !desc.contains("Always"),
       "ApiVpnResponse.vpn_type description must be generic, got: {desc}"
     );
+  }
+
+  #[test]
+  fn batch_create_request_allows_minimal_body() {
+    let json = r#"{"names": ["A", "B"], "browser": "chromium"}"#;
+    let parsed: BatchCreateProfilesRequest =
+      serde_json::from_str(json).expect("minimal batch body must deserialize");
+    assert_eq!(parsed.names, vec!["A", "B"]);
+    assert!(parsed.version.is_none());
+    assert!(parsed.chromium_config.is_none());
+    assert!(!parsed.ephemeral);
+  }
+
+  #[test]
+  fn batch_create_request_supports_prefix_and_count() {
+    let json =
+      r#"{"name_prefix": "Account", "count": 5, "browser": "chromium", "ephemeral": true}"#;
+    let parsed: BatchCreateProfilesRequest =
+      serde_json::from_str(json).expect("prefix/count body must deserialize");
+    assert!(parsed.names.is_empty());
+    assert_eq!(parsed.name_prefix.as_deref(), Some("Account"));
+    assert_eq!(parsed.count, Some(5));
+    assert!(parsed.ephemeral);
+  }
+
+  #[test]
+  fn batch_create_is_not_automation_limited() {
+    // Creation is free (like POST /v1/profiles) — it must never consume the
+    // automation quota, or mass provisioning would 429 instantly.
+    for method in [Method::POST, Method::GET] {
+      assert!(
+        !is_automation_request(&method, "/v1/profiles/batch/create"),
+        "batch create must not be automation-limited"
+      );
+    }
+  }
+
+  #[test]
+  fn openapi_spec_covers_batch_create() {
+    let spec = serde_json::to_value(ApiDoc::openapi()).expect("spec serializes");
+    let paths = spec["paths"].as_object().expect("paths object");
+    assert!(
+      paths.contains_key("/v1/profiles/batch/create"),
+      "batch create endpoint missing from ApiDoc"
+    );
+    let create = &paths["/v1/profiles/batch/create"]["post"];
+    assert!(
+      create["responses"].get("200").is_some(),
+      "batch create must document its 200 response"
+    );
+
+    let required = schema_required(&spec, "BatchCreateProfilesRequest");
+    for field in [
+      "names",
+      "name_prefix",
+      "count",
+      "version",
+      "release_type",
+      "chromium_config",
+      "proxy_id",
+      "vpn_id",
+      "group_id",
+      "ephemeral",
+      "dns_blocklist",
+      "launch_hook",
+    ] {
+      assert!(
+        !required.iter().any(|f| f == field),
+        "{field} must be optional on batch create, required: {required:?}"
+      );
+    }
   }
 }
