@@ -1216,7 +1216,8 @@
       "waiting": "Ожидание",
       "syncing": "Синхронизация",
       "synced": "Синхронизировано",
-      "error": "Ошибка"
+      "error": "Ошибка",
+      "disabled": "Выключено"
     }
   },
   "extensions": {
@@ -1920,7 +1921,11 @@
     "integrations": "Интеграции",
     "account": "Аккаунт",
     "import": "Импорт профиля",
-    "shortcuts": "Сочетания клавиш"
+    "shortcuts": "Сочетания клавиш",
+    "agent": "AI Agent",
+    "profiles": "Профили",
+    "tasks": "Tasks",
+    "keys": "AI keys"
   },
   "encryption": {
     "required": {

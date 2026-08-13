@@ -1216,7 +1216,8 @@
       "waiting": "대기 중",
       "syncing": "동기화 중",
       "synced": "동기화됨",
-      "error": "오류"
+      "error": "오류",
+      "disabled": "사용 안 함"
     }
   },
   "extensions": {
@@ -1920,7 +1921,11 @@
     "integrations": "통합",
     "account": "계정",
     "import": "프로필 가져오기",
-    "shortcuts": "키보드 단축키"
+    "shortcuts": "키보드 단축키",
+    "agent": "AI Agent",
+    "keys": "AI keys",
+    "profiles": "프로필",
+    "tasks": "Tasks"
   },
   "encryption": {
     "required": {

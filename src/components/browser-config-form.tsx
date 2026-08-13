@@ -319,7 +319,7 @@ export function BrowserConfigForm({
                     );
                   }}
                   placeholder={t(
-                    "config.browser.fingerprint.platformPlaceholder",
+                    "config.chromium.fingerprint.platformPlaceholder",
                   )}
                 />
               </div>
@@ -790,7 +790,7 @@ export function BrowserConfigForm({
                     );
                   }}
                   placeholder={t(
-                    "config.browser.fingerprint.timezoneOffsetPlaceholder",
+                    "config.chromium.fingerprint.timezoneOffsetPlaceholder",
                   )}
                 />
               </div>
@@ -886,7 +886,7 @@ export function BrowserConfigForm({
                     );
                   }}
                   placeholder={t(
-                    "config.browser.fingerprint.webglRendererPlaceholder",
+                    "config.chromium.fingerprint.webglRendererPlaceholder",
                   )}
                 />
               </div>

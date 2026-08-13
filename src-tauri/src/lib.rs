@@ -70,6 +70,7 @@ mod geolocation;
 mod group_manager;
 mod human_typing;
 mod ip_utils;
+mod launch_scheduler;
 mod llm;
 mod llm_completion;
 mod llm_rate_limiter;

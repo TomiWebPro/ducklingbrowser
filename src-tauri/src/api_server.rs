@@ -24,10 +24,9 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 
 // API Types
 
-/// How many profile launches/stops run concurrently inside one batch request.
-/// Each launch spawns a Chromium process tree plus a proxy worker, so the
-/// window is deliberately modest; S4 replaces this with a global launch
-/// scheduler.
+/// How many profile stops run concurrently inside one batch request.
+/// Launches use the global launch scheduler instead (see
+/// `batch_run_profiles`), which is the single concurrency controller.
 const BATCH_RUN_CONCURRENCY: usize = 8;
 
 #[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
@@ -520,6 +519,7 @@ struct ImportProxiesResponse {
     assign_profiles_to_pool_api,
     rotate_profile_proxy_api,
     llm_completion_api,
+    system_status_api,
     detect_import_profiles,
     import_profiles_api,
     import_profile_cookies,
@@ -589,6 +589,7 @@ struct ImportProxiesResponse {
     RotateProfileProxyResponse,
     ApiLlmCompletionRequest,
     ApiLlmCompletionResponse,
+    crate::launch_scheduler::LaunchSchedulerMetrics,
     OpenUrlRequest,
     ImportCookiesRequest,
     ImportCookiesResponse,
@@ -614,6 +615,7 @@ struct ImportProxiesResponse {
     (name = "extensions", description = "Extension management endpoints"),
     (name = "browsers", description = "Browser management endpoints"),
     (name = "cookies", description = "Cookie management endpoints"),
+    (name = "system", description = "System and scheduler endpoints"),
   ),
   modifiers(&SecurityAddon),
 )]
@@ -712,6 +714,7 @@ impl ApiServer {
         rotate_profile_proxy_api
       ))
       .routes(routes!(llm_completion_api))
+      .routes(routes!(system_status_api))
       .routes(routes!(detect_import_profiles))
       .routes(routes!(import_profiles_api))
       .routes(routes!(import_profile_cookies))
@@ -1109,32 +1112,32 @@ async fn get_profile(
   State(_state): State<ApiServerState>,
 ) -> Result<Json<ApiProfileResponse>, StatusCode> {
   let profile_manager = ProfileManager::instance();
-  match profile_manager.list_profiles() {
-    Ok(profiles) => {
-      if let Some(profile) = profiles.iter().find(|p| p.id.to_string() == id) {
-        Ok(Json(ApiProfileResponse {
-          profile: ApiProfile {
-            id: profile.id.to_string(),
-            name: profile.name.clone(),
-            browser: profile.browser.clone(),
-            version: profile.version.clone(),
-            proxy_id: profile.proxy_id.clone(),
-            launch_hook: profile.launch_hook.clone(),
-            process_id: profile.process_id,
-            last_launch: profile.last_launch,
-            release_type: profile.release_type.clone(),
-            group_id: profile.group_id.clone(),
-            tags: profile.tags.clone(),
-            is_running: profile.process_id.is_some(), // Simple check based on process_id
-            proxy_bypass_rules: profile.proxy_bypass_rules.clone(),
-            vpn_id: profile.vpn_id.clone(),
-            clear_on_close: profile.clear_on_close,
-          },
-        }))
-      } else {
-        Err(StatusCode::NOT_FOUND)
-      }
+  let Ok(profile_id) = id.parse::<uuid::Uuid>() else {
+    return Err(StatusCode::NOT_FOUND);
+  };
+  match profile_manager.get_profile_by_id(&profile_id) {
+    Ok(Some(profile)) => {
+      Ok(Json(ApiProfileResponse {
+        profile: ApiProfile {
+          id: profile.id.to_string(),
+          name: profile.name.clone(),
+          browser: profile.browser.clone(),
+          version: profile.version.clone(),
+          proxy_id: profile.proxy_id.clone(),
+          launch_hook: profile.launch_hook.clone(),
+          process_id: profile.process_id,
+          last_launch: profile.last_launch,
+          release_type: profile.release_type.clone(),
+          group_id: profile.group_id.clone(),
+          tags: profile.tags.clone(),
+          is_running: profile.process_id.is_some(), // Simple check based on process_id
+          proxy_bypass_rules: profile.proxy_bypass_rules.clone(),
+          vpn_id: profile.vpn_id.clone(),
+          clear_on_close: profile.clear_on_close,
+        },
+      }))
     }
+    Ok(None) => Err(StatusCode::NOT_FOUND),
     Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
   }
 }
@@ -2558,9 +2561,9 @@ async fn kill_profile(
   Ok(StatusCode::NO_CONTENT)
 }
 
-// API Handler - Batch run profiles. Launches run concurrently with a bounded
-// window (`BATCH_RUN_CONCURRENCY`) so a large fleet ramps up in parallel
-// without launching every profile at once; results stay in request order.
+// API Handler - Batch run profiles. Every launch parks on the global launch
+// scheduler (concurrency capped by `max_concurrent_launches`), so a fleet of
+// any size ramps up within that budget while results stay in request order.
 #[utoipa::path(
   post,
   path = "/v1/profiles/batch/run",
@@ -2587,6 +2590,10 @@ async fn batch_run_profiles(
     .list_profiles()
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+  // Every launch parks on the global launch scheduler's semaphore, which is
+  // now the single concurrency cap; the stream window only needs to let all
+  // queued launches be polled so the scheduler delays them, not the batching.
+  let total = request.profile_ids.len().max(1);
   let results: Vec<BatchRunResult> = stream::iter(request.profile_ids)
     .map(|profile_id| {
       let profiles = profiles.clone();
@@ -2641,7 +2648,7 @@ async fn batch_run_profiles(
         }
       }
     })
-    .buffered(BATCH_RUN_CONCURRENCY)
+    .buffered(total)
     .collect()
     .await;
 
@@ -2996,6 +3003,27 @@ async fn detect_import_profiles(
   .map_err(manager_error_response)?;
   let total = profiles.len();
   Ok(Json(DetectedProfilesResponse { profiles, total }))
+}
+
+#[utoipa::path(
+  get,
+  path = "/v1/system/status",
+  responses(
+    (status = 200, description = "Global scheduler and launch-pipeline metrics", body = crate::launch_scheduler::LaunchSchedulerMetrics),
+    (status = 401, description = "Unauthorized"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "system"
+)]
+async fn system_status_api(
+  State(_state): State<ApiServerState>,
+) -> Result<Json<crate::launch_scheduler::LaunchSchedulerMetrics>, axum::response::Response> {
+  Ok(Json(
+    crate::launch_scheduler::LaunchScheduler::instance().metrics(),
+  ))
 }
 
 // API Handler - Bulk-import browser profiles from on-disk profile folders.
@@ -3390,6 +3418,7 @@ mod tests {
       "/v1/proxy-pools/{id}",
       "/v1/profiles/assign-pool",
       "/v1/profiles/{id}/rotate-proxy",
+      "/v1/system/status",
     ] {
       assert!(paths.contains_key(path), "missing from ApiDoc: {path}");
     }

@@ -1268,47 +1268,58 @@ pub async fn launch_browser_profile_impl(
   // `force_new` callers (API/MCP) always start a fresh instance with the
   // requested debug port and headless mode, bypassing the "open URL in the
   // existing window" path which would otherwise ignore both.
-  let launch_result = if force_new {
-    browser_runner
-      .launch_browser_with_debugging(
-        app_handle.clone(),
-        &profile_for_launch,
-        url,
-        remote_debugging_port,
-        headless,
-      )
-      .await
-  } else {
-    browser_runner
-      .launch_or_open_url(app_handle.clone(), &profile_for_launch, url, None)
-      .await
-  };
-  let updated_profile = launch_result.map_err(|e| {
-    log::info!("Browser launch failed for profile: {}, error: {}", profile_for_launch.name, e);
+  //
+  // Every launch funnels through the global launch scheduler, so REST batch
+  // runs, MCP batch runs, UI launches and synchronizer fan-out share one
+  // bounded launch pipeline instead of stacking unboundedly.
+  let launch_result = crate::launch_scheduler::LaunchScheduler::instance()
+    .queue_launch(async move {
+      let result = if force_new {
+        browser_runner
+          .launch_browser_with_debugging(
+            app_handle.clone(),
+            &profile_for_launch,
+            url,
+            remote_debugging_port,
+            headless,
+          )
+          .await
+      } else {
+        browser_runner
+          .launch_or_open_url(app_handle.clone(), &profile_for_launch, url, None)
+          .await
+      };
+      result.map_err(|e| {
+        log::info!("Browser launch failed for profile: {}, error: {}", profile_for_launch.name, e);
 
-    // Emit a failure event to clear loading states in the frontend
-    #[derive(serde::Serialize)]
-    struct RunningChangedPayload {
-      id: String,
-      is_running: bool,
-    }
-    let payload = RunningChangedPayload {
-      id: profile_for_launch.id.to_string(),
-      is_running: false,
-    };
+        // Emit a failure event to clear loading states in the frontend
+        #[derive(serde::Serialize)]
+        struct RunningChangedPayload {
+          id: String,
+          is_running: bool,
+        }
+        let payload = RunningChangedPayload {
+          id: profile_for_launch.id.to_string(),
+          is_running: false,
+        };
 
-    if let Err(e) = events::emit("profile-running-changed", &payload) {
-      log::warn!("Warning: Failed to emit profile running changed event: {e}");
-    }
+        if let Err(e) = events::emit("profile-running-changed", &payload) {
+          log::warn!("Warning: Failed to emit profile running changed event: {e}");
+        }
 
-    // Check if this is an architecture compatibility issue
-    if let Some(io_error) = e.downcast_ref::<std::io::Error>() {
-      if io_error.kind() == std::io::ErrorKind::Other && io_error.to_string().contains("Exec format error") {
-        return format!("Failed to launch browser: Executable format error. This browser version is not compatible with your system architecture ({}). Please try a different browser or version that supports your platform.", std::env::consts::ARCH);
-      }
-    }
-    crate::wrap_backend_error(e, "Failed to launch browser or open URL")
-  })?;
+        // Check if this is an architecture compatibility issue
+        if let Some(io_error) = e.downcast_ref::<std::io::Error>() {
+          if io_error.kind() == std::io::ErrorKind::Other
+            && io_error.to_string().contains("Exec format error")
+          {
+            return format!("Failed to launch browser: Executable format error. This browser version is not compatible with your system architecture ({}). Please try a different browser or version that supports your platform.", std::env::consts::ARCH);
+          }
+        }
+        crate::wrap_backend_error(e, "Failed to launch browser or open URL")
+      })
+    })
+    .await;
+  let updated_profile = launch_result?;
 
   log::info!(
     "Browser launch completed for profile: {} (ID: {})",

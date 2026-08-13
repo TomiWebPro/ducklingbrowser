@@ -73,6 +73,21 @@ pub struct AppSettings {
   /// Hourly LLM completion budget for REST/MCP (0 = unlimited).
   #[serde(default = "default_llm_requests_per_hour")]
   pub llm_requests_per_hour: u64,
+  /// Global cap on concurrent browser launches (min 1). 0 resets to the default.
+  #[serde(default = "default_max_concurrent_launches")]
+  pub max_concurrent_launches: usize,
+  /// Automation quota (REST/MCP browser calls) per hour; 0 = unlimited.
+  /// Used when no per-identity override comes from the backend.
+  #[serde(default = "default_automation_requests_per_hour")]
+  pub automation_requests_per_hour: u64,
+}
+
+fn default_max_concurrent_launches() -> usize {
+  crate::launch_scheduler::MAX_CONCURRENT_LAUNCHES
+}
+
+fn default_automation_requests_per_hour() -> u64 {
+  crate::automation_rate_limiter::DEFAULT_REQUESTS_PER_HOUR
 }
 
 fn default_llm_max_concurrency() -> usize {
@@ -124,6 +139,8 @@ impl Default for AppSettings {
       keep_running_in_background: true,
       llm_max_concurrency: default_llm_max_concurrency(),
       llm_requests_per_hour: default_llm_requests_per_hour(),
+      max_concurrent_launches: default_max_concurrent_launches(),
+      automation_requests_per_hour: default_automation_requests_per_hour(),
     }
   }
 }
@@ -1221,6 +1238,8 @@ mod tests {
       keep_running_in_background: true,
       llm_max_concurrency: default_llm_max_concurrency(),
       llm_requests_per_hour: default_llm_requests_per_hour(),
+      max_concurrent_launches: default_max_concurrent_launches(),
+      automation_requests_per_hour: default_automation_requests_per_hour(),
     };
 
     let save_result = manager.save_settings(&test_settings);

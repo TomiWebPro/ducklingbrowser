@@ -1216,7 +1216,8 @@
       "waiting": "待機中",
       "syncing": "同期中",
       "synced": "同期済み",
-      "error": "エラー"
+      "error": "エラー",
+      "disabled": "無効"
     }
   },
   "extensions": {
@@ -1920,7 +1921,11 @@
     "integrations": "連携",
     "account": "アカウント",
     "import": "プロファイルをインポート",
-    "shortcuts": "キーボードショートカット"
+    "shortcuts": "キーボードショートカット",
+    "agent": "AI Agent",
+    "keys": "AI keys",
+    "profiles": "プロファイル",
+    "tasks": "Tasks"
   },
   "encryption": {
     "required": {

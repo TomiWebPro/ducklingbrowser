@@ -6,6 +6,13 @@ use crate::cloud_auth::CLOUD_AUTH;
 
 const RATE_LIMIT_WINDOW: Duration = Duration::from_secs(60 * 60);
 
+/// Fallback automation quota (per hour) when neither a per-identity override
+/// nor a configured setting exists. Mirrors the backend's default.
+pub const DEFAULT_REQUESTS_PER_HOUR: u64 = 100;
+
+/// The identity the limiter uses when no backend override is in play.
+pub const DEFAULT_IDENTITY: &str = "internal";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RateLimitOutcome {
   Unlimited,
@@ -67,14 +74,41 @@ static AUTOMATION_RATE_LIMITER: LazyLock<Mutex<AutomationRateLimiter>> =
   LazyLock::new(|| Mutex::new(AutomationRateLimiter::default()));
 
 pub async fn check_automation_rate_limit() -> RateLimitOutcome {
-  let Some((identity, requests_per_hour)) = CLOUD_AUTH.automation_rate_limit().await else {
-    return RateLimitOutcome::Unlimited;
+  // The local `automation_requests_per_hour` setting (0 = unlimited) is the
+  // default. In e2e builds the harness can seed it via the environment so a
+  // suite can prove the 429/Retry-After path with a tiny quota.
+  let requests_per_hour_setting = crate::settings_manager::SettingsManager::instance()
+    .load_settings()
+    .ok()
+    .map(|settings| settings.automation_requests_per_hour)
+    .unwrap_or(DEFAULT_REQUESTS_PER_HOUR);
+  let settings = e2e_requests_per_hour_override().unwrap_or(requests_per_hour_setting);
+
+  let (identity, requests_per_hour) = match CLOUD_AUTH.automation_rate_limit().await {
+    Some((identity, limit)) if identity != DEFAULT_IDENTITY && limit > 0 => (identity, limit),
+    _ => (DEFAULT_IDENTITY.to_string(), settings),
   };
 
   AUTOMATION_RATE_LIMITER
     .lock()
     .unwrap_or_else(|poisoned| poisoned.into_inner())
     .check_at(&identity, requests_per_hour, Instant::now())
+}
+
+/// E2E-only quota seeding. The integrations suite sets
+/// `DUCKLING_E2E_REQUESTS_PER_HOUR` to prove the 429 path; normal builds have
+/// no override and use the settings value.
+fn e2e_requests_per_hour_override() -> Option<u64> {
+  #[cfg(feature = "e2e")]
+  {
+    std::env::var("DUCKLING_E2E_REQUESTS_PER_HOUR")
+      .ok()
+      .and_then(|value| value.parse::<u64>().ok())
+  }
+  #[cfg(not(feature = "e2e"))]
+  {
+    None
+  }
 }
 
 #[cfg(test)]
@@ -140,5 +174,52 @@ mod tests {
       limiter.check_at("user-a", 1, now),
       RateLimitOutcome::Allowed { remaining: 0 }
     );
+  }
+
+  #[test]
+  #[serial_test::serial]
+  fn settings_override_controls_the_shared_limit() {
+    use crate::settings_manager::{AppSettings, SettingsManager};
+
+    // Zero in settings = unlimited for the whole app (fleet mode).
+    {
+      let tmp = tempfile::tempdir().unwrap();
+      let _guard = crate::app_dirs::set_test_data_dir(tmp.path().to_path_buf());
+      let settings = AppSettings {
+        automation_requests_per_hour: 0,
+        ..Default::default()
+      };
+      SettingsManager::instance()
+        .save_settings(&settings)
+        .unwrap();
+
+      let outcome = tokio::runtime::Runtime::new()
+        .unwrap()
+        .block_on(check_automation_rate_limit());
+      assert_eq!(outcome, RateLimitOutcome::Unlimited);
+    }
+
+    // A small budget is enforced and then exhausted.
+    {
+      let tmp = tempfile::tempdir().unwrap();
+      let _guard = crate::app_dirs::set_test_data_dir(tmp.path().to_path_buf());
+      let settings = AppSettings {
+        automation_requests_per_hour: 2,
+        ..Default::default()
+      };
+      SettingsManager::instance()
+        .save_settings(&settings)
+        .unwrap();
+
+      let mut outcome = RateLimitOutcome::Unlimited;
+      for _ in 0..3 {
+        outcome = tokio::runtime::Runtime::new()
+          .unwrap()
+          .block_on(check_automation_rate_limit());
+      }
+      assert!(
+        matches!(outcome, RateLimitOutcome::Limited { retry_after_secs } if retry_after_secs >= 1)
+      );
+    }
   }
 }

@@ -1216,7 +1216,8 @@
       "waiting": "Bekliyor",
       "syncing": "Eşitleniyor",
       "synced": "Eşitlendi",
-      "error": "Hata"
+      "error": "Hata",
+      "disabled": "Devre Dışı"
     }
   },
   "extensions": {
@@ -1920,7 +1921,11 @@
     "integrations": "Entegrasyonlar",
     "account": "Hesap",
     "import": "Profil içe aktar",
-    "shortcuts": "Klavye kısayolları"
+    "shortcuts": "Klavye kısayolları",
+    "agent": "AI Agent",
+    "keys": "AI keys",
+    "profiles": "Profiller",
+    "tasks": "Tasks"
   },
   "encryption": {
     "required": {

@@ -6,8 +6,12 @@ use crate::events;
 use crate::profile::types::{get_host_os, BrowserProfile, SyncMode};
 use crate::proxy_manager::PROXY_MANAGER;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs::{self, create_dir_all};
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
+use std::sync::Mutex;
+use std::time::SystemTime;
 use sysinfo::{Pid, ProcessRefreshKind, RefreshKind, System};
 use url::Url;
 
@@ -23,6 +27,133 @@ fn atomic_write(path: &Path, data: &[u8]) -> std::io::Result<()> {
     f.sync_all()?;
   }
   fs::rename(&tmp, path)
+}
+
+/// Parsed profile plus the mtime of its `metadata.json` at cache time.
+struct CachedProfileEntry {
+  profile: BrowserProfile,
+  profile_dir: PathBuf,
+  mtime: Option<SystemTime>,
+}
+
+/// Per-store-directory index. Keyed by base dir so concurrent tests or a
+/// settings change never let one base dir's churn invalidate another's cache.
+#[derive(Default)]
+struct BaseCache {
+  dir_mtime: Option<SystemTime>,
+  entries: HashMap<uuid::Uuid, CachedProfileEntry>,
+}
+
+/// Cached profile-store index (name→id is derivable from the parsed profile;
+/// this holds id→parsed-profile + path so `list_profiles` skips re-reading
+/// `metadata.json` while the store is unchanged). O(n) parse cost on first
+/// load (and after any directory change) only.
+#[derive(Default)]
+struct ProfileIndexCache {
+  bases: HashMap<PathBuf, BaseCache>,
+}
+
+static PROFILE_INDEX_CACHE: LazyLock<Mutex<ProfileIndexCache>> =
+  LazyLock::new(|| Mutex::new(ProfileIndexCache::default()));
+
+fn entry_is_fresh(entry: &CachedProfileEntry) -> bool {
+  match fs::metadata(entry.profile_dir.join("metadata.json")).and_then(|m| m.modified()) {
+    Ok(mtime) => Some(mtime) == entry.mtime,
+    Err(_) => false,
+  }
+}
+
+impl ProfileIndexCache {
+  fn base(&mut self, profiles_dir: &Path) -> &mut BaseCache {
+    self.bases.entry(profiles_dir.to_path_buf()).or_default()
+  }
+
+  /// Returns a snapshot of every profile for the given base when the index is
+  /// fresh: same base dir, same directory mtime, and every cached
+  /// `metadata.json` unchanged. Self-heals externally edited files by
+  /// re-reading just those entries. A suspicious entry (vanished file, failed
+  /// parse) makes the caller rescan the whole store rather than silently
+  /// dropping data.
+  fn snapshot_if_fresh(&mut self, profiles_dir: &Path) -> Option<Vec<BrowserProfile>> {
+    let base = self.base(profiles_dir);
+    let current_dir_mtime = fs::metadata(profiles_dir)
+      .ok()
+      .and_then(|m| m.modified().ok());
+    if base.dir_mtime != current_dir_mtime {
+      return None;
+    }
+
+    let mut profiles = Vec::with_capacity(base.entries.len());
+    for entry in base.entries.values_mut() {
+      let metadata_file = entry.profile_dir.join("metadata.json");
+      match fs::metadata(&metadata_file).and_then(|m| m.modified()) {
+        Ok(mtime) if Some(mtime) == entry.mtime => {
+          profiles.push(entry.profile.clone());
+        }
+        Ok(_) => {
+          // External write: re-read this single file and refresh the entry.
+          match parse_metadata_file(&metadata_file) {
+            Some(profile) => {
+              entry.profile = profile.clone();
+              entry.mtime = fs::metadata(&metadata_file)
+                .ok()
+                .and_then(|m| m.modified().ok());
+              profiles.push(profile);
+            }
+            None => {
+              log::warn!(
+                "Profile index: skipping invalid metadata at {}, rescanning base",
+                metadata_file.display()
+              );
+              return None;
+            }
+          }
+        }
+        Err(_) => return None,
+      }
+    }
+
+    Some(profiles)
+  }
+}
+
+/// Parse one `metadata.json`, applying the host_os backfill so cached entries
+/// are equivalent to a fresh scan.
+fn parse_metadata_file(metadata_file: &Path) -> Option<BrowserProfile> {
+  let content = match fs::read_to_string(metadata_file) {
+    Ok(c) => c,
+    Err(e) => {
+      log::warn!(
+        "Skipping profile at {}: failed to read metadata.json: {e}",
+        metadata_file.display()
+      );
+      return None;
+    }
+  };
+  let mut profile: BrowserProfile = match serde_json::from_str(&content) {
+    Ok(p) => p,
+    Err(e) => {
+      log::warn!(
+        "Skipping profile at {}: invalid metadata.json: {e}",
+        metadata_file.display()
+      );
+      return None;
+    }
+  };
+
+  // Backfill host_os from browser config for profiles created before
+  // the field existed (or synced without it).
+  if profile.host_os.is_none() {
+    let inferred_os = profile.resolved_os().map(str::to_string);
+    if let Some(os) = inferred_os {
+      profile.host_os = Some(os);
+      if let Ok(json) = serde_json::to_string_pretty(&profile) {
+        let _ = atomic_write(metadata_file, json.as_bytes());
+      }
+    }
+  }
+
+  Some(profile)
 }
 
 fn default_release_type() -> String {
@@ -699,7 +830,8 @@ impl ProfileManager {
 
   /// Write `metadata.json` without the O(n) tag-index rebuild. Batch paths
   /// (e.g. `batch_create_profiles`) call this per profile and rebuild the tag
-  /// index once at the end.
+  /// index once at the end. Keeps the profile-store index fresh in the same
+  /// pass.
   fn save_profile_raw(&self, profile: &BrowserProfile) -> Result<(), Box<dyn std::error::Error>> {
     let profiles_dir = self.get_profiles_dir();
     let profile_uuid_dir = profiles_dir.join(profile.id.to_string());
@@ -711,17 +843,45 @@ impl ProfileManager {
     let json = serde_json::to_string_pretty(profile)?;
     atomic_write(&profile_file, json.as_bytes())?;
 
+    let mtime = fs::metadata(&profile_file)
+      .ok()
+      .and_then(|m| m.modified().ok());
+    let mut cache = PROFILE_INDEX_CACHE
+      .lock()
+      .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let base = cache.base(&profiles_dir);
+    base.dir_mtime = fs::metadata(&profiles_dir)
+      .ok()
+      .and_then(|m| m.modified().ok());
+    base.entries.insert(
+      profile.id,
+      CachedProfileEntry {
+        profile: profile.clone(),
+        profile_dir: profile_uuid_dir,
+        mtime,
+      },
+    );
+
     Ok(())
   }
 
   pub fn list_profiles(&self) -> Result<Vec<BrowserProfile>, Box<dyn std::error::Error>> {
     let profiles_dir = self.get_profiles_dir();
+    let mut cache = PROFILE_INDEX_CACHE
+      .lock()
+      .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some(snapshot) = cache.snapshot_if_fresh(&profiles_dir) {
+      return Ok(snapshot);
+    }
+
     if !profiles_dir.exists() {
+      cache.bases.remove(&profiles_dir);
       return Ok(vec![]);
     }
 
     let mut profiles = Vec::new();
-    for entry in fs::read_dir(profiles_dir)? {
+    let mut entries = HashMap::new();
+    for entry in fs::read_dir(&profiles_dir)? {
       let entry = entry?;
       let path = entry.path();
 
@@ -729,45 +889,67 @@ impl ProfileManager {
       if path.is_dir() {
         let metadata_file = path.join("metadata.json");
         if metadata_file.exists() {
-          let content = match fs::read_to_string(&metadata_file) {
-            Ok(c) => c,
-            Err(e) => {
-              log::warn!(
-                "Skipping profile at {}: failed to read metadata.json: {e}",
-                path.display()
-              );
-              continue;
-            }
+          let Some(profile) = parse_metadata_file(&metadata_file) else {
+            continue;
           };
-          let mut profile: BrowserProfile = match serde_json::from_str(&content) {
-            Ok(p) => p,
-            Err(e) => {
-              log::warn!(
-                "Skipping profile at {}: invalid metadata.json: {e}",
-                path.display()
-              );
-              continue;
-            }
-          };
-
-          // Backfill host_os from browser config for profiles created before
-          // the field existed (or synced without it).
-          if profile.host_os.is_none() {
-            let inferred_os = profile.resolved_os().map(str::to_string);
-            if let Some(os) = inferred_os {
-              profile.host_os = Some(os);
-              if let Ok(json) = serde_json::to_string_pretty(&profile) {
-                let _ = atomic_write(&metadata_file, json.as_bytes());
-              }
-            }
-          }
-
+          let mtime = fs::metadata(&metadata_file)
+            .ok()
+            .and_then(|m| m.modified().ok());
+          entries.insert(
+            profile.id,
+            CachedProfileEntry {
+              profile_dir: path,
+              mtime,
+              profile: profile.clone(),
+            },
+          );
           profiles.push(profile);
         }
       }
     }
 
+    let base = cache.base(&profiles_dir);
+    base.entries = entries;
+    base.dir_mtime = fs::metadata(&profiles_dir)
+      .ok()
+      .and_then(|m| m.modified().ok());
+
     Ok(profiles)
+  }
+
+  /// Fast path by ID: serve from the index when fresh (no full scan).
+  /// Falls back to a full scan and returns the first match.
+  pub fn get_profile_by_id(
+    &self,
+    profile_id: &uuid::Uuid,
+  ) -> Result<Option<BrowserProfile>, Box<dyn std::error::Error>> {
+    let profiles_dir = self.get_profiles_dir();
+    {
+      let mut cache = PROFILE_INDEX_CACHE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+      let base = cache.base(&profiles_dir);
+      if base.dir_mtime
+        == fs::metadata(&profiles_dir)
+          .ok()
+          .and_then(|m| m.modified().ok())
+      {
+        if let Some(entry) = base.entries.get(profile_id) {
+          if entry_is_fresh(entry) {
+            return Ok(Some(entry.profile.clone()));
+          }
+        }
+      }
+    }
+
+    // Fast path missed: rescan with the lock released (a full scan re-locks
+    // the index, so this must not run while we hold it).
+    Ok(
+      self
+        .list_profiles()?
+        .into_iter()
+        .find(|p| p.id == *profile_id),
+    )
   }
 
   pub fn rename_profile(
@@ -2477,4 +2659,128 @@ pub fn delete_profile(app_handle: tauri::AppHandle, profile_id: String) -> Resul
 
 lazy_static::lazy_static! {
   static ref PROFILE_MANAGER: ProfileManager = ProfileManager::new();
+}
+
+#[cfg(test)]
+mod index_tests {
+  use super::*;
+
+  fn make_profile(name: &str) -> BrowserProfile {
+    BrowserProfile {
+      id: uuid::Uuid::new_v4(),
+      name: name.to_string(),
+      browser: "chromium".to_string(),
+      version: "stable".to_string(),
+      ..BrowserProfile::default()
+    }
+  }
+
+  fn saved_profile(manager: &ProfileManager, name: &str) -> BrowserProfile {
+    let profile = make_profile(name);
+    manager.save_profile(&profile).unwrap();
+    profile
+  }
+
+  #[test]
+  fn list_serves_fresh_snapshot_and_self_heals_external_edits() {
+    let tmp = tempfile::tempdir().unwrap();
+    let _guard = crate::app_dirs::set_test_data_dir(tmp.path().to_path_buf());
+    let manager = ProfileManager::instance();
+
+    let first = saved_profile(manager, "alpha");
+    let second = saved_profile(manager, "beta");
+
+    let names = |profiles: &[BrowserProfile]| {
+      let mut names: Vec<_> = profiles.iter().map(|p| p.name.clone()).collect();
+      names.sort();
+      names
+    };
+    let listed = manager.list_profiles().unwrap();
+    assert_eq!(names(&listed), vec!["alpha", "beta"]);
+
+    // Editing metadata.json directly (bypassing save_profile) is picked up
+    // without a directory-level rescan: file mtime changed, dir mtime did not.
+    let metadata_file = tmp
+      .path()
+      .join("profiles")
+      .join(first.id.to_string())
+      .join("metadata.json");
+    let mut external = first.clone();
+    external.name = "alpha-renamed-externally".to_string();
+    atomic_write(
+      &metadata_file,
+      serde_json::to_string_pretty(&external).unwrap().as_bytes(),
+    )
+    .unwrap();
+
+    let listed = manager.list_profiles().unwrap();
+    assert_eq!(names(&listed), vec!["alpha-renamed-externally", "beta"]);
+
+    // Deleting a metadata.json externally also self-heals: the entry vanishes.
+    fs::remove_file(&metadata_file).unwrap();
+    let listed = manager.list_profiles().unwrap();
+    assert_eq!(names(&listed), vec!["beta"]);
+
+    // And a fresh profile via the normal path reappears through the upsert.
+    let third = saved_profile(manager, "gamma");
+    let listed = manager.list_profiles().unwrap();
+    assert_eq!(names(&listed), vec!["beta", "gamma"]);
+    let _ = third;
+    let _ = second;
+  }
+
+  #[test]
+  fn save_keeps_the_index_fresh_and_get_by_id_uses_it() {
+    let tmp = tempfile::tempdir().unwrap();
+    let _guard = crate::app_dirs::set_test_data_dir(tmp.path().to_path_buf());
+    let manager = ProfileManager::instance();
+
+    let mut profile = saved_profile(manager, "alpha");
+
+    // Fast path: served straight from the index.
+    let cached = manager.get_profile_by_id(&profile.id).unwrap().unwrap();
+    assert_eq!(cached.name, "alpha");
+    assert_eq!(cached.id, profile.id);
+
+    // Unknown id returns None without a scan.
+    assert!(manager
+      .get_profile_by_id(&uuid::Uuid::new_v4())
+      .unwrap()
+      .is_none());
+
+    // A save refreshes the entry so the next reads see the new name.
+    profile.name = "alpha-v2".to_string();
+    manager.save_profile(&profile).unwrap();
+    let cached = manager.get_profile_by_id(&profile.id).unwrap().unwrap();
+    assert_eq!(cached.name, "alpha-v2");
+    assert_eq!(
+      manager
+        .list_profiles()
+        .unwrap()
+        .iter()
+        .find(|p| p.id == profile.id)
+        .unwrap()
+        .name,
+      "alpha-v2"
+    );
+  }
+
+  #[test]
+  fn cache_resets_when_the_store_directory_changes() {
+    let tmp = tempfile::tempdir().unwrap();
+    let _guard = crate::app_dirs::set_test_data_dir(tmp.path().to_path_buf());
+    let manager = ProfileManager::instance();
+
+    let first = saved_profile(manager, "alpha");
+    assert_eq!(manager.list_profiles().unwrap().len(), 1);
+
+    // A different data dir must not see the cached entries from the old one.
+    let other = tempfile::tempdir().unwrap();
+    let _guard = crate::app_dirs::set_test_data_dir(other.path().to_path_buf());
+    let second = saved_profile(manager, "beta");
+    let listed = manager.list_profiles().unwrap();
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].id, second.id);
+    assert!(manager.get_profile_by_id(&first.id).unwrap().is_none());
+  }
 }

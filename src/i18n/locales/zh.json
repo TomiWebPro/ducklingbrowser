@@ -1216,7 +1216,8 @@
       "waiting": "等待中",
       "syncing": "同步中",
       "synced": "已同步",
-      "error": "错误"
+      "error": "错误",
+      "disabled": "已禁用"
     }
   },
   "extensions": {
@@ -1920,7 +1921,11 @@
     "integrations": "集成",
     "account": "账户",
     "import": "导入配置文件",
-    "shortcuts": "键盘快捷键"
+    "shortcuts": "键盘快捷键",
+    "agent": "AI Agent",
+    "keys": "AI keys",
+    "profiles": "配置文件",
+    "tasks": "Tasks"
   },
   "encryption": {
     "required": {

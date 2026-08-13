@@ -407,6 +407,31 @@ test("real Chromium fingerprinting, terms, API automation, CDP, cookies, and pro
       batchStop.value.results[0].error,
     );
 
+    // The launch scheduler records every routed launch (UI, REST, MCP, pool
+    // failover) and exposes it through /v1/system/status; the batch runs
+    // above must show up as recorded launches.
+    const systemStatus = await request(`${base}/v1/system/status`, {
+      token: saved.api_token,
+    });
+    assert.equal(systemStatus.response.status, 200);
+    assert.ok(
+      systemStatus.value.queued_total >= 2,
+      JSON.stringify(systemStatus.value),
+    );
+    assert.ok(
+      systemStatus.value.completed_total >= 2,
+      JSON.stringify(systemStatus.value),
+    );
+    await app.waitFor(
+      async () => {
+        const current = await request(`${base}/v1/system/status`, {
+          token: saved.api_token,
+        });
+        return (current.value.in_flight ?? 0) === 0;
+      },
+      { timeoutMs: 20_000, description: "launch scheduler drained after kill" },
+    );
+
     await app.invoke("stop_api_server");
     await app.invoke("delete_profile", { profileId: profile.id });
     await app.invoke("delete_profile", { profileId: batchProfile.id });

@@ -1216,7 +1216,8 @@
       "waiting": "Đang chờ",
       "syncing": "Đang đồng bộ",
       "synced": "Đã đồng bộ",
-      "error": "Lỗi"
+      "error": "Lỗi",
+      "disabled": "Đã tắt"
     }
   },
   "extensions": {
@@ -1920,7 +1921,11 @@
     "integrations": "Tích hợp",
     "account": "Tài khoản",
     "import": "Nhập profile",
-    "shortcuts": "Phím tắt"
+    "shortcuts": "Phím tắt",
+    "agent": "AI Agent",
+    "keys": "AI keys",
+    "profiles": "Hồ sơ",
+    "tasks": "Tasks"
   },
   "encryption": {
     "required": {

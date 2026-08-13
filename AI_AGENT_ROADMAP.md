@@ -804,7 +804,7 @@ Implementation notes:
   `llm_requests_per_hour` (default 1000); serde defaults keep old settings
   files loadable. GUI toggle deferred to S6 per plan.
 
-### 10.5 S4 — Concurrency manager + scale hardening
+### 10.5 S4 — Concurrency manager + scale hardening ✅ DONE 2026-08-08
 
 Goal: bounded, observable resource usage at hundreds of concurrent profiles;
 kill the O(n)/O(n²) profile-store hot spots.

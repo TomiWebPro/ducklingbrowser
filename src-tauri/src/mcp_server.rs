@@ -123,10 +123,6 @@ impl From<crate::cdp_session::CdpError> for McpError {
 
 const DEFAULT_MCP_PORT: u16 = 51080;
 
-/// How many profile launches run concurrently inside one MCP batch_run call.
-/// Mirrors the REST batch window (`BATCH_RUN_CONCURRENCY` in api_server.rs).
-const MCP_BATCH_RUN_CONCURRENCY: usize = 8;
-
 struct McpSession {
   initialized: bool,
 }
@@ -2387,7 +2383,7 @@ impl McpServer {
           }
         }
       })
-      .buffered(MCP_BATCH_RUN_CONCURRENCY)
+      .buffered(profile_ids.len().max(1))
       .collect()
       .await;
 

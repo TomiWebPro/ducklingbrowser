@@ -1216,7 +1216,8 @@
       "waiting": "Esperando",
       "syncing": "Sincronizando",
       "synced": "Sincronizado",
-      "error": "Error"
+      "error": "Error",
+      "disabled": "Deshabilitado"
     }
   },
   "extensions": {
@@ -1920,7 +1921,11 @@
     "integrations": "Integraciones",
     "account": "Cuenta",
     "import": "Importar perfil",
-    "shortcuts": "Atajos de teclado"
+    "shortcuts": "Atajos de teclado",
+    "agent": "AI Agent",
+    "keys": "AI keys",
+    "profiles": "Perfiles",
+    "tasks": "Tasks"
   },
   "encryption": {
     "required": {
