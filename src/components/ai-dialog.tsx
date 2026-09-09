@@ -173,7 +173,7 @@ function ChatPanel({
 
   return (
     <>
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         <Select
           value={useAgent ? `agent:${useAgent}` : selectedKey}
           onValueChange={(v) => {
@@ -210,7 +210,7 @@ function ChatPanel({
 
       <div
         ref={scrollRef}
-        className="max-h-[55vh] flex-1 space-y-3 overflow-y-auto px-1 py-1"
+        className="min-h-0 flex-1 space-y-3 overflow-y-auto px-1 py-1"
       >
         {messages.length === 0 && (
           <p className="text-center text-sm text-muted-foreground">
@@ -259,7 +259,7 @@ function ChatPanel({
         </div>
       )}
 
-      <div className="flex items-center gap-2 border-t pt-3">
+      <div className="flex shrink-0 items-center gap-2 border-t pt-3">
         <Input
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -299,7 +299,9 @@ function EndpointsPanel({
     providerMeta("openai")?.defaultModel ?? "gpt-4o-mini",
   );
   const [keyValue, setKeyValue] = useState("");
-  const [endpoint, setEndpoint] = useState("");
+  const [endpoint, setEndpoint] = useState(
+    providerMeta("openai")?.defaultEndpoint ?? "",
+  );
   const [endpointTouched, setEndpointTouched] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -321,11 +323,9 @@ function EndpointsPanel({
     const next = providerMeta(value);
     if (next) {
       if (next.defaultModel) setModel(next.defaultModel);
-      if (next.defaultEndpoint) {
-        setEndpoint(next.defaultEndpoint);
-      } else if (!next.showEndpoint) {
-        setEndpoint("");
-      }
+      // The whole point of picking a provider: the box always shows that
+      // provider's URL (editable). Custom has none, so it clears for input.
+      setEndpoint(next.defaultEndpoint ?? "");
       setEndpointTouched(false);
     }
   };
@@ -668,7 +668,7 @@ export function AiDialog({
 
           <AnimatedTabsContent
             value="chat"
-            className="mt-4 flex flex-col gap-3"
+            className="mt-4 min-h-0 flex-1 flex-col gap-3 data-[state=active]:flex"
           >
             <ChatPanel keys={keys} onNeedKeys={goToEndpoints} />
           </AnimatedTabsContent>

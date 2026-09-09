@@ -183,6 +183,14 @@ export function ProxyManagementDialog({
     Record<string, boolean>
   >({});
 
+  // Subscription form state (the Add button lives in the header action row
+  // next to the proxies/VPNs actions, so the form mounts here).
+  const [showSubForm, setShowSubForm] = useState(false);
+  const [editingSub, setEditingSub] = useState<
+    import("@/components/subscription-form-dialog").SubscriptionInfo | null
+  >(null);
+  const [subsCount, setSubsCount] = useState(0);
+
   // Table state
   const [proxiesSorting, setProxiesSorting] = useState<SortingState>([
     { id: "name", desc: false },
@@ -1132,6 +1140,9 @@ export function ProxyManagementDialog({
                   </AnimatedTabsTrigger>
                   <AnimatedTabsTrigger value="subscriptions">
                     <span>{t("proxies.management.tabSubscriptions")}</span>
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      {subsCount}
+                    </span>
                   </AnimatedTabsTrigger>
                 </AnimatedTabsList>
                 <div className="flex items-center gap-2">
@@ -1199,6 +1210,29 @@ export function ProxyManagementDialog({
                         </TooltipContent>
                       </Tooltip>
                     </>
+                  )}
+                  {activeTab === "subscriptions" && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <RippleButton
+                          size="sm"
+                          onClick={() => {
+                            setEditingSub(null);
+                            setShowSubForm(true);
+                          }}
+                          className="flex items-center gap-2"
+                          aria-label={t("subscriptions.add")}
+                        >
+                          <GoPlus className="size-4" />
+                          <span className="hidden @2xl:inline">
+                            {t("subscriptions.add")}
+                          </span>
+                        </RippleButton>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>{t("subscriptions.add")}</p>
+                      </TooltipContent>
+                    </Tooltip>
                   )}
                   {activeTab === "vpns" && (
                     <>
@@ -1464,9 +1498,16 @@ export function ProxyManagementDialog({
                 value="subscriptions"
                 className="mt-4 min-h-0 flex-1 flex-col data-[state=active]:flex"
               >
-                <FadingScrollArea className="min-h-0 flex-1">
-                  <SubscriptionsPanel proxies={storedProxies} />
-                </FadingScrollArea>
+                <div className="flex min-h-0 flex-1 flex-col gap-4">
+                  <SubscriptionsPanel
+                    proxies={storedProxies}
+                    showForm={showSubForm}
+                    onShowFormChange={setShowSubForm}
+                    editing={editingSub}
+                    onEditingChange={setEditingSub}
+                    onCountChange={setSubsCount}
+                  />
+                </div>
               </AnimatedTabsContent>
             </AnimatedTabs>
           </div>

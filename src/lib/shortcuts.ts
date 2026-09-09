@@ -78,6 +78,8 @@ export const SHORTCUTS: ShortcutDef[] = [
     key: "n",
     mod: true,
   },
+  // NOTE: Temporarily hidden from rail/palette/shortcuts UI (no production
+  // infra yet). Kept as deadcode for a future version — DO NOT DELETE.
   {
     id: "goExtensions",
     labelKey: "shortcuts.goExtensions",
@@ -102,6 +104,8 @@ export const SHORTCUTS: ShortcutDef[] = [
   {
     // Mod+Shift+A (not Mod+A): plain Mod+A must stay select-all in any
     // focused text field or table context.
+    // NOTE: Temporarily hidden from rail/palette/shortcuts UI (no production
+    // infra yet). Kept as deadcode for a future version — DO NOT DELETE.
     id: "goAccount",
     labelKey: "shortcuts.goAccount",
     group: "navigation",

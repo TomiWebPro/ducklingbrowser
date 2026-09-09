@@ -90,6 +90,17 @@ import type { BrowserConfig, BrowserProfile, SyncSettings } from "@/types";
 
 type BrowserTypeString = "chromium";
 
+// NOTE: "account" (signed-out / sign-in + self-hosted) and "extensions" have
+// no production infra yet. They are hidden from the rail (see rail-nav.tsx
+// DISABLED_RAIL_PAGES) and kept as deadcode for a future version — DO NOT
+// DELETE the cases/dialogs below. Looked up via Set.has (instead of `===`)
+// so TypeScript does not narrow the params and invalidate the kept cases.
+const DISABLED_PAGES: ReadonlySet<AppPage> = new Set(["account", "extensions"]);
+const DISABLED_SHORTCUT_IDS: ReadonlySet<ShortcutId> = new Set([
+  "goAccount",
+  "goExtensions",
+]);
+
 interface PendingUrl {
   id: string;
   url: string;
@@ -366,6 +377,9 @@ export default function Home() {
   }, []);
 
   const handleRailNavigate = useCallback((page: AppPage) => {
+    if (DISABLED_PAGES.has(page)) {
+      return;
+    }
     // Always reset every sub-page-able dialog before opening the next one,
     // so navigating from one rail item to another doesn't stack two
     // sub-pages on top of each other.
@@ -377,6 +391,7 @@ export default function Home() {
     setImportProfileDialogOpen(false);
     setAccountDialogOpen(false);
     setAiDialogOpen(false);
+    setScheduledTasksDialogOpen(false);
 
     setCurrentPage(page);
     switch (page) {
@@ -425,6 +440,9 @@ export default function Home() {
 
   const runShortcut = useCallback(
     (id: ShortcutId) => {
+      if (DISABLED_SHORTCUT_IDS.has(id)) {
+        return;
+      }
       switch (id) {
         case "openPalette":
           setCommandPaletteOpen(true);
@@ -455,6 +473,7 @@ export default function Home() {
         }
         case "goExtensions": {
           // Mod+E: flip extensions↔groups tab inside the dialog when already there.
+          // (Temporarily unreachable via the guard above; kept for reactivation.)
           if (currentPage === "extensions") {
             setExtensionManagementInitialTab((cur) =>
               cur === "extensions" ? "groups" : "extensions",
@@ -477,6 +496,7 @@ export default function Home() {
           break;
         }
         case "goAccount":
+          // (Temporarily unreachable via the guard above; kept for reactivation.)
           handleRailNavigate("account");
           break;
         case "goSettings":
@@ -1685,7 +1705,7 @@ export default function Home() {
             </motion.div>
           )}
 
-          {settingsDialogOpen && (
+          {settingsDialogOpen && currentPage === "settings" && (
             <SettingsDialog
               isOpen={settingsDialogOpen}
               onClose={() => {
@@ -1701,7 +1721,7 @@ export default function Home() {
             />
           )}
 
-          {integrationsDialogOpen && (
+          {integrationsDialogOpen && currentPage === "integrations" && (
             <IntegrationsDialog
               isOpen={integrationsDialogOpen}
               onClose={() => {
@@ -1713,7 +1733,7 @@ export default function Home() {
             />
           )}
 
-          {aiDialogOpen && (
+          {aiDialogOpen && currentPage === "ai" && (
             <AiDialog
               isOpen={aiDialogOpen}
               onClose={() => {
@@ -1725,7 +1745,7 @@ export default function Home() {
             />
           )}
 
-          {scheduledTasksDialogOpen && (
+          {scheduledTasksDialogOpen && currentPage === "tasks" && (
             <ScheduledTasksDialog
               isOpen={scheduledTasksDialogOpen}
               onClose={() => {
@@ -1736,19 +1756,20 @@ export default function Home() {
             />
           )}
 
-          {proxyManagementDialogOpen && (
-            <ProxyManagementDialog
-              isOpen={proxyManagementDialogOpen}
-              onClose={() => {
-                setProxyManagementDialogOpen(false);
-                setCurrentPage("profiles");
-              }}
-              subPage={currentPage === "proxies" || currentPage === "vpns"}
-              initialTab={proxyManagementInitialTab}
-            />
-          )}
+          {proxyManagementDialogOpen &&
+            (currentPage === "proxies" || currentPage === "vpns") && (
+              <ProxyManagementDialog
+                isOpen={proxyManagementDialogOpen}
+                onClose={() => {
+                  setProxyManagementDialogOpen(false);
+                  setCurrentPage("profiles");
+                }}
+                subPage={currentPage === "proxies" || currentPage === "vpns"}
+                initialTab={proxyManagementInitialTab}
+              />
+            )}
 
-          {groupManagementDialogOpen && (
+          {groupManagementDialogOpen && currentPage === "groups" && (
             <GroupManagementDialog
               isOpen={groupManagementDialogOpen}
               onClose={() => {
@@ -1760,7 +1781,9 @@ export default function Home() {
             />
           )}
 
-          {extensionManagementDialogOpen && (
+          {/* NOTE: Extensions page temporarily hidden (no production infra yet).
+              Kept as deadcode for a future version — DO NOT DELETE. */}
+          {extensionManagementDialogOpen && currentPage === "extensions" && (
             <ExtensionManagementDialog
               isOpen={extensionManagementDialogOpen}
               onClose={() => {
@@ -1773,7 +1796,7 @@ export default function Home() {
             />
           )}
 
-          {importProfileDialogOpen && (
+          {importProfileDialogOpen && currentPage === "import" && (
             <ImportProfileDialog
               isOpen={importProfileDialogOpen}
               onClose={() => {
@@ -1785,7 +1808,10 @@ export default function Home() {
             />
           )}
 
-          {accountDialogOpen && (
+          {/* NOTE: Account page (signed-out / sign-in + self-hosted) temporarily
+              hidden (no production infra yet). Kept as deadcode for a future
+              version — DO NOT DELETE. */}
+          {accountDialogOpen && currentPage === "account" && (
             <AccountPage
               isOpen={accountDialogOpen}
               onClose={() => {

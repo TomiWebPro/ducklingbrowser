@@ -44,6 +44,7 @@ export const AI_PROVIDERS: ProviderMeta[] = [
   {
     id: "openai",
     defaultModel: "gpt-4o-mini",
+    defaultEndpoint: "https://api.openai.com/v1",
     showEndpoint: true,
     requireEndpoint: false,
     endpointPlaceholder: "https://api.openai.com/v1",
@@ -58,6 +59,7 @@ export const AI_PROVIDERS: ProviderMeta[] = [
   {
     id: "groq",
     defaultModel: "llama-3.3-70b-versatile",
+    defaultEndpoint: "https://api.groq.com/openai/v1",
     showEndpoint: true,
     requireEndpoint: false,
     endpointPlaceholder: "https://api.groq.com/openai/v1",
@@ -72,6 +74,7 @@ export const AI_PROVIDERS: ProviderMeta[] = [
   {
     id: "openrouter",
     defaultModel: "anthropic/claude-sonnet-4-5",
+    defaultEndpoint: "https://openrouter.ai/api/v1",
     showEndpoint: true,
     requireEndpoint: false,
     endpointPlaceholder: "https://openrouter.ai/api/v1",
@@ -79,6 +82,7 @@ export const AI_PROVIDERS: ProviderMeta[] = [
   {
     id: "opencode",
     defaultModel: "opencode",
+    defaultEndpoint: "http://localhost:4096/v1",
     showEndpoint: true,
     requireEndpoint: false,
     endpointPlaceholder: "http://localhost:4096/v1",

@@ -2,23 +2,10 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Frontend (Next.js)",
-      "request": "launch",
-      "type": "node-terminal",
-      "command": "pnpm dev"
-    },
-    {
-      "name": "Tauri (Rust)",
-      "request": "launch",
-      "type": "node-terminal",
-      "command": "node scripts/tauri-before-dev.mjs"
-    }
-  ],
-  "compounds": [
-    {
       "name": "Run Full App",
-      "configurations": ["Frontend (Next.js)", "Tauri (Rust)"],
-      "stopAll": true
+      "request": "launch",
+      "type": "node-terminal",
+      "command": "pnpm tauri dev"
     }
   ]
 }

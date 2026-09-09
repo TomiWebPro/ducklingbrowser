@@ -209,6 +209,20 @@ const TOP_ITEMS: RailItem[] = [
   { page: "account", Icon: LuCloud, labelKey: "rail.account" },
 ];
 
+// NOTE: The Account page (signed-out / sign-in + self-hosted sync) and the
+// Extensions page have no production backend/infra behind them yet. Their code
+// (AccountPage, ExtensionManagementDialog, Tauri commands, shortcuts, palette
+// entries) is intentionally kept as deadcode so it can be reactivated in a
+// future version — DO NOT DELETE it. Only the UI entry points are hidden here.
+const DISABLED_RAIL_PAGES: ReadonlySet<AppPage> = new Set([
+  "account",
+  "extensions",
+]);
+
+const VISIBLE_TOP_ITEMS: RailItem[] = TOP_ITEMS.filter(
+  (item) => !DISABLED_RAIL_PAGES.has(item.page),
+);
+
 interface MoreMenuItem {
   page: AppPage;
   Icon: React.ComponentType<{ className?: string }>;
@@ -310,7 +324,7 @@ export function RailNav({
       <div className="my-1 h-px w-5 shrink-0 bg-border" />
 
       <div className="flex min-h-0 w-full scrollbar-none flex-col items-center gap-1 overflow-y-auto [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-        {TOP_ITEMS.map(({ page, Icon, labelKey }) => {
+        {VISIBLE_TOP_ITEMS.map(({ page, Icon, labelKey }) => {
           const active = currentPage === page;
           return (
             <Tooltip key={page} delayDuration={300}>

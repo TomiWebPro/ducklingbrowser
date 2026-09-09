@@ -639,6 +639,52 @@ impl utoipa::Modify for SecurityAddon {
   }
 }
 
+/// Build the versioned API router. Extracted from `ApiServer::start` so tests
+/// can construct it without binding a port: axum panics on overlapping
+/// method routes at build time, and that panic must surface in CI — not when
+/// a user flips the Local API toggle.
+fn v1_routes() -> OpenApiRouter<ApiServerState> {
+  OpenApiRouter::new()
+    .routes(routes!(get_profiles, create_profile))
+    .routes(routes!(get_profile, update_profile, delete_profile))
+    .routes(routes!(run_profile))
+    .routes(routes!(open_url_in_profile))
+    .routes(routes!(kill_profile))
+    .routes(routes!(batch_run_profiles))
+    .routes(routes!(batch_stop_profiles))
+    .routes(routes!(batch_create_profiles_api))
+    .routes(routes!(create_proxy_pool_api, list_proxy_pools_api))
+    .routes(routes!(update_proxy_pool_api, delete_proxy_pool_api))
+    // NOTE: one `routes!()` call per path. The macro folds every handler
+    // into a single MethodRouter (paths only feed the OpenAPI object), so
+    // grouping two POST handlers here panics at startup with "Overlapping
+    // method route" — which bricked the Local API toggle.
+    .routes(routes!(assign_profiles_to_pool_api))
+    .routes(routes!(rotate_profile_proxy_api))
+    .routes(routes!(llm_completion_api))
+    .routes(routes!(system_status_api))
+    .routes(routes!(detect_import_profiles))
+    .routes(routes!(import_profiles_api))
+    .routes(routes!(import_profile_cookies))
+    .routes(routes!(get_groups, create_group))
+    .routes(routes!(get_group, update_group, delete_group))
+    .routes(routes!(get_tags))
+    .routes(routes!(get_proxies, create_proxy))
+    .routes(routes!(import_proxies_api))
+    .routes(routes!(get_proxy, update_proxy, delete_proxy))
+    .routes(routes!(get_vpns, create_vpn))
+    .routes(routes!(import_vpn))
+    .routes(routes!(export_vpn))
+    .routes(routes!(get_vpn, update_vpn, delete_vpn))
+    .routes(routes!(get_extensions))
+    .routes(routes!(delete_extension_api))
+    .routes(routes!(get_extension_groups))
+    .routes(routes!(delete_extension_group_api))
+    .routes(routes!(download_browser_api))
+    .routes(routes!(get_browser_versions))
+    .routes(routes!(check_browser_downloaded))
+}
+
 pub struct ApiServer {
   port: Option<u16>,
   shutdown_tx: Option<mpsc::Sender<()>>,
@@ -698,44 +744,7 @@ impl ApiServer {
       .port();
 
     // Create router with OpenAPI documentation
-    let (v1_routes, _) = OpenApiRouter::new()
-      .routes(routes!(get_profiles, create_profile))
-      .routes(routes!(get_profile, update_profile, delete_profile))
-      .routes(routes!(run_profile))
-      .routes(routes!(open_url_in_profile))
-      .routes(routes!(kill_profile))
-      .routes(routes!(batch_run_profiles))
-      .routes(routes!(batch_stop_profiles))
-      .routes(routes!(batch_create_profiles_api))
-      .routes(routes!(create_proxy_pool_api, list_proxy_pools_api))
-      .routes(routes!(update_proxy_pool_api, delete_proxy_pool_api))
-      .routes(routes!(
-        assign_profiles_to_pool_api,
-        rotate_profile_proxy_api
-      ))
-      .routes(routes!(llm_completion_api))
-      .routes(routes!(system_status_api))
-      .routes(routes!(detect_import_profiles))
-      .routes(routes!(import_profiles_api))
-      .routes(routes!(import_profile_cookies))
-      .routes(routes!(get_groups, create_group))
-      .routes(routes!(get_group, update_group, delete_group))
-      .routes(routes!(get_tags))
-      .routes(routes!(get_proxies, create_proxy))
-      .routes(routes!(import_proxies_api))
-      .routes(routes!(get_proxy, update_proxy, delete_proxy))
-      .routes(routes!(get_vpns, create_vpn))
-      .routes(routes!(import_vpn))
-      .routes(routes!(export_vpn))
-      .routes(routes!(get_vpn, update_vpn, delete_vpn))
-      .routes(routes!(get_extensions))
-      .routes(routes!(delete_extension_api))
-      .routes(routes!(get_extension_groups))
-      .routes(routes!(delete_extension_group_api))
-      .routes(routes!(download_browser_api))
-      .routes(routes!(get_browser_versions))
-      .routes(routes!(check_browser_downloaded))
-      .split_for_parts();
+    let (v1_routes, _) = v1_routes().split_for_parts();
 
     let api = ApiDoc::openapi();
 
@@ -3404,6 +3413,15 @@ mod tests {
   // list, not from the router — endpoints registered on the router but missing
   // from ApiDoc silently disappear from the spec. Lock in the ones that were
   // once dropped, and that removed endpoints stay gone.
+  #[test]
+  fn router_builds_without_overlapping_method_routes() {
+    // Axum panics at router-build time on overlapping method routes. That
+    // panic used to escape to production: flipping the Local API toggle
+    // crashed the tokio worker and left the switch permanently stuck.
+    // Building the real router here fails CI instead.
+    let _ = v1_routes().split_for_parts();
+  }
+
   #[test]
   fn openapi_spec_covers_registered_routes() {
     let spec = serde_json::to_value(ApiDoc::openapi()).expect("spec serializes");

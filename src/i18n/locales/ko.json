@@ -2313,6 +2313,22 @@
     "deleteTitle": "Delete {{name}}?",
     "deleteDescription": "Imported routes can stay as manual entries or be deleted with the subscription.",
     "deleteKeepEntries": "Keep entries",
-    "deleteWithEntries": "Delete with entries"
+    "deleteWithEntries": "Delete with entries",
+    "columns": {
+      "url": "URL",
+      "schedule": "Refresh",
+      "status": "Status"
+    },
+    "direct": "Direct",
+    "loading": "Loading subscriptions...",
+    "refreshSelected": "Refresh selected",
+    "bulkRefreshDone": "Refreshed {{ok}} of {{total}} subscriptions",
+    "bulkRefreshFailed": "{{failed}} of {{total}} refreshes failed",
+    "bulkDelete": {
+      "title": "Delete {{count}} subscriptions?",
+      "description": "Imported routes stay as manual entries: {{names}}",
+      "confirm": "Delete {{count}}"
+    },
+    "bulkDeleteFailed": "Failed to delete some subscriptions"
   }
 }

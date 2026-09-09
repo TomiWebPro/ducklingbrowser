@@ -349,7 +349,15 @@ export function ScheduledTasksDialog({
   return (
     <Dialog open={isOpen} onOpenChange={onClose} subPage={subPage}>
       <DialogContent className="max-w-2xl flex flex-col">
-        <DialogHeader className="flex flex-row items-center justify-between gap-3">
+        <DialogHeader
+          className={cn(
+            "flex flex-row items-center justify-between gap-3",
+            // Base DialogHeader reserves pr-8 for the modal close X, which
+            // doesn't exist in sub-page mode — drop it so the toggle sits
+            // flush against the right edge.
+            subPage && "!pr-0",
+          )}
+        >
           <DialogTitle className="flex items-center gap-2">
             <LuCalendarDays className="size-4 text-muted-foreground" />
             {t("tasks.title")}

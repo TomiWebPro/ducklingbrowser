@@ -161,6 +161,29 @@ fn generate_tray_icons() {
     return;
   }
 
+  // These outputs live under src-tauri/, which `tauri dev` watches. Rewriting
+  // them on every build retriggers the watcher, which rebuilds, which rewrites
+  // them again — an infinite rebuild loop. Only regenerate when the SVG is
+  // newer than an output.
+  let svg_mtime = fs::metadata(&svg_path)
+    .and_then(|m| m.modified())
+    .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+  let outputs = [
+    "tray-icon-22.png",
+    "tray-icon-44.png",
+    "tray-icon-win-44.png",
+  ];
+  let stale = outputs.iter().any(|filename| {
+    let path = icons_dir.join(filename);
+    match fs::metadata(&path).and_then(|m| m.modified()) {
+      Ok(mtime) => mtime < svg_mtime,
+      Err(_) => true,
+    }
+  });
+  if !stale {
+    return;
+  }
+
   let svg_data = fs::read(&svg_path).expect("Failed to read tray-icon.svg");
   let tree = Tree::from_data(&svg_data, &Options::default()).expect("Failed to parse SVG");
 

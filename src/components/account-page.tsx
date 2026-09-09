@@ -1,5 +1,10 @@
 "use client";
 
+// NOTE: This page (signed-out / sign-in + self-hosted sync) is temporarily
+// hidden from the UI — there is no production backend/infra behind it yet.
+// It is kept as deadcode so it can be reactivated in a future version —
+// DO NOT DELETE. See DISABLED_RAIL_PAGES in rail-nav.tsx.
+
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";

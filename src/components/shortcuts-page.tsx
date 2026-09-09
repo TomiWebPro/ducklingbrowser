@@ -41,6 +41,14 @@ function ShortcutTokens({ shortcut }: { shortcut: ShortcutDef }) {
 export function ShortcutsPage({ groupTargets }: ShortcutsPageProps) {
   const { t } = useTranslation();
 
+  // NOTE: Account and Extensions have no production infra yet. Their SHORTCUTS
+  // entries are kept as deadcode for a future version — DO NOT DELETE. Only
+  // the listing here is filtered.
+  const DISABLED_SHORTCUT_IDS: ReadonlySet<string> = new Set([
+    "goAccount",
+    "goExtensions",
+  ]);
+
   const sections: Array<{ key: ShortcutDef["group"]; titleKey: string }> = [
     { key: "navigation", titleKey: "commandPalette.groups.navigation" },
     { key: "actions", titleKey: "commandPalette.groups.actions" },
@@ -59,7 +67,9 @@ export function ShortcutsPage({ groupTargets }: ShortcutsPageProps) {
         </header>
 
         {sections.map(({ key, titleKey }) => {
-          const items = SHORTCUTS.filter((s) => s.group === key);
+          const items = SHORTCUTS.filter(
+            (s) => s.group === key && !DISABLED_SHORTCUT_IDS.has(s.id),
+          );
           if (items.length === 0) return null;
           return (
             <section key={key} className="flex flex-col gap-2">

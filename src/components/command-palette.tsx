@@ -139,8 +139,18 @@ export function CommandPalette({
     setTimeout(fn, 0);
   };
 
+  // NOTE: Account (signed-out / sign-in + self-hosted) and Extensions have no
+  // production infra yet. Their SHORTCUTS entries are kept as deadcode for a
+  // future version — DO NOT DELETE. Only the palette display is filtered here.
+  const DISABLED_PALETTE_IDS: ReadonlySet<ShortcutId> = new Set([
+    "goAccount",
+    "goExtensions",
+  ]);
+
   const byGroup = (group: ShortcutDef["group"]) =>
-    SHORTCUTS.filter((s) => s.group === group);
+    SHORTCUTS.filter(
+      (s) => s.group === group && !DISABLED_PALETTE_IDS.has(s.id),
+    );
 
   // Limit to 9 — only the first 9 group targets have a Mod+digit binding.
   // We still display more in the palette (without a shortcut hint) so the

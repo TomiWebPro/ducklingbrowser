@@ -1,5 +1,10 @@
 "use client";
 
+// NOTE: This dialog is temporarily hidden from the UI — there is no
+// production backend/infra behind extensions yet. It is kept as deadcode so it
+// can be reactivated in a future version — DO NOT DELETE. See
+// DISABLED_RAIL_PAGES in rail-nav.tsx.
+
 import {
   type ColumnDef,
   flexRender,
