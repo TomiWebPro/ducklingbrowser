@@ -28,6 +28,9 @@ interface DeleteConfirmationDialogProps {
   isLoading?: boolean;
   profileIds?: string[];
   profiles?: { id: string; name: string }[];
+  /** Optional tertiary action (e.g. "delete including imported entries"). */
+  extraActionLabel?: string;
+  onExtraAction?: () => void | Promise<void>;
 }
 
 export function DeleteConfirmationDialog({
@@ -41,6 +44,8 @@ export function DeleteConfirmationDialog({
   isLoading = false,
   profileIds,
   profiles = [],
+  extraActionLabel,
+  onExtraAction,
 }: DeleteConfirmationDialogProps) {
   const { t } = useTranslation();
   const handleConfirm = async () => {
@@ -85,6 +90,15 @@ export function DeleteConfirmationDialog({
           >
             {t("common.buttons.cancel")}
           </RippleButton>
+          {extraActionLabel && onExtraAction && (
+            <LoadingButton
+              variant="secondary"
+              onClick={() => void onExtraAction()}
+              isLoading={isLoading}
+            >
+              {extraActionLabel}
+            </LoadingButton>
+          )}
           <LoadingButton
             variant={confirmButtonVariant}
             onClick={() => void handleConfirm()}

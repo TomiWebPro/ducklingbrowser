@@ -51,6 +51,7 @@ pub mod app_dirs;
 mod auto_updater;
 mod automation_rate_limiter;
 mod browser;
+mod browser_downloads;
 mod browser_runner;
 mod browser_version_manager;
 mod cdp_session;
@@ -96,6 +97,7 @@ pub mod events;
 mod mcp_integrations;
 mod mcp_server;
 mod scheduler;
+mod subscription_manager;
 mod tag_manager;
 mod task_runner;
 mod team_lock;
@@ -111,7 +113,8 @@ use browser_runner::{
 use profile::manager::{
   batch_create_browser_profiles, check_browser_status, clone_profile, create_browser_profile_new,
   delete_profile, list_browser_profiles, rename_profile, update_chromium_config,
-  update_profile_clear_on_close, update_profile_dns_blocklist, update_profile_launch_hook,
+  update_profile_allow_agent_downloads, update_profile_clear_on_close,
+  update_profile_dns_blocklist, update_profile_download_dir, update_profile_launch_hook,
   update_profile_note, update_profile_proxy, update_profile_proxy_bypass_rules,
   update_profile_tags, update_profile_vpn, update_profile_window_color,
 };
@@ -133,6 +136,10 @@ use downloaded_browsers_registry::{
 };
 
 use ai_keys::{ai_keys_delete, ai_keys_list, ai_keys_save, ai_keys_test};
+use subscription_manager::{
+  subscription_delete, subscription_entries, subscription_preview, subscription_refresh,
+  subscription_save, subscriptions_list,
+};
 
 use agent_engine::{agent_chat, agent_chat_confirm, agent_chat_decline};
 
@@ -1407,6 +1414,8 @@ async fn generate_sample_fingerprint(
     clear_on_close: false,
     created_at: None,
     updated_at: None,
+    download_dir: None,
+    allow_agent_downloads: true,
   };
 
   if browser == "chromium" {
@@ -2403,6 +2412,9 @@ pub fn run_with_builder(
       scheduler::reconcile_stale_schedules();
       scheduler::JobRunner::instance().start();
 
+      // Start the subscription auto-refresh loop in the background
+      subscription_manager::start_subscription_loop(app.handle().clone());
+
       // Start cloud auth background refresh loop
       let app_handle_cloud = app.handle().clone();
       tauri::async_runtime::spawn(async move {
@@ -2450,6 +2462,8 @@ pub fn run_with_builder(
       update_profile_tags,
       update_profile_note,
       update_profile_clear_on_close,
+      update_profile_download_dir,
+      update_profile_allow_agent_downloads,
       update_profile_launch_hook,
       update_profile_window_color,
       update_profile_proxy_bypass_rules,
@@ -2634,6 +2648,12 @@ pub fn run_with_builder(
       agent_chat,
       agent_chat_confirm,
       agent_chat_decline,
+      subscriptions_list,
+      subscription_entries,
+      subscription_save,
+      subscription_delete,
+      subscription_refresh,
+      subscription_preview,
     ])
     .build(tauri::generate_context!())
     .expect("error while building tauri application")

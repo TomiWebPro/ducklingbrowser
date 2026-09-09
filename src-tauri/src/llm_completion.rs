@@ -80,7 +80,7 @@ pub async fn run_llm_completion(
     api_key: record.key.clone(),
     model: model.clone(),
     client: None,
-    endpoint_override: None,
+    endpoint_override: record.endpoint.clone(),
   };
   let max_retries = request.max_retries.unwrap_or(DEFAULT_MAX_RETRIES);
 
@@ -166,7 +166,7 @@ mod tests {
   fn empty_messages_are_rejected_before_any_request() {
     let tmp = tempfile::tempdir().unwrap();
     let _guard = crate::app_dirs::set_test_data_dir(tmp.path().to_path_buf());
-    crate::ai_keys::save_key("openai", "Main", "gpt-4o-mini", "sk-test").unwrap();
+    crate::ai_keys::save_key("openai", "Main", "gpt-4o-mini", "sk-test", None).unwrap();
 
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let err = runtime
@@ -189,7 +189,7 @@ mod tests {
   fn unknown_provider_override_is_rejected() {
     let tmp = tempfile::tempdir().unwrap();
     let _guard = crate::app_dirs::set_test_data_dir(tmp.path().to_path_buf());
-    crate::ai_keys::save_key("openai", "Main", "gpt-4o-mini", "sk-test").unwrap();
+    crate::ai_keys::save_key("openai", "Main", "gpt-4o-mini", "sk-test", None).unwrap();
 
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let err = runtime

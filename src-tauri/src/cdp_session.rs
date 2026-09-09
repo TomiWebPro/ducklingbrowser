@@ -652,6 +652,107 @@ impl CdpSession {
     Ok(profile)
   }
 
+  /// Resolve a selector/index target to its viewport center point.
+  /// Scrolls the element into view first so the coordinates are actionable.
+  pub async fn element_point(
+    &self,
+    ws_url: &str,
+    selector: Option<&str>,
+    index: Option<u32>,
+  ) -> Result<(f64, f64), CdpError> {
+    let expression = point_expression(selector, index)?;
+    let result = self
+      .send_cdp(
+        ws_url,
+        "Runtime.evaluate",
+        json!({
+          "expression": expression,
+          "returnByValue": true
+        }),
+      )
+      .await?;
+    if let Some(exception) = result.get("exceptionDetails") {
+      return Err(CdpError::new(
+        -32000,
+        format!("Target lookup failed: {exception}"),
+      ));
+    }
+    let value = result
+      .pointer("/result/value")
+      .ok_or_else(|| CdpError::new(-32000, "Target lookup returned no point".to_string()))?;
+    let x = value
+      .get("x")
+      .and_then(|v| v.as_f64())
+      .ok_or_else(|| CdpError::new(-32000, "Target is not visible".to_string()))?;
+    let y = value
+      .get("y")
+      .and_then(|v| v.as_f64())
+      .ok_or_else(|| CdpError::new(-32000, "Target is not visible".to_string()))?;
+    Ok((x, y))
+  }
+
+  /// Low-level mouse event at viewport coordinates.
+  pub async fn dispatch_mouse(
+    &self,
+    ws_url: &str,
+    mouse_type: &str,
+    x: f64,
+    y: f64,
+    button: Option<&str>,
+  ) -> Result<(), CdpError> {
+    let mut params = json!({ "type": mouse_type, "x": x, "y": y });
+    if let Some(button) = button {
+      params["button"] = json!(button);
+      params["clickCount"] = json!(1);
+    }
+    self
+      .send_cdp(ws_url, "Input.dispatchMouseEvent", params)
+      .await?;
+    Ok(())
+  }
+
+  /// Press a named key. Only an allowlist of non-text keys is accepted;
+  /// text entry stays on the typing path (human keystrokes / insertText).
+  pub async fn press_key(&self, ws_url: &str, key: &str) -> Result<(), CdpError> {
+    let (key_name, windows_code) = validated_key(key)?;
+    for event_type in ["rawKeyDown", "keyUp"] {
+      self
+        .send_cdp(
+          ws_url,
+          "Input.dispatchKeyEvent",
+          json!({
+            "type": event_type,
+            "key": key_name,
+            "windowsVirtualKeyCode": windows_code,
+            "nativeVirtualKeyCode": windows_code,
+          }),
+        )
+        .await?;
+    }
+    Ok(())
+  }
+
+  /// Route page downloads into `dir` (must already exist — see
+  /// browser_downloads::resolve_download_dir).
+  pub async fn set_download_behavior(
+    &self,
+    ws_url: &str,
+    dir: &std::path::Path,
+  ) -> Result<(), CdpError> {
+    self
+      .send_cdp(
+        ws_url,
+        "Browser.setDownloadBehavior",
+        json!({
+          "behavior": "allow",
+          "downloadPath": dir.to_string_lossy(),
+          "eventsEnabled": true,
+        }),
+      )
+      .await?;
+    Ok(())
+  }
+
   /// Poll `Runtime.evaluate` until `document.querySelector(selector)` matches
   /// or the timeout elapses.
   #[allow(dead_code)]
@@ -701,6 +802,59 @@ fn selector_expression(selector: &str) -> String {
   format!("!!document.querySelector({escaped})")
 }
 
+/// Build the expression resolving a selector/index target to its viewport
+/// center `{x, y}` (scrolling it into view). Throws a descriptive Error when
+/// the element is missing so the failure surfaces through exceptionDetails.
+fn point_expression(selector: Option<&str>, index: Option<u32>) -> Result<String, CdpError> {
+  if let Some(index) = index {
+    return Ok(format!(
+      r#"(() => {{
+        const arr = window.__duckling_interactive;
+        if (!arr || !arr[{index}]) throw new Error('No element at index {index}');
+        const el = arr[{index}];
+        el.scrollIntoView({{block: 'center'}});
+        const r = el.getBoundingClientRect();
+        return {{x: r.x + r.width / 2, y: r.y + r.height / 2}};
+      }})()"#
+    ));
+  }
+  let selector = selector
+    .ok_or_else(|| CdpError::new(-32000, "A selector or an index is required".to_string()))?;
+  let escaped = serde_json::to_string(selector).unwrap_or_default();
+  Ok(format!(
+    r#"(() => {{
+      const el = document.querySelector({escaped});
+      if (!el) throw new Error('Element not found');
+      el.scrollIntoView({{block: 'center'}});
+      const r = el.getBoundingClientRect();
+      return {{x: r.x + r.width / 2, y: r.y + r.height / 2}};
+    }})()"#
+  ))
+}
+
+/// Allowlisted non-text keys with their Windows virtual-key codes.
+fn validated_key(key: &str) -> Result<(&'static str, u32), CdpError> {
+  match key {
+    "Enter" => Ok(("Enter", 13)),
+    "Tab" => Ok(("Tab", 9)),
+    "Escape" => Ok(("Escape", 27)),
+    "Backspace" => Ok(("Backspace", 8)),
+    "Delete" => Ok(("Delete", 46)),
+    "ArrowUp" => Ok(("ArrowUp", 38)),
+    "ArrowDown" => Ok(("ArrowDown", 40)),
+    "ArrowLeft" => Ok(("ArrowLeft", 37)),
+    "ArrowRight" => Ok(("ArrowRight", 39)),
+    "Home" => Ok(("Home", 36)),
+    "End" => Ok(("End", 35)),
+    "PageUp" => Ok(("PageUp", 33)),
+    "PageDown" => Ok(("PageDown", 34)),
+    _ => Err(CdpError::new(
+      -32000,
+      format!("Unsupported key '{key}'. Use one of: Enter, Tab, Escape, Backspace, Delete, ArrowUp/Down/Left/Right, Home, End, PageUp, PageDown."),
+    )),
+  }
+}
+
 #[allow(dead_code)]
 #[async_trait::async_trait]
 pub trait CdpSessionTrait: Send {
@@ -713,6 +867,26 @@ pub trait CdpSessionTrait: Send {
     ws_url: &str,
     selector: &str,
     timeout_ms: u64,
+  ) -> Result<(), CdpError>;
+  async fn element_point(
+    &mut self,
+    ws_url: &str,
+    selector: Option<&str>,
+    index: Option<u32>,
+  ) -> Result<(f64, f64), CdpError>;
+  async fn dispatch_mouse(
+    &mut self,
+    ws_url: &str,
+    mouse_type: &str,
+    x: f64,
+    y: f64,
+    button: Option<&str>,
+  ) -> Result<(), CdpError>;
+  async fn press_key(&mut self, ws_url: &str, key: &str) -> Result<(), CdpError>;
+  async fn set_download_behavior(
+    &mut self,
+    ws_url: &str,
+    dir: &std::path::Path,
   ) -> Result<(), CdpError>;
 }
 
@@ -759,6 +933,38 @@ impl CdpSessionTrait for CdpSession {
   ) -> Result<(), CdpError> {
     self.wait_for_selector(ws_url, selector, timeout_ms).await
   }
+
+  async fn element_point(
+    &mut self,
+    ws_url: &str,
+    selector: Option<&str>,
+    index: Option<u32>,
+  ) -> Result<(f64, f64), CdpError> {
+    self.element_point(ws_url, selector, index).await
+  }
+
+  async fn dispatch_mouse(
+    &mut self,
+    ws_url: &str,
+    mouse_type: &str,
+    x: f64,
+    y: f64,
+    button: Option<&str>,
+  ) -> Result<(), CdpError> {
+    self.dispatch_mouse(ws_url, mouse_type, x, y, button).await
+  }
+
+  async fn press_key(&mut self, ws_url: &str, key: &str) -> Result<(), CdpError> {
+    self.press_key(ws_url, key).await
+  }
+
+  async fn set_download_behavior(
+    &mut self,
+    ws_url: &str,
+    dir: &std::path::Path,
+  ) -> Result<(), CdpError> {
+    self.set_download_behavior(ws_url, dir).await
+  }
 }
 
 #[cfg(test)]
@@ -775,6 +981,26 @@ mod tests {
       selector_expression("button.submit"),
       "!!document.querySelector(\"button.submit\")"
     );
+  }
+
+  #[test]
+  fn point_expression_prefers_index_then_selector() {
+    let expr = point_expression(Some("button.submit"), None).unwrap();
+    assert!(expr.contains("querySelector(\"button.submit\")"));
+    assert!(expr.contains("getBoundingClientRect"));
+    let expr = point_expression(None, Some(2)).unwrap();
+    assert!(expr.contains("arr[2]"));
+    assert!(point_expression(None, None).is_err());
+  }
+
+  #[test]
+  fn validated_key_accepts_allowlist_and_rejects_text() {
+    assert_eq!(validated_key("Enter").unwrap(), ("Enter", 13));
+    assert_eq!(validated_key("ArrowDown").unwrap(), ("ArrowDown", 40));
+    assert_eq!(validated_key("PageUp").unwrap(), ("PageUp", 33));
+    assert!(validated_key("a").is_err());
+    assert!(validated_key("F5").is_err());
+    assert!(validated_key("").is_err());
   }
 
   #[test]

@@ -71,6 +71,73 @@ test("scheduler rejects invalid tasks", async () => {
   });
 });
 
+test("agent_browser tasks validate profile, prompt, tools, and steps", async () => {
+  await withApp("tasks-agent-browser", async (app) => {
+    const base = {
+      id: "",
+      name: "Browser agent task",
+      description: null,
+      mode: "agent_browser",
+      steps: [],
+      schedule: {
+        window_start: "02:00",
+        window_end: "04:00",
+        timezone: "UTC",
+        jitter_minutes: 30,
+        randomize_daily: true,
+      },
+      same_bucket_rate_limit: true,
+      enabled: true,
+    };
+    // Missing profile and prompt.
+    await app.invokeError("scheduler_save", {
+      task: { ...base, profile_id: null, prompt: null },
+    });
+    // Missing prompt.
+    await app.invokeError("scheduler_save", {
+      task: { ...base, profile_id: "some-profile", prompt: "   " },
+    });
+    // Disallowed tool.
+    await app.invokeError("scheduler_save", {
+      task: {
+        ...base,
+        profile_id: "some-profile",
+        prompt: "Do it",
+        allowed_tools: ["delete_profile"],
+      },
+    });
+    // Bad step budget.
+    await app.invokeError("scheduler_save", {
+      task: {
+        ...base,
+        profile_id: "some-profile",
+        prompt: "Do it",
+        max_steps: 0,
+      },
+    });
+
+    const saved = await app.invoke("scheduler_save", {
+      task: {
+        ...base,
+        profile_id: "some-profile",
+        prompt: "Open the dashboard",
+        allowed_tools: ["navigate", "drag", "get_downloads"],
+        download_dir_override: "reports",
+        max_steps: 10,
+      },
+    });
+    assert.ok(saved.id, "valid agent_browser task should save");
+    assert.deepEqual(saved.allowed_tools, [
+      "navigate",
+      "drag",
+      "get_downloads",
+    ]);
+    assert.equal(saved.max_steps, 10);
+
+    await app.invoke("scheduler_delete", { id: saved.id });
+  });
+});
+
 test("scheduler_run_now reports run outcomes", async () => {
   await withApp("tasks-run-now", async (app) => {
     const saved = await app.invoke("scheduler_save", {

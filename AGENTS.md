@@ -18,7 +18,7 @@ ducklingbrowser/
 │   ├── components/                   # 50+ React components (dialogs, tables, UI)
 │   ├── hooks/                        # Event-driven React hooks
 │   ├── i18n/locales/                 # Translations (en, es, fr, ja, ko, pt, ru, tr, vi, zh)
-│   ├── lib/                          # Utilities (themes, toast, browser-utils)
+│   ├── lib/                          # Utilities (themes, toast, browser-utils, ai)
 │   └── types.ts                      # Shared TypeScript interfaces
 ├── src-tauri/                        # Rust backend (Tauri)
 │   ├── src/
@@ -29,6 +29,8 @@ ducklingbrowser/
 │   │   ├── proxy_manager.rs         # Proxy lifecycle & connection testing
 │   │   ├── proxy_server.rs          # Local proxy binary (duckling-proxy)
 │   │   ├── proxy_storage.rs         # Proxy config persistence (JSON files)
+│   │   ├── subscription_manager.rs  # V2Ray-style subscription import + auto-refresh
+│   │   ├── browser_downloads.rs     # Sandboxed per-profile download folders
 │   │   ├── api_server.rs            # REST API (utoipa + axum)
 │   │   ├── mcp_server.rs            # MCP protocol server
 │   │   ├── automation_rate_limiter.rs # Shared REST/MCP automation quota

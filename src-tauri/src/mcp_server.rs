@@ -504,6 +504,13 @@ impl McpServer {
         | "get_interactive_elements"
         | "click_by_index"
         | "type_by_index"
+        | "drag"
+        | "scroll"
+        | "press_key"
+        | "hover"
+        | "set_download_dir"
+        | "wait_for_download"
+        | "get_downloads"
     )
   }
 
@@ -1849,6 +1856,165 @@ impl McpServer {
           "required": ["profile_id", "index", "text"]
         }),
       },
+      McpTool {
+        name: "drag".to_string(),
+        description: "Drag from a source element to a target element or viewport point. Source and target each resolve from a CSS selector, an index from the last get_interactive_elements call, or explicit x/y coordinates. If the drag triggers navigation, waits for the new page to load before returning.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": {
+              "type": "string",
+              "description": "The UUID of the running profile"
+            },
+            "from_selector": {
+              "type": "string",
+              "description": "CSS selector for the drag source"
+            },
+            "from_index": {
+              "type": "integer",
+              "description": "Index of the drag source from get_interactive_elements"
+            },
+            "to_selector": {
+              "type": "string",
+              "description": "CSS selector for the drop target"
+            },
+            "to_index": {
+              "type": "integer",
+              "description": "Index of the drop target from get_interactive_elements"
+            },
+            "to_x": {
+              "type": "number",
+              "description": "Viewport x coordinate (use with to_y instead of a target)"
+            },
+            "to_y": {
+              "type": "number",
+              "description": "Viewport y coordinate (use with to_x instead of a target)"
+            }
+          },
+          "required": ["profile_id"]
+        }),
+      },
+      McpTool {
+        name: "scroll".to_string(),
+        description: "Scroll the page or an element. Direction is up, down, left, or right; pixels defaults to 500.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": {
+              "type": "string",
+              "description": "The UUID of the running profile"
+            },
+            "selector": {
+              "type": "string",
+              "description": "CSS selector of the scrollable element (omit to scroll the page)"
+            },
+            "index": {
+              "type": "integer",
+              "description": "Index of the scrollable element from get_interactive_elements"
+            },
+            "direction": {
+              "type": "string",
+              "enum": ["up", "down", "left", "right"],
+              "description": "Scroll direction (default: down)"
+            },
+            "pixels": {
+              "type": "integer",
+              "description": "Pixels to scroll (default: 500, max 10000)"
+            }
+          },
+          "required": ["profile_id"]
+        }),
+      },
+      McpTool {
+        name: "press_key".to_string(),
+        description: "Press a non-text key (Enter, Tab, Escape, Backspace, Delete, arrows, Home, End, PageUp, PageDown). For text entry use type_text instead.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": {
+              "type": "string",
+              "description": "The UUID of the running profile"
+            },
+            "key": {
+              "type": "string",
+              "description": "Key to press"
+            }
+          },
+          "required": ["profile_id", "key"]
+        }),
+      },
+      McpTool {
+        name: "hover".to_string(),
+        description: "Hover the pointer over an element identified by a CSS selector or an index from get_interactive_elements. Useful for revealing menus and tooltips.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": {
+              "type": "string",
+              "description": "The UUID of the running profile"
+            },
+            "selector": {
+              "type": "string",
+              "description": "CSS selector for the element"
+            },
+            "index": {
+              "type": "integer",
+              "description": "Index from the last get_interactive_elements response"
+            }
+          },
+          "required": ["profile_id"]
+        }),
+      },
+      McpTool {
+        name: "set_download_dir".to_string(),
+        description: "Route subsequent page downloads into a sandboxed folder. Relative paths resolve under the app downloads root; absolute paths must stay inside the app data directory. Fails when the profile disables agent downloads.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": {
+              "type": "string",
+              "description": "The UUID of the running profile"
+            },
+            "path": {
+              "type": "string",
+              "description": "Download folder (omit to reset to the profile default)"
+            }
+          },
+          "required": ["profile_id"]
+        }),
+      },
+      McpTool {
+        name: "wait_for_download".to_string(),
+        description: "Wait for new files to finish downloading into the current download folder and return them. Skips in-progress partial files.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": {
+              "type": "string",
+              "description": "The UUID of the running profile"
+            },
+            "timeout_ms": {
+              "type": "integer",
+              "description": "How long to wait in milliseconds (default: 30000, max 300000)"
+            }
+          },
+          "required": ["profile_id"]
+        }),
+      },
+      McpTool {
+        name: "get_downloads".to_string(),
+        description: "List finished files in the profile's current download folder.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": {
+              "type": "string",
+              "description": "The UUID of the profile"
+            }
+          },
+          "required": ["profile_id"]
+        }),
+      },
     ]
   }
 
@@ -2093,6 +2259,13 @@ impl McpServer {
       "get_interactive_elements" => self.handle_get_interactive_elements(arguments).await,
       "click_by_index" => self.handle_click_by_index(arguments).await,
       "type_by_index" => self.handle_type_by_index(arguments).await,
+      "drag" => self.handle_drag(arguments).await,
+      "scroll" => self.handle_scroll(arguments).await,
+      "press_key" => self.handle_press_key(arguments).await,
+      "hover" => self.handle_hover(arguments).await,
+      "set_download_dir" => self.handle_set_download_dir(arguments).await,
+      "wait_for_download" => self.handle_wait_for_download(arguments).await,
+      "get_downloads" => self.handle_get_downloads(arguments).await,
       _ => Err(McpError {
         code: -32602,
         message: format!("Unknown tool: {tool_name}"),
@@ -5396,6 +5569,376 @@ impl McpServer {
     }))
   }
 
+  fn opt_selector(arguments: &serde_json::Value, key: &str) -> Option<String> {
+    arguments
+      .get(key)
+      .and_then(|v| v.as_str())
+      .map(|s| s.to_string())
+  }
+
+  fn opt_index(arguments: &serde_json::Value, key: &str) -> Option<u32> {
+    arguments
+      .get(key)
+      .and_then(|v| v.as_u64())
+      .map(|n| n as u32)
+  }
+
+  async fn handle_drag(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = arguments
+      .get("profile_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing profile_id".to_string(),
+      })?;
+    let session = crate::cdp_session::CdpSession::new();
+    let profile = self.get_running_profile(profile_id)?;
+    let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
+    let ws_url = self.get_cdp_ws_url(cdp_port).await?;
+
+    let (from_x, from_y) = session
+      .element_point(
+        &ws_url,
+        Self::opt_selector(arguments, "from_selector").as_deref(),
+        Self::opt_index(arguments, "from_index"),
+      )
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e.message,
+      })?;
+    let (to_x, to_y) = match (
+      arguments.get("to_x").and_then(|v| v.as_f64()),
+      arguments.get("to_y").and_then(|v| v.as_f64()),
+    ) {
+      (Some(x), Some(y)) => (x, y),
+      _ => session
+        .element_point(
+          &ws_url,
+          Self::opt_selector(arguments, "to_selector").as_deref(),
+          Self::opt_index(arguments, "to_index"),
+        )
+        .await
+        .map_err(|e| McpError {
+          code: -32000,
+          message: e.message,
+        })?,
+    };
+
+    session
+      .dispatch_mouse(&ws_url, "mousePressed", from_x, from_y, Some("left"))
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e.message,
+      })?;
+    for i in 1..=5 {
+      let t = f64::from(i) / 5.0;
+      session
+        .dispatch_mouse(
+          &ws_url,
+          "mouseMoved",
+          from_x + (to_x - from_x) * t,
+          from_y + (to_y - from_y) * t,
+          None,
+        )
+        .await
+        .map_err(|e| McpError {
+          code: -32000,
+          message: e.message,
+        })?;
+    }
+    // Use the load-aware path: a drop that navigates still returns settled.
+    let release = session
+      .send_cdp(
+        &ws_url,
+        "Input.dispatchMouseEvent",
+        serde_json::json!({
+          "type": "mouseReleased", "x": to_x, "y": to_y,
+          "button": "left", "clickCount": 1,
+        }),
+      )
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e.message,
+      })?;
+    let _ = release;
+
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": format!("Dragged to ({to_x:.0}, {to_y:.0})") }]
+    }))
+  }
+
+  async fn handle_scroll(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = arguments
+      .get("profile_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing profile_id".to_string(),
+      })?;
+    let direction = arguments
+      .get("direction")
+      .and_then(|v| v.as_str())
+      .unwrap_or("down");
+    let pixels = arguments
+      .get("pixels")
+      .and_then(|v| v.as_u64())
+      .unwrap_or(500)
+      .clamp(1, 10_000);
+    let (dx, dy): (i64, i64) = match direction {
+      "down" => (0, pixels as i64),
+      "up" => (0, -(pixels as i64)),
+      "right" => (pixels as i64, 0),
+      "left" => (-(pixels as i64), 0),
+      other => {
+        return Err(McpError {
+          code: -32602,
+          message: format!("Unknown direction '{other}'. Use up, down, left, or right."),
+        });
+      }
+    };
+
+    let profile = self.get_running_profile(profile_id)?;
+    let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
+    let ws_url = self.get_cdp_ws_url(cdp_port).await?;
+
+    let target = if let Some(index) = Self::opt_index(arguments, "index") {
+      format!(
+        r#"(window.__duckling_interactive && window.__duckling_interactive[{index}]) || (() => {{ throw new Error('No element at index {index}'); }})()"#
+      )
+    } else if let Some(selector) = Self::opt_selector(arguments, "selector") {
+      let escaped = selector.replace('\\', "\\\\").replace('\'', "\\'");
+      format!(
+        r#"document.querySelector('{escaped}') || (() => {{ throw new Error('Element not found: {escaped}'); }})()"#
+      )
+    } else {
+      "window".to_string()
+    };
+    let js = format!(
+      r#"(() => {{
+        const el = {target};
+        if (el === window) {{ window.scrollBy({dx}, {dy}); }}
+        else {{ el.scrollBy({dx}, {dy}); }}
+        return true;
+      }})()"#
+    );
+    let result = self
+      .send_cdp(
+        &ws_url,
+        "Runtime.evaluate",
+        serde_json::json!({ "expression": js, "returnByValue": true }),
+      )
+      .await?;
+    if let Some(exception) = result.get("exceptionDetails") {
+      let msg = exception
+        .get("exception")
+        .and_then(|e| e.get("description"))
+        .or_else(|| exception.get("text"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("Scroll failed");
+      return Err(McpError {
+        code: -32000,
+        message: msg.to_string(),
+      });
+    }
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": format!("Scrolled {direction} by {pixels}px") }]
+    }))
+  }
+
+  async fn handle_press_key(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = arguments
+      .get("profile_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing profile_id".to_string(),
+      })?;
+    let key = arguments
+      .get("key")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing key".to_string(),
+      })?;
+    let session = crate::cdp_session::CdpSession::new();
+    let profile = self.get_running_profile(profile_id)?;
+    let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
+    let ws_url = self.get_cdp_ws_url(cdp_port).await?;
+    session
+      .press_key(&ws_url, key)
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e.message,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": format!("Pressed {key}") }]
+    }))
+  }
+
+  async fn handle_hover(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = arguments
+      .get("profile_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing profile_id".to_string(),
+      })?;
+    let session = crate::cdp_session::CdpSession::new();
+    let profile = self.get_running_profile(profile_id)?;
+    let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
+    let ws_url = self.get_cdp_ws_url(cdp_port).await?;
+    let (x, y) = session
+      .element_point(
+        &ws_url,
+        Self::opt_selector(arguments, "selector").as_deref(),
+        Self::opt_index(arguments, "index"),
+      )
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e.message,
+      })?;
+    session
+      .dispatch_mouse(&ws_url, "mouseMoved", x, y, None)
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e.message,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": format!("Hovered ({x:.0}, {y:.0})") }]
+    }))
+  }
+
+  fn download_profile(&self, profile_id: &str) -> Result<crate::profile::BrowserProfile, McpError> {
+    let profiles = crate::profile::ProfileManager::instance()
+      .list_profiles()
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to list profiles: {e}"),
+      })?;
+    profiles
+      .into_iter()
+      .find(|p| p.id.to_string() == profile_id)
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: format!("Profile not found: {profile_id}"),
+      })
+  }
+
+  async fn handle_set_download_dir(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = arguments
+      .get("profile_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing profile_id".to_string(),
+      })?;
+    let path = arguments.get("path").and_then(|v| v.as_str());
+    let profile = self.download_profile(profile_id)?;
+    let dir =
+      crate::browser_downloads::resolve_download_dir(&profile, path).map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+    // Apply immediately when the profile is running; otherwise the folder is
+    // still resolved + created and takes effect on next launch/tool call.
+    if profile.process_id.is_some() {
+      let running = self.get_running_profile(profile_id)?;
+      let cdp_port = self.get_cdp_port_for_profile(&running).await?;
+      let ws_url = self.get_cdp_ws_url(cdp_port).await?;
+      crate::cdp_session::CdpSession::new()
+        .set_download_behavior(&ws_url, &dir)
+        .await
+        .map_err(|e| McpError {
+          code: -32000,
+          message: e.message,
+        })?;
+    }
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": format!("Download folder: {}", dir.display()) }]
+    }))
+  }
+
+  async fn handle_wait_for_download(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = arguments
+      .get("profile_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing profile_id".to_string(),
+      })?;
+    let timeout_ms = arguments
+      .get("timeout_ms")
+      .and_then(|v| v.as_u64())
+      .unwrap_or(30_000)
+      .clamp(1_000, 300_000);
+    let profile = self.download_profile(profile_id)?;
+    let dir =
+      crate::browser_downloads::resolve_download_dir(&profile, None).map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+    let known: std::collections::HashSet<String> = crate::browser_downloads::list_downloads(&dir)
+      .iter()
+      .map(|f| f.name.clone())
+      .collect();
+    let found = crate::browser_downloads::wait_for_new_downloads(
+      &dir,
+      &known,
+      std::time::Duration::from_millis(timeout_ms),
+    )
+    .await;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string(&found).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_get_downloads(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = arguments
+      .get("profile_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing profile_id".to_string(),
+      })?;
+    let profile = self.download_profile(profile_id)?;
+    let dir =
+      crate::browser_downloads::resolve_download_dir(&profile, None).map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+    let files = crate::browser_downloads::list_downloads(&dir);
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string(&files).unwrap_or_default() }]
+    }))
+  }
+
   // --- Synchronizer handlers ---
 
   async fn handle_start_sync_session(
@@ -5627,6 +6170,13 @@ mod tests {
     assert!(tool_names.contains(&"evaluate_javascript"));
     assert!(tool_names.contains(&"click_element"));
     assert!(tool_names.contains(&"type_text"));
+    assert!(tool_names.contains(&"drag"));
+    assert!(tool_names.contains(&"scroll"));
+    assert!(tool_names.contains(&"press_key"));
+    assert!(tool_names.contains(&"hover"));
+    assert!(tool_names.contains(&"set_download_dir"));
+    assert!(tool_names.contains(&"wait_for_download"));
+    assert!(tool_names.contains(&"get_downloads"));
     assert!(tool_names.contains(&"get_page_content"));
     assert!(tool_names.contains(&"get_page_info"));
   }
@@ -5662,6 +6212,13 @@ mod tests {
       "get_interactive_elements",
       "click_by_index",
       "type_by_index",
+      "drag",
+      "scroll",
+      "press_key",
+      "hover",
+      "set_download_dir",
+      "wait_for_download",
+      "get_downloads",
     ] {
       assert!(
         McpServer::is_automation_tool_call(&request("tools/call", Some(name))),

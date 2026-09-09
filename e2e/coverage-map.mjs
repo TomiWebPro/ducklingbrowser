@@ -43,6 +43,8 @@ export const commandCoverage = {
       "update_profile_tags",
       "update_profile_note",
       "update_profile_clear_on_close",
+      "update_profile_download_dir",
+      "update_profile_allow_agent_downloads",
       "update_profile_launch_hook",
       "update_profile_window_color",
       "update_profile_proxy_bypass_rules",
@@ -302,6 +304,18 @@ export const commandCoverage = {
     suite: "ai",
     level: "integration",
     commands: ["agent_chat", "agent_chat_confirm", "agent_chat_decline"],
+  },
+  subscriptions: {
+    suite: "subscriptions",
+    level: "integration",
+    commands: [
+      "subscriptions_list",
+      "subscription_entries",
+      "subscription_save",
+      "subscription_delete",
+      "subscription_refresh",
+      "subscription_preview",
+    ],
   },
   llmCompletion: {
     suite: "integrations",

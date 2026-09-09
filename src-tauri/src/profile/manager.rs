@@ -405,6 +405,8 @@ impl ProfileManager {
           clear_on_close: false,
           created_at: None,
           updated_at: None,
+          download_dir: None,
+          allow_agent_downloads: true,
         };
 
         match self
@@ -495,6 +497,8 @@ impl ProfileManager {
           .unwrap_or(0),
       ),
       updated_at: Some(crate::proxy_manager::now_secs()),
+      download_dir: None,
+      allow_agent_downloads: true,
     };
 
     // Save profile info
@@ -656,6 +660,8 @@ impl ProfileManager {
           clear_on_close: false,
           created_at: None,
           updated_at: None,
+          download_dir: None,
+          allow_agent_downloads: true,
         };
         match self
           .chromium_manager
@@ -782,6 +788,8 @@ impl ProfileManager {
               .unwrap_or(0),
           ),
           updated_at: Some(crate::proxy_manager::now_secs()),
+          download_dir: None,
+          allow_agent_downloads: true,
         };
 
         self.save_profile_raw(&profile)?;
@@ -1335,6 +1343,71 @@ impl ProfileManager {
     Ok(profile)
   }
 
+  pub fn update_profile_download_dir(
+    &self,
+    _app_handle: &tauri::AppHandle,
+    profile_id: &str,
+    download_dir: Option<String>,
+  ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
+    let profile_uuid =
+      uuid::Uuid::parse_str(profile_id).map_err(|_| format!("Invalid profile ID: {profile_id}"))?;
+    let profiles = self.list_profiles()?;
+    let mut profile = profiles
+      .into_iter()
+      .find(|p| p.id == profile_uuid)
+      .ok_or_else(|| format!("Profile with ID '{profile_id}' not found"))?;
+
+    // Validate before persisting: absolute + creatable, empty clears back to
+    // the per-profile default.
+    profile.download_dir = match download_dir {
+      Some(raw) if !raw.trim().is_empty() => Some(
+        crate::browser_downloads::validate_configured_dir(&raw)
+          .map(|p| p.to_string_lossy().to_string())
+          .map_err(|e| format!("Invalid download folder: {e}"))?,
+      ),
+      _ => None,
+    };
+    profile.updated_at = Some(crate::proxy_manager::now_secs());
+
+    self.save_profile(&profile)?;
+
+    crate::sync::queue_profile_sync_if_eligible(&profile);
+
+    if let Err(e) = events::emit_empty("profiles-changed") {
+      log::warn!("Warning: Failed to emit profiles-changed event: {e}");
+    }
+
+    Ok(profile)
+  }
+
+  pub fn update_profile_allow_agent_downloads(
+    &self,
+    _app_handle: &tauri::AppHandle,
+    profile_id: &str,
+    allow: bool,
+  ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
+    let profile_uuid =
+      uuid::Uuid::parse_str(profile_id).map_err(|_| format!("Invalid profile ID: {profile_id}"))?;
+    let profiles = self.list_profiles()?;
+    let mut profile = profiles
+      .into_iter()
+      .find(|p| p.id == profile_uuid)
+      .ok_or_else(|| format!("Profile with ID '{profile_id}' not found"))?;
+
+    profile.allow_agent_downloads = allow;
+    profile.updated_at = Some(crate::proxy_manager::now_secs());
+
+    self.save_profile(&profile)?;
+
+    crate::sync::queue_profile_sync_if_eligible(&profile);
+
+    if let Err(e) = events::emit_empty("profiles-changed") {
+      log::warn!("Warning: Failed to emit profiles-changed event: {e}");
+    }
+
+    Ok(profile)
+  }
+
   pub fn update_profile_window_color(
     &self,
     _app_handle: &tauri::AppHandle,
@@ -1607,6 +1680,8 @@ impl ProfileManager {
           .unwrap_or(0),
       ),
       updated_at: Some(crate::proxy_manager::now_secs()),
+      download_dir: source.download_dir,
+      allow_agent_downloads: source.allow_agent_downloads,
     };
 
     // Duckling: a clone must NOT be linkable to its source. The source
@@ -2469,6 +2544,28 @@ pub fn update_profile_clear_on_close(
   ProfileManager::instance()
     .update_profile_clear_on_close(&app_handle, &profile_id, clear_on_close)
     .map_err(crate::profile_importer::error_to_code_string)
+}
+
+#[tauri::command]
+pub fn update_profile_download_dir(
+  app_handle: tauri::AppHandle,
+  profile_id: String,
+  download_dir: Option<String>,
+) -> Result<BrowserProfile, String> {
+  ProfileManager::instance()
+    .update_profile_download_dir(&app_handle, &profile_id, download_dir)
+    .map_err(|e| format!("Failed to update profile download folder: {e}"))
+}
+
+#[tauri::command]
+pub fn update_profile_allow_agent_downloads(
+  app_handle: tauri::AppHandle,
+  profile_id: String,
+  allow: bool,
+) -> Result<BrowserProfile, String> {
+  ProfileManager::instance()
+    .update_profile_allow_agent_downloads(&app_handle, &profile_id, allow)
+    .map_err(|e| format!("Failed to update profile agent downloads: {e}"))
 }
 
 /// Validate a launch hook value. Returns `Ok(None)` for "clear the hook"

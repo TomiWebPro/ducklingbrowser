@@ -51,7 +51,7 @@ const driverBinary = path.join(
 const suiteFiles = {
   smoke: ["diagnostics.test.mjs", "smoke.test.mjs", "coverage.test.mjs"],
   ui: ["ui.test.mjs"],
-  entities: ["entities.test.mjs"],
+  entities: ["entities.test.mjs", "subscriptions.test.mjs"],
   network: ["network.test.mjs"],
   integrations: ["integrations.test.mjs"],
   tasks: ["tasks.test.mjs"],
@@ -64,6 +64,7 @@ const suiteFiles = {
     "smoke.test.mjs",
     "ui.test.mjs",
     "entities.test.mjs",
+    "subscriptions.test.mjs",
     "network.test.mjs",
     "integrations.test.mjs",
     "tasks.test.mjs",

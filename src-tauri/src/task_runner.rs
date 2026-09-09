@@ -82,6 +82,63 @@ fn type_expression(
   ))
 }
 
+/// Load the task's target profile (macro steps that need the page fail
+/// without one — same rule as `resolve_ws_url`).
+fn task_profile(task: &TaskDefinition) -> Result<crate::profile::BrowserProfile, String> {
+  let profile_id = task
+    .profile_id
+    .as_deref()
+    .ok_or_else(|| "Task has no target profile".to_string())?;
+  ProfileManager::instance()
+    .list_profiles()
+    .map_err(|e| format!("Failed to list profiles: {e}"))?
+    .into_iter()
+    .find(|p| p.id.to_string() == profile_id)
+    .ok_or_else(|| format!("Profile '{profile_id}' not found"))
+}
+
+/// Translate a scroll direction + pixel count into viewport deltas.
+fn scroll_delta(direction: Option<&str>, pixels: u32) -> Result<(i64, i64), String> {
+  let amount = i64::from(pixels).clamp(1, 10_000);
+  match direction.unwrap_or("down") {
+    "down" => Ok((0, amount)),
+    "up" => Ok((0, -amount)),
+    "right" => Ok((amount, 0)),
+    "left" => Ok((-amount, 0)),
+    other => Err(format!(
+      "Unknown scroll direction '{other}'. Use up, down, left, or right."
+    )),
+  }
+}
+
+fn scroll_expression(
+  selector: Option<&str>,
+  index: Option<u32>,
+  dx: i64,
+  dy: i64,
+) -> Result<String, String> {
+  let target = if let Some(index) = index {
+    format!(
+      r#"(window.__duckling_interactive && window.__duckling_interactive[{index}]) || (() => {{ throw new Error('No element at index {index}'); }})()"#
+    )
+  } else if let Some(selector) = selector {
+    let escaped = selector.replace('\\', "\\\\").replace('\'', "\\'");
+    format!(
+      r#"document.querySelector('{escaped}') || (() => {{ throw new Error('Element not found: {escaped}'); }})()"#
+    )
+  } else {
+    "window".to_string()
+  };
+  Ok(format!(
+    r#"(() => {{
+      const el = {target};
+      if (el === window) {{ window.scrollBy({dx}, {dy}); }}
+      else {{ el.scrollBy({dx}, {dy}); }}
+      return true;
+    }})()"#
+  ))
+}
+
 fn save_profile_field(path: &str, value: &Value) -> Result<(), String> {
   let rest = path
     .strip_prefix("profile.")
@@ -247,6 +304,110 @@ async fn execute_step(
         .map_err(|e| e.message)?;
       Ok(None)
     }
+    MacroStep::Drag {
+      from_selector,
+      from_index,
+      to_selector,
+      to_index,
+      to_x,
+      to_y,
+    } => {
+      let (from_x, from_y) = session
+        .element_point(ws_url, from_selector.as_deref(), *from_index)
+        .await
+        .map_err(|e| e.message)?;
+      let (target_x, target_y) = match (to_x, to_y) {
+        (Some(x), Some(y)) => (*x, *y),
+        _ => session
+          .element_point(ws_url, to_selector.as_deref(), *to_index)
+          .await
+          .map_err(|e| e.message)?,
+      };
+      session
+        .dispatch_mouse(ws_url, "mousePressed", from_x, from_y, Some("left"))
+        .await
+        .map_err(|e| e.message)?;
+      // Intermediate moves so draggable targets track the pointer.
+      let steps = 5;
+      for i in 1..=steps {
+        let t = f64::from(i) / f64::from(steps);
+        session
+          .dispatch_mouse(
+            ws_url,
+            "mouseMoved",
+            from_x + (target_x - from_x) * t,
+            from_y + (target_y - from_y) * t,
+            None,
+          )
+          .await
+          .map_err(|e| e.message)?;
+      }
+      session
+        .dispatch_mouse(ws_url, "mouseReleased", target_x, target_y, Some("left"))
+        .await
+        .map_err(|e| e.message)?;
+      Ok(None)
+    }
+    MacroStep::Scroll {
+      selector,
+      index,
+      direction,
+      pixels,
+    } => {
+      let (dx, dy) = scroll_delta(direction.as_deref(), pixels.unwrap_or(500))?;
+      let expression = scroll_expression(selector.as_deref(), *index, dx, dy)?;
+      session
+        .evaluate(ws_url, &expression)
+        .await
+        .map_err(|e| e.message)?;
+      Ok(None)
+    }
+    MacroStep::PressKey { key } => {
+      session
+        .press_key(ws_url, key)
+        .await
+        .map_err(|e| e.message)?;
+      Ok(None)
+    }
+    MacroStep::Hover { selector, index } => {
+      let (x, y) = session
+        .element_point(ws_url, selector.as_deref(), *index)
+        .await
+        .map_err(|e| e.message)?;
+      session
+        .dispatch_mouse(ws_url, "mouseMoved", x, y, None)
+        .await
+        .map_err(|e| e.message)?;
+      Ok(None)
+    }
+    MacroStep::SetDownloadDir { path } => {
+      let profile = task_profile(task)?;
+      let dir = crate::browser_downloads::resolve_download_dir(&profile, path.as_deref())?;
+      session
+        .set_download_behavior(ws_url, &dir)
+        .await
+        .map_err(|e| e.message)?;
+      Ok(None)
+    }
+    MacroStep::WaitForDownload { timeout_ms } => {
+      let profile = task_profile(task)?;
+      let dir = crate::browser_downloads::resolve_download_dir(&profile, None)?;
+      let known: std::collections::HashSet<String> = crate::browser_downloads::list_downloads(&dir)
+        .iter()
+        .map(|f| f.name.clone())
+        .collect();
+      let found = crate::browser_downloads::wait_for_new_downloads(
+        &dir,
+        &known,
+        std::time::Duration::from_millis(timeout_ms.unwrap_or(30_000)),
+      )
+      .await;
+      extracted.insert(
+        "downloads".to_string(),
+        serde_json::to_value(&found).unwrap_or(serde_json::Value::Null),
+      );
+      Ok(None)
+    }
     MacroStep::Evaluate { expression } => {
       session
         .evaluate(ws_url, expression)
@@ -330,6 +491,34 @@ mod tests {
     ) -> Result<(), CdpError> {
       Ok(())
     }
+    async fn element_point(
+      &mut self,
+      _ws_url: &str,
+      _selector: Option<&str>,
+      _index: Option<u32>,
+    ) -> Result<(f64, f64), CdpError> {
+      Ok((100.0, 200.0))
+    }
+    async fn dispatch_mouse(
+      &mut self,
+      _ws_url: &str,
+      _mouse_type: &str,
+      _x: f64,
+      _y: f64,
+      _button: Option<&str>,
+    ) -> Result<(), CdpError> {
+      Ok(())
+    }
+    async fn press_key(&mut self, _ws_url: &str, _key: &str) -> Result<(), CdpError> {
+      Ok(())
+    }
+    async fn set_download_behavior(
+      &mut self,
+      _ws_url: &str,
+      _dir: &std::path::Path,
+    ) -> Result<(), CdpError> {
+      Ok(())
+    }
   }
 
   fn task(steps: Vec<MacroStep>) -> TaskDefinition {
@@ -341,6 +530,11 @@ mod tests {
       profile_id: Some("profile-1".to_string()),
       agent_id: None,
       prompt: None,
+      key_id: None,
+      model: None,
+      allowed_tools: Vec::new(),
+      download_dir_override: None,
+      max_steps: None,
       steps,
       schedule: Default::default(),
       same_bucket_rate_limit: true,
@@ -453,6 +647,8 @@ mod tests {
       clear_on_close: false,
       created_at: Some(0),
       updated_at: Some(0),
+      download_dir: None,
+      allow_agent_downloads: true,
     };
     ProfileManager::instance().save_profile(&profile).unwrap();
     profile.id.to_string()
@@ -554,6 +750,104 @@ mod tests {
     let mut fake = FakeCdpSession::new();
     let error = run_task(&t, &mut fake).await.unwrap_err();
     assert!(error.contains("not found"));
+  }
+
+  #[test]
+  fn scroll_delta_maps_directions() {
+    assert_eq!(scroll_delta(Some("down"), 500).unwrap(), (0, 500));
+    assert_eq!(scroll_delta(Some("up"), 500).unwrap(), (0, -500));
+    assert_eq!(scroll_delta(Some("right"), 100).unwrap(), (100, 0));
+    assert_eq!(scroll_delta(Some("left"), 100).unwrap(), (-100, 0));
+    assert_eq!(scroll_delta(None, 500).unwrap(), (0, 500));
+    assert_eq!(scroll_delta(Some("down"), 99_999).unwrap(), (0, 10_000));
+    assert!(scroll_delta(Some("diagonal"), 100).is_err());
+  }
+
+  #[test]
+  fn scroll_expression_targets_page_and_elements() {
+    let page = scroll_expression(None, None, 0, 500).unwrap();
+    assert!(page.contains("window.scrollBy(0, 500)"));
+    let el = scroll_expression(Some("div.feed"), None, 0, 300).unwrap();
+    assert!(el.contains("querySelector('div.feed')"));
+    assert!(el.contains("scrollBy(0, 300)"));
+    let idx = scroll_expression(None, Some(1), 10, 0).unwrap();
+    assert!(idx.contains("__duckling_interactive[1]"));
+  }
+
+  #[tokio::test]
+  async fn run_task_executes_interaction_steps() {
+    let tmp = tempfile::tempdir().unwrap();
+    let _guard = crate::app_dirs::set_test_data_dir(tmp.path().to_path_buf());
+    let profile_id = seeded_profile();
+
+    let steps = vec![
+      MacroStep::Drag {
+        from_selector: Some("li.item".to_string()),
+        from_index: None,
+        to_selector: None,
+        to_index: Some(2),
+        to_x: None,
+        to_y: None,
+      },
+      MacroStep::Drag {
+        from_selector: None,
+        from_index: Some(0),
+        to_selector: None,
+        to_index: None,
+        to_x: Some(10.0),
+        to_y: Some(20.0),
+      },
+      MacroStep::Scroll {
+        selector: None,
+        index: None,
+        direction: Some("down".to_string()),
+        pixels: Some(800),
+      },
+      MacroStep::PressKey {
+        key: "Enter".to_string(),
+      },
+      MacroStep::Hover {
+        selector: Some("nav a".to_string()),
+        index: None,
+      },
+      MacroStep::SetDownloadDir { path: None },
+      MacroStep::WaitForDownload {
+        timeout_ms: Some(1),
+      },
+    ];
+    let mut t = task(steps);
+    t.profile_id = Some(profile_id);
+
+    let mut fake = FakeCdpSession::new();
+    let result = run_task(&t, &mut fake).await.unwrap();
+    assert_eq!(result.status, "success");
+    assert!(result.extracted.contains_key("downloads"));
+  }
+
+  #[tokio::test]
+  async fn run_task_rejects_bad_interaction_args() {
+    let tmp = tempfile::tempdir().unwrap();
+    let _guard = crate::app_dirs::set_test_data_dir(tmp.path().to_path_buf());
+    let profile_id = seeded_profile();
+
+    // Unknown scroll direction fails the run with a clear message.
+    let mut t = task(vec![MacroStep::Scroll {
+      selector: None,
+      index: None,
+      direction: Some("diagonal".to_string()),
+      pixels: None,
+    }]);
+    t.profile_id = Some(profile_id);
+    let mut fake = FakeCdpSession::new();
+    let error = run_task(&t, &mut fake).await.unwrap_err();
+    assert!(error.contains("Unknown scroll direction"));
+
+    // A target with neither selector nor index fails before any CDP call.
+    let err = crate::cdp_session::CdpSession::new()
+      .element_point("ws://fake", None, None)
+      .await
+      .unwrap_err();
+    assert!(err.message.contains("selector or an index"));
   }
 
   #[test]

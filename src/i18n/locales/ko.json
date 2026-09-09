@@ -425,7 +425,8 @@
       "newVpn": "새 VPN",
       "protocolCol": "프로토콜",
       "hostPort": "호스트 : 포트",
-      "title": "프록시 및 VPN"
+      "title": "프록시 및 VPN",
+      "tabSubscriptions": "Subscriptions"
     },
     "add": "프록시 추가",
     "edit": "프록시 편집",
@@ -1209,6 +1210,15 @@
       "synced": "동기화됨",
       "error": "오류",
       "disabled": "사용 안 함"
+    },
+    "downloads": {
+      "title": "Downloads",
+      "description": "Where this profile saves files, and whether agents may trigger downloads.",
+      "folder": "Download folder",
+      "folderPlaceholder": "Empty = per-profile default folder",
+      "agentLabel": "Allow agent downloads",
+      "agentDescription": "Let the AI agent, MCP clients, and scheduled tasks download files in this profile.",
+      "saved": "Download settings saved"
     }
   },
   "extensions": {
@@ -1871,7 +1881,10 @@
     "agentToolUnknown": "The agent requested an unknown tool: {{tool}}",
     "agentDelegateNotFound": "That agent CLI is not supported for delegation",
     "agentCardNotFound": "Change request not found (it may have already been handled)",
-    "agentLlmError": "Agent request failed: {{detail}}"
+    "agentLlmError": "Agent request failed: {{detail}}",
+    "subscriptionInvalid": "Invalid subscription: {{detail}}",
+    "subscriptionNotFound": "Subscription not found",
+    "agentDownloadsDisabled": "Agent downloads are disabled for this profile"
   },
   "rail": {
     "profiles": "프로필",
@@ -1891,9 +1904,8 @@
     "network": "네트워크",
     "integrations": "통합",
     "account": "계정",
-    "keys": "AI keys",
-    "agent": "AI Agent",
-    "tasks": "Tasks"
+    "tasks": "Tasks",
+    "ai": "AI"
   },
   "pageTitle": {
     "proxies": "네트워크",
@@ -1905,10 +1917,9 @@
     "account": "계정",
     "import": "프로필 가져오기",
     "shortcuts": "키보드 단축키",
-    "agent": "AI Agent",
-    "keys": "AI keys",
     "profiles": "프로필",
-    "tasks": "Tasks"
+    "tasks": "Tasks",
+    "ai": "AI"
   },
   "encryption": {
     "required": {
@@ -2146,8 +2157,15 @@
       "openai": "OpenAI",
       "groq": "Groq",
       "google": "Google",
-      "openrouter": "OpenRouter"
-    }
+      "openrouter": "OpenRouter",
+      "opencode": "OpenCode",
+      "custom": "Custom (OpenAI-compatible)"
+    },
+    "endpoint": "Endpoint URL",
+    "endpointPlaceholder": "https://.../v1",
+    "endpointHint": "Optional override for OpenAI-compatible providers. Leave empty to use the provider default.",
+    "endpointInvalid": "Enter a valid http(s) URL",
+    "endpointRequired": "A custom provider needs an endpoint URL"
   },
   "agentChat": {
     "title": "AI Agent",
@@ -2156,7 +2174,7 @@
     "send": "Send",
     "working": "Agent is working…",
     "empty": "Add an AI provider key to start chatting, or delegate to an installed agent CLI.",
-    "goToKeys": "Open AI keys",
+    "goToKeys": "Manage endpoints",
     "noKeySelected": "Select a provider key or an agent CLI first",
     "pickModel": "Pick provider or agent",
     "orDirect": "— or chat directly —"
@@ -2191,7 +2209,8 @@
     "noNextRun": "Disabled — no next run",
     "mode": {
       "liveAgent": "Agent CLI",
-      "macro": "Macro"
+      "macro": "Macro",
+      "agentBrowser": "Browser agent"
     },
     "form": {
       "title": "Task details",
@@ -2216,7 +2235,20 @@
       "nameRequired": "Give the task a name",
       "agentRequired": "Pick an agent CLI for this task",
       "promptRequired": "Write instructions for the agent",
-      "macroUnavailable": "Macro steps arrive in a future update. Use an agent CLI task for now."
+      "macroUnavailable": "Macro steps arrive in a future update. Use an agent CLI task for now.",
+      "profile": "Browser profile",
+      "profilePlaceholder": "Pick a profile to automate",
+      "profileRequired": "Pick a browser profile for this task",
+      "aiKey": "AI key",
+      "aiKeyDefault": "First saved key",
+      "agentBrowserPromptPlaceholder": "Open the dashboard, download the monthly report…",
+      "agentBrowserAutoApprove": "Runs unattended: allowed tools execute without confirmation. Every step is logged to run history.",
+      "allowedTools": "Allowed tools",
+      "allowedToolsHint": "All tools allowed when none are unchecked. Destructive profile/proxy tools can never run unattended.",
+      "downloadDirOverride": "Download subfolder (optional)",
+      "downloadDirPlaceholder": "reports/monthly",
+      "maxSteps": "Max steps (1–100)",
+      "maxStepsInvalid": "Max steps must be 1–100"
     },
     "calendar": {
       "today": "Today",
@@ -2233,5 +2265,54 @@
         "sat": "Sat"
       }
     }
+  },
+  "ai": {
+    "title": "AI",
+    "tabs": {
+      "chat": "Chat",
+      "endpoints": "Endpoints"
+    }
+  },
+  "subscriptions": {
+    "title": "Subscriptions",
+    "empty": "No subscriptions yet. Add a V2Ray-style subscription URL to auto-import VPN and proxy routes.",
+    "add": "Add subscription",
+    "edit": "Edit",
+    "delete": "Delete",
+    "refreshNow": "Refresh now",
+    "saved": "Subscription saved",
+    "deleted": "Subscription deleted",
+    "refreshSuccess": "Subscription refreshed: {{added}} new entries",
+    "refreshPartial": "Refreshed with {{added}} new entries and {{errors}} errors",
+    "entryCount": "{{count}} entries",
+    "everyHours": "every {{hours}}h",
+    "manual": "manual",
+    "form": {
+      "addTitle": "Add subscription",
+      "editTitle": "Edit subscription",
+      "description": "Subscribe to a V2Ray-style share-link list. Entries refresh automatically on your schedule.",
+      "name": "Name",
+      "namePlaceholder": "Free V2Ray pool",
+      "url": "Subscription URL",
+      "preview": "Preview",
+      "previewResult": "{{vpn}} VPN routes · {{proxy}} proxies · {{unsupported}} unsupported",
+      "interval": "Refresh every (hours, 0 = manual)",
+      "intervalHint": "Providers usually update every few hours. 0 disables auto-refresh.",
+      "fetchVia": "Fetch via",
+      "direct": "Direct connection",
+      "autoCheck": "Check that routes work",
+      "autoCheckHint": "Probe every imported route after refresh.",
+      "autoPrune": "Remove unusable routes",
+      "autoPruneHint": "Delete entries that fail checks or disappear from the source.",
+      "save": "Save",
+      "saveAndRefresh": "Save and refresh",
+      "nameRequired": "Give the subscription a name",
+      "urlRequired": "Enter a subscription URL",
+      "intervalInvalid": "Interval must be 0–720 hours"
+    },
+    "deleteTitle": "Delete {{name}}?",
+    "deleteDescription": "Imported routes can stay as manual entries or be deleted with the subscription.",
+    "deleteKeepEntries": "Keep entries",
+    "deleteWithEntries": "Delete with entries"
   }
 }

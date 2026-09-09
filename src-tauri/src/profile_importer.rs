@@ -947,6 +947,8 @@ impl ProfileImporter {
           clear_on_close: false,
           created_at: None,
           updated_at: None,
+          download_dir: None,
+          allow_agent_downloads: true,
         };
 
         match self
@@ -1012,6 +1014,8 @@ impl ProfileImporter {
           .unwrap_or(0),
       ),
       updated_at: Some(crate::proxy_manager::now_secs()),
+      download_dir: None,
+      allow_agent_downloads: true,
     };
 
     self.profile_manager.save_profile(&profile)?;

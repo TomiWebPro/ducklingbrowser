@@ -1099,7 +1099,14 @@ function ProfileInfoLayout({
           )}
 
           {section === "automation" && (
-            <LaunchHookEditor profile={profile} t={t} />
+            <div className="flex flex-col gap-5">
+              <LaunchHookEditor profile={profile} t={t} />
+              <DownloadsEditor
+                profile={profile}
+                isDisabled={isDisabled}
+                t={t}
+              />
+            </div>
           )}
 
           {section === "security" && (
@@ -1273,6 +1280,124 @@ function LaunchHookEditor({
             className="h-7 text-xs"
             onClick={() => {
               setValue(initial);
+              setError(null);
+            }}
+          >
+            {t("common.buttons.cancel")}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DownloadsEditor({
+  profile,
+  isDisabled,
+  t,
+}: {
+  profile: BrowserProfile;
+  isDisabled: boolean;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  const { t: tFn } = useTranslation();
+  const [dir, setDir] = React.useState(profile.download_dir ?? "");
+  const [allowAgent, setAllowAgent] = React.useState(
+    profile.allow_agent_downloads !== false,
+  );
+  const [isSaving, setIsSaving] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    setDir(profile.download_dir ?? "");
+    setAllowAgent(profile.allow_agent_downloads !== false);
+  }, [profile.download_dir, profile.allow_agent_downloads]);
+
+  const initialDir = profile.download_dir ?? "";
+  const dirtyDir = dir !== initialDir;
+  const dirtyAllow = allowAgent !== (profile.allow_agent_downloads !== false);
+
+  const onSave = async () => {
+    setIsSaving(true);
+    setError(null);
+    try {
+      const trimmed = dir.trim();
+      await invoke("update_profile_download_dir", {
+        profileId: profile.id,
+        downloadDir: trimmed ? trimmed : null,
+      });
+      await invoke("update_profile_allow_agent_downloads", {
+        profileId: profile.id,
+        allow: allowAgent,
+      });
+      showSuccessToast(tFn("profileInfo.downloads.saved"));
+    } catch (e) {
+      setError(translateBackendError(tFn, e));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-2 text-sm font-semibold">
+        <LuDownload className="size-4" />
+        {t("profileInfo.downloads.title")}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {t("profileInfo.downloads.description")}
+      </p>
+      <div className="space-y-1.5">
+        <span className="text-[10px] tracking-wide text-muted-foreground uppercase">
+          {t("profileInfo.downloads.folder")}
+        </span>
+        <Input
+          value={dir}
+          onChange={(e) => {
+            setDir(e.target.value);
+          }}
+          placeholder={t("profileInfo.downloads.folderPlaceholder")}
+          className="font-mono text-xs"
+          disabled={isDisabled}
+        />
+      </div>
+      <div className="flex items-center gap-3 rounded-md border border-border bg-muted/40 px-3 py-2">
+        <LuDownload className="size-4 shrink-0 text-muted-foreground" />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium">
+            {t("profileInfo.downloads.agentLabel")}
+          </p>
+          <p className="text-[11px] text-muted-foreground">
+            {t("profileInfo.downloads.agentDescription")}
+          </p>
+        </div>
+        <AnimatedSwitch
+          checked={allowAgent}
+          disabled={isDisabled}
+          onCheckedChange={(v) => setAllowAgent(v === true)}
+          aria-label={t("profileInfo.downloads.agentLabel")}
+        />
+      </div>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+      <div className="flex items-center gap-2">
+        <Button
+          size="sm"
+          className="h-7 text-xs"
+          disabled={isSaving || (!dirtyDir && !dirtyAllow)}
+          onClick={() => {
+            void onSave();
+          }}
+        >
+          {isSaving ? t("common.buttons.saving") : t("common.buttons.save")}
+        </Button>
+        {(dirtyDir || dirtyAllow) && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs"
+            onClick={() => {
+              setDir(initialDir);
+              setAllowAgent(profile.allow_agent_downloads !== false);
               setError(null);
             }}
           >

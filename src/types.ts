@@ -42,6 +42,8 @@ export interface BrowserProfile {
   created_at?: number;
   dns_blocklist?: string;
   password_protected?: boolean;
+  download_dir?: string;
+  allow_agent_downloads?: boolean;
 }
 
 export interface Extension {

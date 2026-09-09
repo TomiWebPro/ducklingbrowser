@@ -9,8 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AboutDialog } from "@/components/about-dialog";
 import { AccountPage } from "@/components/account-page";
-import { AgentChatDialog } from "@/components/agent-chat-dialog";
-import { AiKeysDialog } from "@/components/ai-keys-dialog";
+import { AiDialog } from "@/components/ai-dialog";
 import { BrowserConfigDialog } from "@/components/browser-config-dialog";
 import { BrowserTermsDialog } from "@/components/browser-terms-dialog";
 import { CloneProfileDialog } from "@/components/clone-profile-dialog";
@@ -278,8 +277,10 @@ export default function Home() {
   const [createProfileDialogOpen, setCreateProfileDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [integrationsDialogOpen, setIntegrationsDialogOpen] = useState(false);
-  const [aiKeysDialogOpen, setAiKeysDialogOpen] = useState(false);
-  const [agentDialogOpen, setAgentDialogOpen] = useState(false);
+  const [aiDialogOpen, setAiDialogOpen] = useState(false);
+  const [aiInitialTab, setAiInitialTab] = useState<"chat" | "endpoints">(
+    "chat",
+  );
   const [scheduledTasksDialogOpen, setScheduledTasksDialogOpen] =
     useState(false);
   const [importProfileDialogOpen, setImportProfileDialogOpen] = useState(false);
@@ -375,6 +376,7 @@ export default function Home() {
     setIntegrationsDialogOpen(false);
     setImportProfileDialogOpen(false);
     setAccountDialogOpen(false);
+    setAiDialogOpen(false);
 
     setCurrentPage(page);
     switch (page) {
@@ -396,11 +398,9 @@ export default function Home() {
       case "integrations":
         setIntegrationsDialogOpen(true);
         break;
-      case "keys":
-        setAiKeysDialogOpen(true);
-        break;
-      case "agent":
-        setAgentDialogOpen(true);
+      case "ai":
+        setAiInitialTab("chat");
+        setAiDialogOpen(true);
         break;
       case "tasks":
         setScheduledTasksDialogOpen(true);
@@ -1713,30 +1713,15 @@ export default function Home() {
             />
           )}
 
-          {aiKeysDialogOpen && (
-            <AiKeysDialog
-              isOpen={aiKeysDialogOpen}
+          {aiDialogOpen && (
+            <AiDialog
+              isOpen={aiDialogOpen}
               onClose={() => {
-                setAiKeysDialogOpen(false);
+                setAiDialogOpen(false);
                 setCurrentPage("profiles");
               }}
-              subPage={currentPage === "keys"}
-            />
-          )}
-
-          {agentDialogOpen && (
-            <AgentChatDialog
-              isOpen={agentDialogOpen}
-              onClose={() => {
-                setAgentDialogOpen(false);
-                setCurrentPage("profiles");
-              }}
-              subPage={currentPage === "agent"}
-              onGoToKeys={() => {
-                setAgentDialogOpen(false);
-                setAiKeysDialogOpen(true);
-                setCurrentPage("keys");
-              }}
+              subPage={currentPage === "ai"}
+              initialTab={aiInitialTab}
             />
           )}
 

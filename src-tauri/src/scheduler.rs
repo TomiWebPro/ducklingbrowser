@@ -72,15 +72,32 @@ pub struct TaskDefinition {
   /// installed agent CLI.
   #[serde(default = "default_mode")]
   pub mode: String,
-  /// Target profile for macro mode.
+  /// Target profile for macro and agent_browser modes.
   #[serde(default)]
   pub profile_id: Option<String>,
   /// Registry agent id for live_agent mode.
   #[serde(default)]
   pub agent_id: Option<String>,
-  /// Instruction text for live_agent mode.
+  /// Instruction text for live_agent and agent_browser modes.
   #[serde(default)]
   pub prompt: Option<String>,
+  /// Saved AI key id for agent_browser mode (None = first saved key).
+  #[serde(default)]
+  pub key_id: Option<String>,
+  /// Model override for agent_browser mode (None = the key's model).
+  #[serde(default)]
+  pub model: Option<String>,
+  /// Explicit tool allowlist for agent_browser mode. Empty = the full
+  /// allowable set; unknown names are rejected at save time.
+  #[serde(default)]
+  pub allowed_tools: Vec<String>,
+  /// Download folder override for agent_browser mode (sandboxed; None =
+  /// the profile default).
+  #[serde(default)]
+  pub download_dir_override: Option<String>,
+  /// Maximum agent iterations for agent_browser mode (1–100).
+  #[serde(default)]
+  pub max_steps: Option<u32>,
   #[serde(default)]
   pub steps: Vec<MacroStep>,
   #[serde(default)]
@@ -109,6 +126,68 @@ pub struct TaskDefinition {
 
 fn default_mode() -> String {
   "macro".to_string()
+}
+
+/// Tools an `agent_browser` task may execute unattended. Everything else is
+/// denied at run time (the run fails with a clear error instead of acting).
+pub fn agent_browser_allowable_tools() -> &'static [&'static str] {
+  &[
+    "navigate",
+    "screenshot",
+    "evaluate_javascript",
+    "click_element",
+    "type_text",
+    "get_page_content",
+    "get_page_info",
+    "get_interactive_elements",
+    "click_by_index",
+    "type_by_index",
+    "drag",
+    "scroll",
+    "press_key",
+    "hover",
+    "set_download_dir",
+    "wait_for_download",
+    "get_downloads",
+    "get_profile_status",
+  ]
+}
+
+fn validate_agent_browser_task(task: &TaskDefinition) -> Result<(), String> {
+  if task
+    .profile_id
+    .as_deref()
+    .is_none_or(|s| s.trim().is_empty())
+  {
+    return Err(code_error(
+      "TASK_INVALID_SCHEDULE",
+      serde_json::json!({ "detail": "agent_browser tasks need a target profile" }),
+    ));
+  }
+  if task.prompt.as_deref().is_none_or(|s| s.trim().is_empty()) {
+    return Err(code_error(
+      "TASK_INVALID_SCHEDULE",
+      serde_json::json!({ "detail": "agent_browser tasks need instructions" }),
+    ));
+  }
+  let allowable = agent_browser_allowable_tools();
+  for tool in &task.allowed_tools {
+    if !allowable.contains(&tool.as_str()) {
+      return Err(code_error(
+        "TASK_INVALID_SCHEDULE",
+        serde_json::json!({ "detail": format!("tool '{tool}' is not allowed in unattended tasks") }),
+      ));
+    }
+  }
+  if let Some(max_steps) = task.max_steps {
+    if max_steps == 0 || max_steps > 100 {
+      return Err(code_error(
+        "TASK_INVALID_SCHEDULE",
+        serde_json::json!({ "detail": "max_steps must be 1–100" }),
+      ));
+    }
+  }
+  Ok(())
 }
 
 pub fn now_iso() -> String {
@@ -337,11 +416,14 @@ impl SchedulerStore {
     if task.name.trim().is_empty() {
       return Err(code_error("NAME_CANNOT_BE_EMPTY", serde_json::json!({})));
     }
-    if !matches!(task.mode.as_str(), "macro" | "live_agent") {
+    if !matches!(task.mode.as_str(), "macro" | "live_agent" | "agent_browser") {
       return Err(code_error(
         "TASK_INVALID_SCHEDULE",
         serde_json::json!({ "detail": format!("unknown mode '{}'", task.mode) }),
       ));
+    }
+    if task.mode == "agent_browser" {
+      validate_agent_browser_task(task)?;
     }
     parse_window_time(&task.schedule.window_start)?;
     parse_window_time(&task.schedule.window_end)?;
@@ -538,6 +620,7 @@ impl JobRunner {
     let outcome = match task.mode.as_str() {
       "macro" => run_macro_task(task).await,
       "live_agent" => run_live_agent_task(task).await,
+      "agent_browser" => run_agent_browser_task(task).await,
       other => Err(format!("Unknown task mode '{other}'")),
     };
 
@@ -595,6 +678,34 @@ async fn run_live_agent_task(task: &TaskDefinition) -> Result<TaskRunResult, Str
   })
 }
 
+async fn run_agent_browser_task(task: &TaskDefinition) -> Result<TaskRunResult, String> {
+  let started = std::time::Instant::now();
+  let params = crate::agent_engine::AgentBrowserParams {
+    profile_id: task.profile_id.clone().unwrap_or_default(),
+    key_id: task.key_id.clone(),
+    model: task.model.clone(),
+    prompt: task.prompt.clone().unwrap_or_default(),
+    allowed_tools: if task.allowed_tools.is_empty() {
+      agent_browser_allowable_tools()
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
+    } else {
+      task.allowed_tools.clone()
+    },
+    download_dir_override: task.download_dir_override.clone(),
+    max_steps: task.max_steps.unwrap_or(20).clamp(1, 100),
+  };
+  let result = crate::agent_engine::agent_browser_run(params).await?;
+  Ok(TaskRunResult {
+    status: "success".to_string(),
+    error: None,
+    duration_ms: started.elapsed().as_millis() as u64,
+    extracted: result,
+    deferred_profile_fields: Vec::new(),
+  })
+}
+
 /// Runs one task immediately (manual trigger / tests).
 #[tauri::command]
 pub async fn scheduler_run_now(id: String) -> Result<serde_json::Value, String> {
@@ -625,6 +736,11 @@ mod tests {
       profile_id: None,
       agent_id: None,
       prompt: None,
+      key_id: None,
+      model: None,
+      allowed_tools: Vec::new(),
+      download_dir_override: None,
+      max_steps: None,
       steps: vec![],
       schedule,
       same_bucket_rate_limit: true,
@@ -864,6 +980,58 @@ mod tests {
     assert_eq!(outcome["status"], "error");
     assert!(outcome["error"].as_str().unwrap().contains("profile"));
     assert!(outcome["durationMs"].is_number());
+  }
+
+  #[test]
+  fn agent_browser_validation() {
+    let mut t = task("ab", test_schedule("02:00", "04:00", "UTC"));
+    t.mode = "agent_browser".to_string();
+    // Missing profile + prompt.
+    assert!(validate_agent_browser_task(&t).is_err());
+
+    t.profile_id = Some("profile-1".to_string());
+    assert!(validate_agent_browser_task(&t).is_err(), "prompt required");
+
+    t.prompt = Some("Do the thing".to_string());
+    assert!(validate_agent_browser_task(&t).is_ok());
+
+    t.allowed_tools = vec!["navigate".to_string(), "drag".to_string()];
+    assert!(validate_agent_browser_task(&t).is_ok());
+
+    t.allowed_tools = vec!["delete_profile".to_string()];
+    assert!(
+      validate_agent_browser_task(&t).is_err(),
+      "destructive tools are not allowlisted"
+    );
+
+    t.allowed_tools = Vec::new();
+    t.max_steps = Some(0);
+    assert!(validate_agent_browser_task(&t).is_err());
+    t.max_steps = Some(101);
+    assert!(validate_agent_browser_task(&t).is_err());
+    t.max_steps = Some(10);
+    assert!(validate_agent_browser_task(&t).is_ok());
+  }
+
+  #[test]
+  fn agent_browser_allowlist_covers_interaction_tools() {
+    let tools = agent_browser_allowable_tools();
+    for required in [
+      "navigate",
+      "click_by_index",
+      "type_by_index",
+      "drag",
+      "scroll",
+      "press_key",
+      "hover",
+      "set_download_dir",
+      "wait_for_download",
+      "get_downloads",
+    ] {
+      assert!(tools.contains(&required), "allowlist misses {required}");
+    }
+    assert!(!tools.contains(&"delete_profile"));
+    assert!(!tools.contains(&"agent_chat"));
   }
 
   #[tokio::test]

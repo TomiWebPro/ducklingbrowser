@@ -33,6 +33,7 @@ import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialo
 import { ProxyExportDialog } from "@/components/proxy-export-dialog";
 import { ProxyFormDialog } from "@/components/proxy-form-dialog";
 import { ProxyImportDialog } from "@/components/proxy-import-dialog";
+import { SubscriptionsPanel } from "@/components/subscriptions-panel";
 import { AnimatedSwitch } from "@/components/ui/animated-switch";
 import {
   AnimatedTabs,
@@ -132,7 +133,7 @@ interface ProxyManagementDialogProps {
   onClose: () => void;
   subPage?: boolean;
   /** Which tab to display first when the dialog mounts; defaults to "proxies". */
-  initialTab?: "proxies" | "vpns";
+  initialTab?: "proxies" | "vpns" | "subscriptions";
 }
 
 export function ProxyManagementDialog({
@@ -198,7 +199,9 @@ export function ProxyManagementDialog({
   // Track the active tab so we can scope the floating action bar (portaled
   // to body) to only the currently visible list. Initial value comes from
   // initialTab; subsequent changes drive the animated tabs via onValueChange.
-  const [activeTab, setActiveTab] = useState<"proxies" | "vpns">(initialTab);
+  const [activeTab, setActiveTab] = useState<
+    "proxies" | "vpns" | "subscriptions"
+  >(initialTab);
   // Reset selections when the dialog closes so the floating action bar
   // (portaled to body) doesn't linger on the page across navigations.
   useEffect(() => {
@@ -1108,7 +1111,9 @@ export function ProxyManagementDialog({
             <AnimatedTabs
               key={initialTab}
               defaultValue={initialTab}
-              onValueChange={(v) => setActiveTab(v as "proxies" | "vpns")}
+              onValueChange={(v) =>
+                setActiveTab(v as "proxies" | "vpns" | "subscriptions")
+              }
               className="flex min-h-0 flex-1 flex-col"
             >
               <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
@@ -1124,6 +1129,9 @@ export function ProxyManagementDialog({
                     <span className="text-xs text-muted-foreground tabular-nums">
                       {vpnConfigs.length}
                     </span>
+                  </AnimatedTabsTrigger>
+                  <AnimatedTabsTrigger value="subscriptions">
+                    <span>{t("proxies.management.tabSubscriptions")}</span>
                   </AnimatedTabsTrigger>
                 </AnimatedTabsList>
                 <div className="flex items-center gap-2">
@@ -1450,6 +1458,15 @@ export function ProxyManagementDialog({
                     </FadingScrollArea>
                   )}
                 </div>
+              </AnimatedTabsContent>
+
+              <AnimatedTabsContent
+                value="subscriptions"
+                className="mt-4 min-h-0 flex-1 flex-col data-[state=active]:flex"
+              >
+                <FadingScrollArea className="min-h-0 flex-1">
+                  <SubscriptionsPanel proxies={storedProxies} />
+                </FadingScrollArea>
               </AnimatedTabsContent>
             </AnimatedTabs>
           </div>

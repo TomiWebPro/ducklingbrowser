@@ -16,6 +16,8 @@ pub enum AiProvider {
   Groq,
   Google,
   Openrouter,
+  Opencode,
+  Custom,
 }
 
 impl AiProvider {
@@ -26,7 +28,34 @@ impl AiProvider {
       AiProvider::Groq => "groq",
       AiProvider::Google => "google",
       AiProvider::Openrouter => "openrouter",
+      AiProvider::Opencode => "opencode",
+      AiProvider::Custom => "custom",
     }
+  }
+
+  /// Default chat-completions endpoint for OpenAI-compatible providers.
+  /// Non-compatible providers return None.
+  pub fn default_endpoint(&self) -> Option<&'static str> {
+    match self {
+      AiProvider::Opencode => Some("http://localhost:4096/v1/chat/completions"),
+      AiProvider::Custom => None,
+      AiProvider::Openai => Some("https://api.openai.com/v1/chat/completions"),
+      AiProvider::Groq => Some("https://api.groq.com/openai/v1/chat/completions"),
+      AiProvider::Openrouter => Some("https://openrouter.ai/api/v1/chat/completions"),
+      _ => None,
+    }
+  }
+
+  /// True for providers speaking the OpenAI chat-completions wire format.
+  pub fn is_openai_compatible(&self) -> bool {
+    matches!(
+      self,
+      AiProvider::Openai
+        | AiProvider::Groq
+        | AiProvider::Openrouter
+        | AiProvider::Opencode
+        | AiProvider::Custom
+    )
   }
 }
 
@@ -40,9 +69,35 @@ impl std::str::FromStr for AiProvider {
       "groq" => Ok(AiProvider::Groq),
       "google" => Ok(AiProvider::Google),
       "openrouter" => Ok(AiProvider::Openrouter),
+      "opencode" => Ok(AiProvider::Opencode),
+      "custom" => Ok(AiProvider::Custom),
       _ => Err(()),
     }
   }
+}
+
+/// Normalize + validate a user-supplied base endpoint URL.
+/// Accepts a full chat-completions URL or a `/v1` base; rejects
+/// non-http(s) schemes, missing hosts, and overlong values.
+pub fn normalize_endpoint(raw: &str) -> Result<String, String> {
+  let trimmed = raw.trim();
+  if trimmed.is_empty() {
+    return Err(invalid("endpoint must not be empty"));
+  }
+  if trimmed.len() > 2000 {
+    return Err(invalid("endpoint URL is too long"));
+  }
+  let parsed: url::Url = trimmed
+    .parse()
+    .map_err(|_| invalid("endpoint must be a valid http(s) URL"))?;
+  match parsed.scheme() {
+    "http" | "https" => {}
+    _ => return Err(invalid("endpoint must start with http:// or https://")),
+  }
+  if parsed.host_str().is_none_or(|h| h.is_empty()) {
+    return Err(invalid("endpoint must include a host"));
+  }
+  Ok(trimmed.trim_end_matches('/').to_string())
 }
 
 /// Full record kept inside the encrypted vault file only. The plaintext key
@@ -56,6 +111,10 @@ pub struct AiKeyRecord {
   pub model: String,
   pub key: String,
   pub created_at: String,
+  /// Optional per-key endpoint override (normalized base URL).
+  /// `None` = use the provider default. Legacy records deserialize to None.
+  #[serde(default)]
+  pub endpoint: Option<String>,
 }
 
 /// Safe shape returned to the frontend: the key is masked.
@@ -68,6 +127,8 @@ pub struct AiKeyInfo {
   pub model: String,
   pub masked_key: String,
   pub created_at: String,
+  #[serde(default)]
+  pub endpoint: Option<String>,
 }
 
 pub fn mask_key(key: &str) -> String {
@@ -238,6 +299,7 @@ fn to_info(record: &AiKeyRecord) -> AiKeyInfo {
     model: record.model.clone(),
     masked_key: mask_key(&record.key),
     created_at: record.created_at.clone(),
+    endpoint: record.endpoint.clone(),
   }
 }
 
@@ -257,7 +319,13 @@ pub fn all_records() -> Vec<AiKeyRecord> {
   load_records()
 }
 
-pub fn save_key(provider: &str, name: &str, model: &str, key: &str) -> Result<AiKeyInfo, String> {
+pub fn save_key(
+  provider: &str,
+  name: &str,
+  model: &str,
+  key: &str,
+  endpoint: Option<&str>,
+) -> Result<AiKeyInfo, String> {
   if name.trim().is_empty() {
     return Err(crate::backend_error("NAME_CANNOT_BE_EMPTY"));
   }
@@ -271,12 +339,28 @@ pub fn save_key(provider: &str, name: &str, model: &str, key: &str) -> Result<Ai
     .parse()
     .map_err(|_| invalid(&format!("unknown provider '{provider}'")))?;
 
+  // Normalize the endpoint override. Custom requires one; opencode falls
+  // back to its local default; other providers accept an optional override.
+  let normalized_endpoint: Option<String> = match endpoint {
+    Some(raw) if !raw.trim().is_empty() => Some(normalize_endpoint(raw)?),
+    _ => None,
+  };
+  if provider_parsed == AiProvider::Custom && normalized_endpoint.is_none() {
+    return Err(invalid("custom provider requires an endpoint URL"));
+  }
+  if !provider_parsed.is_openai_compatible() && normalized_endpoint.is_some() {
+    return Err(invalid(
+      "endpoint overrides are only supported for OpenAI-compatible providers",
+    ));
+  }
+
   let mut records = load_records();
   let now = now_iso();
   let record = if let Some(existing) = records.iter_mut().find(|r| r.name == name.trim()) {
     existing.provider = provider_parsed.as_str().to_string();
     existing.model = model.trim().to_string();
     existing.key = key.trim().to_string();
+    existing.endpoint = normalized_endpoint;
     existing.clone()
   } else {
     let record = AiKeyRecord {
@@ -286,6 +370,7 @@ pub fn save_key(provider: &str, name: &str, model: &str, key: &str) -> Result<Ai
       model: model.trim().to_string(),
       key: key.trim().to_string(),
       created_at: now,
+      endpoint: normalized_endpoint,
     };
     records.push(record.clone());
     record
@@ -305,7 +390,27 @@ pub fn delete_key(id: &str) -> Result<(), String> {
   persist_records(&records)
 }
 
-async fn probe(provider: AiProvider, key: &str, model: &str) -> Result<serde_json::Value, String> {
+/// Derive the models-list probe URL for OpenAI-compatible providers.
+/// A full `/chat/completions` override is mapped to `/models`; a `/v1` base
+/// gets `/models` appended.
+fn compat_models_url(endpoint_override: Option<&str>, fallback: &str) -> String {
+  let base = endpoint_override.unwrap_or(fallback);
+  let trimmed = base.trim_end_matches('/');
+  if let Some(root) = trimmed.strip_suffix("/chat/completions") {
+    format!("{root}/models")
+  } else if trimmed.ends_with("/v1") {
+    format!("{trimmed}/models")
+  } else {
+    trimmed.to_string()
+  }
+}
+
+async fn probe(
+  provider: AiProvider,
+  key: &str,
+  model: &str,
+  endpoint_override: Option<&str>,
+) -> Result<serde_json::Value, String> {
   let client = reqwest::Client::builder()
     .timeout(std::time::Duration::from_secs(10))
     .build()
@@ -327,27 +432,45 @@ async fn probe(provider: AiProvider, key: &str, model: &str) -> Result<serde_jso
       probe_outcome(response)
     }
     AiProvider::Openai => {
-      let response = client
-        .get("https://api.openai.com/v1/models")
-        .bearer_auth(key)
-        .send()
-        .await;
+      let url = compat_models_url(
+        endpoint_override,
+        "https://api.openai.com/v1/chat/completions",
+      );
+      let response = client.get(url).bearer_auth(key).send().await;
       probe_outcome(response)
     }
     AiProvider::Groq => {
-      let response = client
-        .get("https://api.groq.com/openai/v1/models")
-        .bearer_auth(key)
-        .send()
-        .await;
+      let url = compat_models_url(
+        endpoint_override,
+        "https://api.groq.com/openai/v1/chat/completions",
+      );
+      let response = client.get(url).bearer_auth(key).send().await;
       probe_outcome(response)
     }
     AiProvider::Openrouter => {
-      let response = client
-        .get("https://openrouter.ai/api/v1/models")
-        .bearer_auth(key)
-        .send()
-        .await;
+      let url = compat_models_url(
+        endpoint_override,
+        "https://openrouter.ai/api/v1/chat/completions",
+      );
+      let response = client.get(url).bearer_auth(key).send().await;
+      probe_outcome(response)
+    }
+    AiProvider::Opencode => {
+      let url = compat_models_url(
+        endpoint_override,
+        "http://localhost:4096/v1/chat/completions",
+      );
+      let response = client.get(url).bearer_auth(key).send().await;
+      probe_outcome(response)
+    }
+    AiProvider::Custom => {
+      let Some(override_url) = endpoint_override else {
+        return Ok(
+          serde_json::json!({ "ok": false, "detail": "custom provider requires an endpoint URL" }),
+        );
+      };
+      let url = compat_models_url(Some(override_url), override_url);
+      let response = client.get(url).bearer_auth(key).send().await;
       probe_outcome(response)
     }
     AiProvider::Google => {
@@ -397,8 +520,9 @@ pub fn ai_keys_save(
   name: String,
   model: String,
   key: String,
+  endpoint: Option<String>,
 ) -> Result<AiKeyInfo, String> {
-  save_key(&provider, &name, &model, &key)
+  save_key(&provider, &name, &model, &key, endpoint.as_deref())
 }
 
 #[tauri::command]
@@ -412,19 +536,31 @@ pub async fn ai_keys_test(
   model: String,
   key: Option<String>,
   id: Option<String>,
+  endpoint: Option<String>,
 ) -> Result<serde_json::Value, String> {
   let provider_parsed: AiProvider = provider
     .parse()
     .map_err(|_| invalid(&format!("unknown provider '{provider}'")))?;
-  let plaintext = match key {
-    Some(k) if !k.trim().is_empty() => k.trim().to_string(),
+  let (plaintext, stored_endpoint) = match key {
+    Some(k) if !k.trim().is_empty() => (k.trim().to_string(), None),
     _ => {
       let id = id.ok_or_else(|| invalid("provide a key or a saved key id"))?;
       let record = get_key(&id)?.ok_or_else(|| not_found(&id))?;
-      record.key
+      (record.key, record.endpoint)
     }
   };
-  probe(provider_parsed, &plaintext, &model).await
+  // Explicit endpoint wins; otherwise fall back to the saved record's.
+  let effective_endpoint = match endpoint {
+    Some(e) if !e.trim().is_empty() => Some(normalize_endpoint(&e)?),
+    _ => stored_endpoint,
+  };
+  probe(
+    provider_parsed,
+    &plaintext,
+    &model,
+    effective_endpoint.as_deref(),
+  )
+  .await
 }
 
 #[cfg(test)]
@@ -465,16 +601,17 @@ mod tests {
 
     assert!(list_keys().unwrap().is_empty());
 
-    let saved = save_key("openai", "Main key", "gpt-4o-mini", "sk-test-123456").unwrap();
+    let saved = save_key("openai", "Main key", "gpt-4o-mini", "sk-test-123456", None).unwrap();
     assert_eq!(saved.masked_key, "sk-***3456");
+    assert!(saved.endpoint.is_none());
     assert!(get_key(&saved.id).unwrap().is_some());
 
     let listed = list_keys().unwrap();
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].provider, "openai");
 
-    assert!(save_key("bad-provider", "x", "model", "key").is_err());
-    assert!(save_key("openai", "", "model", "key").is_err());
+    assert!(save_key("bad-provider", "x", "model", "key", None).is_err());
+    assert!(save_key("openai", "", "model", "key", None).is_err());
 
     delete_key(&saved.id).unwrap();
     assert!(list_keys().unwrap().is_empty());
@@ -483,9 +620,85 @@ mod tests {
 
   #[test]
   fn provider_roundtrip() {
-    for p in ["anthropic", "openai", "groq", "google", "openrouter"] {
+    for p in [
+      "anthropic",
+      "openai",
+      "groq",
+      "google",
+      "openrouter",
+      "opencode",
+      "custom",
+    ] {
       assert_eq!(p.parse::<AiProvider>().unwrap().as_str(), p);
     }
     assert!("unknown".parse::<AiProvider>().is_err());
+  }
+
+  #[test]
+  fn normalize_endpoint_accepts_and_rejects() {
+    assert_eq!(
+      normalize_endpoint("https://example.com/v1/").unwrap(),
+      "https://example.com/v1"
+    );
+    assert_eq!(
+      normalize_endpoint(" http://localhost:4096/v1 ").unwrap(),
+      "http://localhost:4096/v1"
+    );
+    assert!(normalize_endpoint("ftp://example.com/v1").is_err());
+    assert!(normalize_endpoint("not a url").is_err());
+    assert!(normalize_endpoint("https://").is_err());
+    assert!(normalize_endpoint("").is_err());
+  }
+
+  #[test]
+  fn custom_requires_endpoint_and_opencode_defaults() {
+    let tmp = tempfile::tempdir().unwrap();
+    let _guard = crate::app_dirs::set_test_data_dir(tmp.path().to_path_buf());
+
+    assert!(save_key("custom", "c1", "m", "k", None).is_err());
+    let custom = save_key("custom", "c1", "m", "k", Some("http://localhost:11434/v1/")).unwrap();
+    assert_eq!(
+      custom.endpoint.as_deref(),
+      Some("http://localhost:11434/v1")
+    );
+
+    let oc = save_key("opencode", "oc", "m", "k", None).unwrap();
+    assert!(oc.endpoint.is_none());
+    assert_eq!(
+      AiProvider::Opencode.default_endpoint(),
+      Some("http://localhost:4096/v1/chat/completions")
+    );
+    assert!(AiProvider::Custom.is_openai_compatible());
+    assert!(!AiProvider::Anthropic.is_openai_compatible());
+  }
+
+  #[test]
+  fn compat_models_url_mapping() {
+    assert_eq!(
+      compat_models_url(
+        Some("http://localhost:4096/v1/chat/completions"),
+        "http://localhost:4096/v1/chat/completions"
+      ),
+      "http://localhost:4096/v1/models"
+    );
+    assert_eq!(
+      compat_models_url(Some("https://gw.example.com/v1"), "x"),
+      "https://gw.example.com/v1/models"
+    );
+  }
+
+  #[test]
+  fn legacy_records_without_endpoint_load() {
+    let tmp = tempfile::tempdir().unwrap();
+    let _guard = crate::app_dirs::set_test_data_dir(tmp.path().to_path_buf());
+    let saved = save_key("openai", "legacy", "gpt-4o-mini", "sk-test-123456", None).unwrap();
+    let raw = get_key(&saved.id).unwrap().unwrap();
+    // Simulate a pre-endpoint vault entry.
+    let legacy_json = serde_json::json!({
+      "id": raw.id, "provider": raw.provider, "name": raw.name,
+      "model": raw.model, "key": raw.key, "createdAt": raw.created_at,
+    });
+    let parsed: AiKeyRecord = serde_json::from_value(legacy_json).unwrap();
+    assert!(parsed.endpoint.is_none());
   }
 }

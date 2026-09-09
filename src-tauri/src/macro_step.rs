@@ -22,6 +22,41 @@ pub enum MacroStep {
     index: Option<u32>,
     text: String,
   },
+  /// Drag from a source element to a target element or viewport point.
+  Drag {
+    from_selector: Option<String>,
+    from_index: Option<u32>,
+    to_selector: Option<String>,
+    to_index: Option<u32>,
+    to_x: Option<f64>,
+    to_y: Option<f64>,
+  },
+  /// Scroll the page or a target element. Direction is one of
+  /// up/down/left/right; pixels defaults to 500.
+  Scroll {
+    selector: Option<String>,
+    index: Option<u32>,
+    direction: Option<String>,
+    pixels: Option<u32>,
+  },
+  /// Press a non-text key (Enter, Tab, Escape, arrows, …).
+  PressKey {
+    key: String,
+  },
+  Hover {
+    selector: Option<String>,
+    index: Option<u32>,
+  },
+  /// Route subsequent downloads into the resolved folder.
+  /// None = the profile's configured/default folder.
+  SetDownloadDir {
+    path: Option<String>,
+  },
+  /// Wait for new files to land in the current download folder and record
+  /// them under the `downloads` extraction key.
+  WaitForDownload {
+    timeout_ms: Option<u64>,
+  },
   Evaluate {
     expression: String,
   },
@@ -58,6 +93,33 @@ mod tests {
         selector: None,
         index: Some(2),
         text: "hello".to_string(),
+      },
+      MacroStep::Drag {
+        from_selector: Some("li.item".to_string()),
+        from_index: None,
+        to_selector: None,
+        to_index: Some(4),
+        to_x: None,
+        to_y: None,
+      },
+      MacroStep::Scroll {
+        selector: None,
+        index: None,
+        direction: Some("down".to_string()),
+        pixels: Some(800),
+      },
+      MacroStep::PressKey {
+        key: "Enter".to_string(),
+      },
+      MacroStep::Hover {
+        selector: Some("nav a".to_string()),
+        index: None,
+      },
+      MacroStep::SetDownloadDir {
+        path: Some("cron-task-1".to_string()),
+      },
+      MacroStep::WaitForDownload {
+        timeout_ms: Some(30_000),
       },
       MacroStep::Evaluate {
         expression: "document.title".to_string(),

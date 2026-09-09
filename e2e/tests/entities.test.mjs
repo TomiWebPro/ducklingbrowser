@@ -168,6 +168,28 @@ test("profile, group, proxy, tag, metadata, clone, and bulk-delete lifecycle", a
       profileId: profile.id,
       clearOnClose: true,
     });
+    const withDownloads = await app.invoke(
+      "update_profile_allow_agent_downloads",
+      {
+        profileId: profile.id,
+        allow: false,
+      },
+    );
+    assert.equal(withDownloads.allow_agent_downloads, false);
+    const invalidDir = await app.invokeError("update_profile_download_dir", {
+      profileId: profile.id,
+      downloadDir: "relative/not/absolute",
+    });
+    assert.match(invalidDir, /Invalid download folder/i);
+    const withDir = await app.invoke("update_profile_download_dir", {
+      profileId: profile.id,
+      downloadDir: null,
+    });
+    assert.equal(withDir.download_dir, null);
+    await app.invoke("update_profile_allow_agent_downloads", {
+      profileId: profile.id,
+      allow: true,
+    });
 
     const profiles = await app.invoke("list_browser_profiles");
     const changed = profiles.find((item) => item.id === profile.id);

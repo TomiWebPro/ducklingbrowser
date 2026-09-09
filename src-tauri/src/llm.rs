@@ -81,6 +81,14 @@ impl LlmClient {
       AiProvider::Openai => "https://api.openai.com/v1/chat/completions".to_string(),
       AiProvider::Groq => "https://api.groq.com/openai/v1/chat/completions".to_string(),
       AiProvider::Openrouter => "https://openrouter.ai/api/v1/chat/completions".to_string(),
+      AiProvider::Opencode | AiProvider::Custom => {
+        self.endpoint_override.clone().unwrap_or_else(|| {
+          provider
+            .default_endpoint()
+            .unwrap_or("https://api.openai.com/v1/chat/completions")
+            .to_string()
+        })
+      }
     }
   }
 }

@@ -66,7 +66,10 @@ export type BackendErrorCode =
   | "TASK_INVALID_SCHEDULE"
   | "AI_KEY_INVALID"
   | "AI_KEY_NOT_FOUND"
+  | "SUBSCRIPTION_INVALID"
+  | "SUBSCRIPTION_NOT_FOUND"
   | "AGENT_NO_KEY"
+  | "AGENT_DOWNLOADS_DISABLED"
   | "AGENT_TOOL_UNKNOWN"
   | "AGENT_DELEGATE_NOT_FOUND"
   | "AGENT_CARD_NOT_FOUND"
@@ -260,8 +263,16 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       });
     case "AI_KEY_NOT_FOUND":
       return t("backendErrors.aiKeyNotFound");
+    case "SUBSCRIPTION_INVALID":
+      return t("backendErrors.subscriptionInvalid", {
+        detail: parsed.params?.detail ?? "",
+      });
+    case "SUBSCRIPTION_NOT_FOUND":
+      return t("backendErrors.subscriptionNotFound");
     case "AGENT_NO_KEY":
       return t("backendErrors.agentNoKey");
+    case "AGENT_DOWNLOADS_DISABLED":
+      return t("backendErrors.agentDownloadsDisabled");
     case "AGENT_TOOL_UNKNOWN":
       return t("backendErrors.agentToolUnknown", {
         tool: parsed.params?.tool ?? "",

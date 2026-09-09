@@ -87,6 +87,18 @@ pub struct BrowserProfile {
   /// NOT bumped by browser-file changes, which sync via the file manifest.
   #[serde(default)]
   pub updated_at: Option<u64>,
+  /// Explicit download folder for this profile. None = per-profile default
+  /// under the app data dir. Validated at save time (absolute + creatable).
+  #[serde(default)]
+  pub download_dir: Option<String>,
+  /// When false, agents (chat, MCP, scheduled tasks) may not trigger or
+  /// redirect downloads in this profile. Defaults to true.
+  #[serde(default = "default_true")]
+  pub allow_agent_downloads: bool,
+}
+
+fn default_true() -> bool {
+  true
 }
 
 pub fn default_release_type() -> String {

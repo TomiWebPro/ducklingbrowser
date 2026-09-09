@@ -36,6 +36,60 @@ test("AI key store CRUD through Tauri commands", async () => {
   });
 });
 
+test("AI key store supports custom endpoints and opencode provider", async () => {
+  await withApp("ai-keys-endpoints", async (app) => {
+    // Custom without an endpoint must fail.
+    await app.invokeError("ai_keys_save", {
+      provider: "custom",
+      name: "Local",
+      model: "qwen3",
+      key: "ollama",
+    });
+    // Bad endpoint URLs must fail.
+    await app.invokeError("ai_keys_save", {
+      provider: "custom",
+      name: "Local",
+      model: "qwen3",
+      key: "ollama",
+      endpoint: "ftp://example.com/v1",
+    });
+
+    const custom = await app.invoke("ai_keys_save", {
+      provider: "custom",
+      name: "Local",
+      model: "qwen3",
+      key: "ollama",
+      endpoint: "http://localhost:11434/v1/",
+    });
+    assert.equal(
+      custom.endpoint,
+      "http://localhost:11434/v1",
+      "endpoint is normalized",
+    );
+
+    const oc = await app.invoke("ai_keys_save", {
+      provider: "opencode",
+      name: "Code",
+      model: "opencode",
+      key: "local",
+    });
+    assert.equal(oc.provider, "opencode");
+    assert.ok(!oc.endpoint, "opencode falls back to its local default");
+
+    // Probing a saved id resolves the stored endpoint without erroring.
+    const probed = await app.invoke("ai_keys_test", {
+      provider: "custom",
+      model: "qwen3",
+      id: custom.id,
+    });
+    assert.equal(typeof probed.ok, "boolean");
+    assert.ok(probed.detail.length > 0);
+
+    await app.invoke("ai_keys_delete", { id: custom.id });
+    await app.invoke("ai_keys_delete", { id: oc.id });
+  });
+});
+
 test("AI key store validates input and probes reject bogus keys", async () => {
   await withApp("ai-keys-validation", async (app) => {
     await app.invokeError("ai_keys_save", {

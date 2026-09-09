@@ -43,8 +43,14 @@ import { cn } from "@/lib/utils";
 interface TaskDefinition extends TaskWithSchedule {
   description?: string | null;
   mode: string;
+  profile_id?: string | null;
   agent_id?: string | null;
   prompt?: string | null;
+  key_id?: string | null;
+  model?: string | null;
+  allowed_tools?: string[] | null;
+  download_dir_override?: string | null;
+  max_steps?: number | null;
   steps: unknown[];
   schedule: {
     window_start: string;
@@ -103,6 +109,27 @@ interface ScheduledTasksDialogProps {
   subPage?: boolean;
 }
 
+const AGENT_BROWSER_TOOLS = [
+  "navigate",
+  "screenshot",
+  "evaluate_javascript",
+  "click_element",
+  "type_text",
+  "get_page_content",
+  "get_page_info",
+  "get_interactive_elements",
+  "click_by_index",
+  "type_by_index",
+  "drag",
+  "scroll",
+  "press_key",
+  "hover",
+  "set_download_dir",
+  "wait_for_download",
+  "get_downloads",
+  "get_profile_status",
+];
+
 function emptyForm() {
   return {
     id: "",
@@ -111,6 +138,11 @@ function emptyForm() {
     mode: "live_agent" as string,
     agent_id: "",
     prompt: "",
+    profile_id: "",
+    key_id: "",
+    allowed_tools: [] as string[],
+    download_dir_override: "",
+    max_steps: "20",
     window_start: "09:00",
     window_end: "12:00",
     timezone: "UTC",
@@ -137,6 +169,8 @@ export function ScheduledTasksDialog({
   const [tab, setTab] = useState<"tasks" | "calendar">("tasks");
   const [tasks, setTasks] = useState<TaskDefinition[]>([]);
   const [agents, setAgents] = useState<McpAgentInfo[]>([]);
+  const [profiles, setProfiles] = useState<{ id: string; name: string }[]>([]);
+  const [aiKeys, setAiKeys] = useState<{ id: string; name: string }[]>([]);
   const [form, setForm] = useState(emptyForm());
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -158,6 +192,14 @@ export function ScheduledTasksDialog({
           setAgents(all.filter((a) => a.category === "cli" && a.detected)),
         )
         .catch(() => {});
+      void invoke<{ id: string; name: string }[]>("list_browser_profiles")
+        .then((all) =>
+          setProfiles(all.map((p) => ({ id: p.id, name: p.name }))),
+        )
+        .catch(() => {});
+      void invoke<{ id: string; name: string }[]>("ai_keys_list")
+        .then((all) => setAiKeys(all.map((k) => ({ id: k.id, name: k.name }))))
+        .catch(() => {});
     }
   }, [isOpen, loadTasks]);
 
@@ -174,6 +216,11 @@ export function ScheduledTasksDialog({
       mode: task.mode,
       agent_id: task.agent_id ?? "",
       prompt: task.prompt ?? "",
+      profile_id: task.profile_id ?? "",
+      key_id: task.key_id ?? "",
+      allowed_tools: task.allowed_tools ?? [],
+      download_dir_override: task.download_dir_override ?? "",
+      max_steps: String(task.max_steps ?? 20),
       window_start: task.schedule.window_start,
       window_end: task.schedule.window_end,
       timezone: task.schedule.timezone,
@@ -198,6 +245,21 @@ export function ScheduledTasksDialog({
       showErrorToast(t("tasks.form.promptRequired"));
       return;
     }
+    if (form.mode === "agent_browser") {
+      if (!form.profile_id) {
+        showErrorToast(t("tasks.form.profileRequired"));
+        return;
+      }
+      if (!form.prompt.trim()) {
+        showErrorToast(t("tasks.form.promptRequired"));
+        return;
+      }
+      const maxSteps = Number(form.max_steps) || 0;
+      if (maxSteps < 1 || maxSteps > 100) {
+        showErrorToast(t("tasks.form.maxStepsInvalid"));
+        return;
+      }
+    }
     if (form.mode === "macro") {
       showErrorToast(t("tasks.form.macroUnavailable"));
       return;
@@ -210,9 +272,20 @@ export function ScheduledTasksDialog({
           name: form.name,
           description: form.description || null,
           mode: form.mode,
-          profile_id: null,
+          profile_id:
+            form.mode === "agent_browser" ? form.profile_id || null : null,
           agent_id: form.agent_id || null,
           prompt: form.prompt || null,
+          key_id: form.mode === "agent_browser" ? form.key_id || null : null,
+          model: null,
+          allowed_tools:
+            form.mode === "agent_browser" ? form.allowed_tools : [],
+          download_dir_override:
+            form.mode === "agent_browser"
+              ? form.download_dir_override.trim() || null
+              : null,
+          max_steps:
+            form.mode === "agent_browser" ? Number(form.max_steps) || 20 : null,
           steps: [],
           schedule: {
             window_start: form.window_start,
@@ -350,7 +423,9 @@ export function ScheduledTasksDialog({
                               <Badge variant="secondary" className="text-xs">
                                 {task.mode === "live_agent"
                                   ? t("tasks.mode.liveAgent")
-                                  : t("tasks.mode.macro")}
+                                  : task.mode === "agent_browser"
+                                    ? t("tasks.mode.agentBrowser")
+                                    : t("tasks.mode.macro")}
                               </Badge>
                               {task.last_run_status && (
                                 <span
@@ -452,6 +527,9 @@ export function ScheduledTasksDialog({
                               <SelectItem value="live_agent">
                                 {t("tasks.mode.liveAgent")}
                               </SelectItem>
+                              <SelectItem value="agent_browser">
+                                {t("tasks.mode.agentBrowser")}
+                              </SelectItem>
                               <SelectItem value="macro" disabled>
                                 {t("tasks.mode.macro")}
                               </SelectItem>
@@ -499,6 +577,167 @@ export function ScheduledTasksDialog({
                             rows={3}
                           />
                         </div>
+                      )}
+
+                      {form.mode === "agent_browser" && (
+                        <>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1.5">
+                              <Label>{t("tasks.form.profile")}</Label>
+                              <Select
+                                value={form.profile_id}
+                                onValueChange={(v) =>
+                                  setForm((f) => ({ ...f, profile_id: v }))
+                                }
+                              >
+                                <SelectTrigger>
+                                  <SelectValue
+                                    placeholder={t(
+                                      "tasks.form.profilePlaceholder",
+                                    )}
+                                  />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {profiles.map((p) => (
+                                    <SelectItem key={p.id} value={p.id}>
+                                      {p.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label>{t("tasks.form.aiKey")}</Label>
+                              <Select
+                                value={form.key_id || "__first__"}
+                                onValueChange={(v) =>
+                                  setForm((f) => ({
+                                    ...f,
+                                    key_id: v === "__first__" ? "" : v,
+                                  }))
+                                }
+                              >
+                                <SelectTrigger>
+                                  <SelectValue
+                                    placeholder={t("tasks.form.aiKeyDefault")}
+                                  />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__first__">
+                                    {t("tasks.form.aiKeyDefault")}
+                                  </SelectItem>
+                                  {aiKeys.map((k) => (
+                                    <SelectItem key={k.id} value={k.id}>
+                                      {k.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <Label>{t("tasks.form.prompt")}</Label>
+                            <Textarea
+                              value={form.prompt}
+                              onChange={(e) =>
+                                setForm((f) => ({
+                                  ...f,
+                                  prompt: e.target.value,
+                                }))
+                              }
+                              placeholder={t(
+                                "tasks.form.agentBrowserPromptPlaceholder",
+                              )}
+                              rows={3}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              {t("tasks.form.agentBrowserAutoApprove")}
+                            </p>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <Label>{t("tasks.form.allowedTools")}</Label>
+                            <div className="grid grid-cols-2 gap-1.5 rounded-md border p-3">
+                              {AGENT_BROWSER_TOOLS.map((tool) => (
+                                <div
+                                  key={tool}
+                                  className="flex items-center gap-2 text-xs"
+                                >
+                                  <Checkbox
+                                    id={`tool-${tool}`}
+                                    checked={
+                                      form.allowed_tools.length === 0 ||
+                                      form.allowed_tools.includes(tool)
+                                    }
+                                    onCheckedChange={(checked) =>
+                                      setForm((f) => {
+                                        const base =
+                                          f.allowed_tools.length === 0
+                                            ? [...AGENT_BROWSER_TOOLS]
+                                            : f.allowed_tools;
+                                        return {
+                                          ...f,
+                                          allowed_tools: checked
+                                            ? [...base, tool].filter(
+                                                (t2, i, arr) =>
+                                                  arr.indexOf(t2) === i,
+                                              )
+                                            : base.filter((t2) => t2 !== tool),
+                                        };
+                                      })
+                                    }
+                                  />
+                                  <Label
+                                    htmlFor={`tool-${tool}`}
+                                    className="cursor-pointer font-mono"
+                                  >
+                                    {tool}
+                                  </Label>
+                                </div>
+                              ))}
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              {t("tasks.form.allowedToolsHint")}
+                            </p>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1.5">
+                              <Label>
+                                {t("tasks.form.downloadDirOverride")}
+                              </Label>
+                              <Input
+                                value={form.download_dir_override}
+                                onChange={(e) =>
+                                  setForm((f) => ({
+                                    ...f,
+                                    download_dir_override: e.target.value,
+                                  }))
+                                }
+                                placeholder={t(
+                                  "tasks.form.downloadDirPlaceholder",
+                                )}
+                                className="font-mono text-xs"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label>{t("tasks.form.maxSteps")}</Label>
+                              <Input
+                                type="number"
+                                min={1}
+                                max={100}
+                                value={form.max_steps}
+                                onChange={(e) =>
+                                  setForm((f) => ({
+                                    ...f,
+                                    max_steps: e.target.value,
+                                  }))
+                                }
+                              />
+                            </div>
+                          </div>
+                        </>
                       )}
                       {form.mode === "macro" && (
                         <p className="text-xs text-muted-foreground">

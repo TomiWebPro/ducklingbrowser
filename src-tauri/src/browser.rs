@@ -534,6 +534,8 @@ mod tests {
       clear_on_close: false,
       created_at: None,
       updated_at: None,
+      download_dir: None,
+      allow_agent_downloads: true,
     };
 
     let path = profile.get_profile_data_path(&profiles_dir);

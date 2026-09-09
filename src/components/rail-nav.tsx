@@ -11,7 +11,6 @@ import {
   LuCalendarDays,
   LuCloud,
   LuInfo,
-  LuKey,
   LuKeyboard,
   LuPlug,
   LuPuzzle,
@@ -32,11 +31,10 @@ export type AppPage =
   | "vpns"
   | "settings"
   | "integrations"
-  | "agent"
+  | "ai"
   | "tasks"
   | "account"
   | "import"
-  | "keys"
   | "shortcuts";
 
 const CLICK_THRESHOLD = 5;
@@ -206,9 +204,8 @@ const TOP_ITEMS: RailItem[] = [
   { page: "extensions", Icon: LuPuzzle, labelKey: "rail.extensions" },
   { page: "groups", Icon: LuUsers, labelKey: "rail.groups" },
   { page: "integrations", Icon: LuPlug, labelKey: "rail.integrations" },
-  { page: "agent", Icon: LuBot, labelKey: "rail.agent" },
+  { page: "ai", Icon: LuBot, labelKey: "rail.ai" },
   { page: "tasks", Icon: LuCalendarDays, labelKey: "rail.tasks" },
-  { page: "keys", Icon: LuKey, labelKey: "rail.keys" },
   { page: "account", Icon: LuCloud, labelKey: "rail.account" },
 ];
 
