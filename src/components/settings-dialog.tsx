@@ -46,7 +46,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCloudAuth } from "@/hooks/use-cloud-auth";
-import { useCommercialTrial } from "@/hooks/use-commercial-trial";
 import { useLanguage } from "@/hooks/use-language";
 import type { PermissionType } from "@/hooks/use-permissions";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -171,7 +170,6 @@ export function SettingsDialog({
   } = usePermissions(isOpen);
   const isMacOS = currentOS === "macos";
   const isLinux = currentOS === "linux";
-  const { trialStatus } = useCommercialTrial();
   const { user: cloudUser } = useCloudAuth();
   // Encryption is available to everyone except team members who aren't owners
   const canUseEncryption =
@@ -1234,54 +1232,6 @@ export function SettingsDialog({
                     </LoadingButton>
                   </div>
                 )}
-              </div>
-
-              {/* Commercial License Section */}
-              <div className="space-y-4">
-                <Label className="text-base font-medium">
-                  {t("settings.commercial.title")}
-                </Label>
-
-                <div className="flex items-center justify-between rounded-md border bg-muted/40 p-3">
-                  {cloudUser != null && cloudUser.plan !== "free" ? (
-                    // Paid Duckling plan supersedes the local commercial trial —
-                    // the trial only exists to gate commercial use until the
-                    // user subscribes. Showing "Trial expired" to a paying
-                    // customer reads like a billing error, so swap in a
-                    // subscription-active badge instead.
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium text-success">
-                        {t("settings.commercial.subscriptionActive", {
-                          plan: cloudUser.plan,
-                        })}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {t("settings.commercial.subscriptionActiveDescription")}
-                      </p>
-                    </div>
-                  ) : trialStatus?.type === "Active" ? (
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium">
-                        {t("settings.commercial.trialActive", {
-                          days: trialStatus.days_remaining,
-                          hours: trialStatus.hours_remaining,
-                        })}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {t("settings.commercial.trialActiveDescription")}
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium text-warning">
-                        {t("settings.commercial.trialExpired")}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {t("settings.commercial.trialExpiredDescription")}
-                      </p>
-                    </div>
-                  )}
-                </div>
               </div>
 
               {/* Advanced Section */}

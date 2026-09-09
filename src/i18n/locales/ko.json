@@ -175,15 +175,6 @@
         "mismatchToast": "비밀번호가 일치하지 않습니다"
       }
     },
-    "commercial": {
-      "title": "상업용 라이선스",
-      "trialActive": "체험판: {{days}}일 {{hours}}시간 남음",
-      "trialActiveDescription": "체험 기간 동안 상업적 사용은 무료입니다. 체험이 종료되면 모든 기능은 계속 작동합니다 — 개인 사용은 무료로 유지되며 상업적 사용만 라이선스가 필요합니다.",
-      "trialExpired": "체험판이 만료되었습니다",
-      "trialExpiredDescription": "개인 사용은 무료로 유지됩니다. 상업적 사용에는 라이선스가 필요합니다.",
-      "subscriptionActive": "구독 중 — {{plan}} 플랜",
-      "subscriptionActiveDescription": "Duckling Browser 구독이 활성 상태입니다. 플랜 기간 동안 상업적 사용이 라이선스됩니다."
-    },
     "advanced": {
       "title": "고급",
       "clearCache": "모든 버전 캐시 지우기",
@@ -1590,14 +1581,6 @@
     "body": "Duckling Browser는 Chromium 웹 브라우저 엔진을 사용합니다. Chromium은 BSD 라이선스로 배포되며, 자유로운 사용, 수정 및 재배포가 가능합니다.",
     "acknowledgeButton": "Acknowledge"
   },
-  "commercialTrial": {
-    "title": "상업용 체험판 만료됨",
-    "description": "2주 상업용 체험판 기간이 종료되었습니다.",
-    "body": "Duckling Browser를 비즈니스 용도로 사용하는 경우 계속 사용하려면 상업용 라이선스를 구매해야 합니다. 개인 용도로는 계속 무료로 사용할 수 있습니다.",
-    "understandButton": "이해했습니다",
-    "failed": "확인 저장 실패",
-    "tryAgain": "다시 시도하세요"
-  },
   "permissionDialog": {
     "titleMicrophone": "마이크 액세스가 필요합니다",
     "titleCamera": "카메라 액세스가 필요합니다",
@@ -2099,7 +2082,6 @@
       "personalTitle": "개인 사용",
       "personalDesc": "영구적으로 무료입니다.",
       "commercialTitle": "상업적 사용",
-      "trialBadge": "2주 무료",
       "commercialDesc": "2주간의 평가 기간 동안 무료입니다. 이후에는 유료 요금제가 필요하며, 이를 통해 프로젝트가 유지되고 발전할 수 있습니다."
     }
   },

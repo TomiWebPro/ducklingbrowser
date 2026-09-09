@@ -2946,6 +2946,8 @@ fn llm_completion_error_response(message: String) -> (StatusCode, String) {
   ),
   tag = "llm"
 )]
+// Large axum Response Err variant is intentional; boxing it would change the handler surface.
+#[allow(clippy::result_large_err)]
 async fn llm_completion_api(
   State(_state): State<ApiServerState>,
   Json(request): Json<ApiLlmCompletionRequest>,
@@ -3018,6 +3020,8 @@ async fn detect_import_profiles(
   ),
   tag = "system"
 )]
+// Large axum Response Err variant is intentional; boxing it would change the handler surface.
+#[allow(clippy::result_large_err)]
 async fn system_status_api(
   State(_state): State<ApiServerState>,
 ) -> Result<Json<crate::launch_scheduler::LaunchSchedulerMetrics>, axum::response::Response> {

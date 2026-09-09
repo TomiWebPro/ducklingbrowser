@@ -331,9 +331,6 @@ export function WelcomeDialog({
                   <div className="flex flex-col gap-0.5 text-left">
                     <dt className="flex flex-wrap items-center gap-2 text-base/7 font-medium text-foreground sm:text-sm/6">
                       {t("welcome.license.commercialTitle")}
-                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                        {t("welcome.license.trialBadge")}
-                      </span>
                     </dt>
                     <dd className="text-base/7 text-pretty text-muted-foreground sm:text-sm/6">
                       {t("welcome.license.commercialDesc")}

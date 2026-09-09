@@ -250,9 +250,6 @@ export const commandCoverage = {
     suite: "integrations",
     level: "contract",
     commands: [
-      "get_commercial_trial_status",
-      "acknowledge_trial_expiration",
-      "has_acknowledged_trial_expiration",
       "cloud_auth::cloud_exchange_device_code",
       "cloud_auth::cloud_get_user",
       "cloud_auth::cloud_refresh_profile",

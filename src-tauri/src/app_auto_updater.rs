@@ -1742,16 +1742,20 @@ impl AppAutoUpdater {
     let proxy_ids: Vec<String> = proxy_configs.into_iter().map(|config| config.id).collect();
     let vpn_ids: Vec<String> = vpn_configs.into_iter().map(|config| config.id).collect();
 
-    let stop_proxies = futures_util::future::join_all(
-      proxy_ids
-        .iter()
-        .map(|id| crate::proxy_runner::stop_proxy_process(id)),
-    );
-    let stop_vpns = futures_util::future::join_all(
-      vpn_ids
-        .iter()
-        .map(|id| crate::vpn_worker_runner::stop_vpn_worker(id)),
-    );
+    let stop_proxies = futures_util::future::join_all(proxy_ids.iter().map(|id| async move {
+      // Map the error to String: Box<dyn Error> is not Send, which would make
+      // the joined future non-Send and break the #[tauri::command] bound.
+      crate::proxy_runner::stop_proxy_process(id)
+        .await
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+    }));
+    let stop_vpns = futures_util::future::join_all(vpn_ids.iter().map(|id| async move {
+      crate::vpn_worker_runner::stop_vpn_worker(id)
+        .await
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+    }));
     let (proxy_results, vpn_results) = tokio::join!(stop_proxies, stop_vpns);
 
     for result in proxy_results.into_iter().chain(vpn_results) {

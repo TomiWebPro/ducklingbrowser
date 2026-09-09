@@ -175,15 +175,6 @@
         "mismatchToast": "Parola eşleşmiyor"
       }
     },
-    "commercial": {
-      "title": "Ticari Lisans",
-      "trialActive": "Deneme: {{days}} gün, {{hours}} saat kaldı",
-      "trialActiveDescription": "Deneme süresince ticari kullanım ücretsizdir. Süre sona erdiğinde tüm özellikler çalışmaya devam eder — kişisel kullanım ücretsiz kalır, yalnızca ticari kullanım lisans gerektirir.",
-      "trialExpired": "Deneme süresi doldu",
-      "trialExpiredDescription": "Kişisel kullanım ücretsiz kalır. Ticari kullanım lisans gerektirir.",
-      "subscriptionActive": "Abone — {{plan}} planı",
-      "subscriptionActiveDescription": "Duckling Browser aboneliğiniz etkin. Ticari kullanım, planınızın süresi boyunca lisanslıdır."
-    },
     "advanced": {
       "title": "Gelişmiş",
       "clearCache": "Tüm Sürüm Önbelleğini Temizle",
@@ -1590,14 +1581,6 @@
     "body": "Duckling Browser, Chromium web tarayıcı motorunu kullanır. Chromium, ücretsiz kullanım, değiştirme ve yeniden dağıtıma izin veren BSD lisansı altında dağıtılmaktadır.",
     "acknowledgeButton": "Acknowledge"
   },
-  "commercialTrial": {
-    "title": "Ticari Deneme Süresi Doldu",
-    "description": "2 haftalık ticari deneme süreniz sona erdi.",
-    "body": "Duckling Browser'ı iş amaçlı kullanıyorsanız devam etmek için ticari lisans satın almanız gerekir. Kişisel kullanım için ücretsiz olarak kullanmaya devam edebilirsiniz.",
-    "understandButton": "Anladım",
-    "failed": "Onay kaydedilemedi",
-    "tryAgain": "Lütfen yeniden deneyin"
-  },
   "permissionDialog": {
     "titleMicrophone": "Mikrofon Erişimi Gerekli",
     "titleCamera": "Kamera Erişimi Gerekli",
@@ -2099,7 +2082,6 @@
       "personalTitle": "Kişisel kullanım",
       "personalDesc": "Sonsuza dek ücretsiz.",
       "commercialTitle": "Ticari kullanım",
-      "trialBadge": "2 hafta ücretsiz",
       "commercialDesc": "2 haftalık değerlendirme için ücretsiz. Sonrasında ücretli bir plan, projenin bakımını ve gelişimini sürdürmesini sağlar."
     }
   },

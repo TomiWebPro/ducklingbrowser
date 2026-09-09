@@ -175,15 +175,6 @@
         "mismatchToast": "Le mot de passe ne correspond pas"
       }
     },
-    "commercial": {
-      "title": "Licence commerciale",
-      "trialActive": "Essai: {{days}} jours, {{hours}} heures restantes",
-      "trialActiveDescription": "L'utilisation commerciale est gratuite pendant l'essai. À l'expiration, toutes les fonctionnalités continuent de fonctionner — l'utilisation personnelle reste gratuite, seule l'utilisation commerciale nécessitera une licence.",
-      "trialExpired": "Essai expiré",
-      "trialExpiredDescription": "L'utilisation personnelle reste gratuite. L'utilisation commerciale nécessite une licence.",
-      "subscriptionActive": "Abonné — formule {{plan}}",
-      "subscriptionActiveDescription": "Votre abonnement Duckling Browser est actif. L'usage commercial est licencié pendant toute la durée de votre formule."
-    },
     "advanced": {
       "title": "Avancé",
       "clearCache": "Effacer tout le cache des versions",
@@ -1590,14 +1581,6 @@
     "body": "Duckling Browser utilise le moteur de navigateur web Chromium. Chromium est distribué sous licence BSD, qui autorise l'utilisation, la modification et la redistribution gratuites.",
     "acknowledgeButton": "Acknowledge"
   },
-  "commercialTrial": {
-    "title": "Période d'essai commerciale expirée",
-    "description": "Votre période d'essai commercial de 2 semaines est terminée.",
-    "body": "Si vous utilisez Duckling Browser à des fins professionnelles, vous devez acheter une licence commerciale pour continuer. Vous pouvez toujours l'utiliser gratuitement à des fins personnelles.",
-    "understandButton": "J'ai compris",
-    "failed": "Échec de l'enregistrement de la confirmation",
-    "tryAgain": "Veuillez réessayer"
-  },
   "permissionDialog": {
     "titleMicrophone": "Accès au microphone requis",
     "titleCamera": "Accès à la caméra requis",
@@ -2099,7 +2082,6 @@
       "personalTitle": "Usage personnel",
       "personalDesc": "Gratuit à vie.",
       "commercialTitle": "Usage commercial",
-      "trialBadge": "2 semaines gratuites",
       "commercialDesc": "Gratuit pendant une évaluation de 2 semaines. Ensuite, un forfait payant permet de maintenir et de faire prospérer le projet."
     }
   },

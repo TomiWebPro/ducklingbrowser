@@ -175,15 +175,6 @@
         "mismatchToast": "Mật khẩu không khớp"
       }
     },
-    "commercial": {
-      "title": "Giấy phép thương mại",
-      "trialActive": "Dùng thử: còn {{days}} ngày, {{hours}} giờ",
-      "trialActiveDescription": "Sử dụng thương mại miễn phí trong thời gian dùng thử. Khi hết hạn, tất cả tính năng vẫn hoạt động — sử dụng cá nhân miễn phí, chỉ sử dụng thương mại mới cần giấy phép.",
-      "trialExpired": "Đã hết hạn dùng thử",
-      "trialExpiredDescription": "Sử dụng cá nhân vẫn miễn phí. Sử dụng thương mại cần giấy phép.",
-      "subscriptionActive": "Đã đăng ký — gói {{plan}}",
-      "subscriptionActiveDescription": "Đăng ký Duckling Browser của bạn đang hoạt động. Sử dụng thương mại được cấp phép trong thời hạn gói."
-    },
     "advanced": {
       "title": "Nâng cao",
       "clearCache": "Xóa toàn bộ bộ nhớ đệm phiên bản",
@@ -1590,14 +1581,6 @@
     "body": "Duckling Browser sử dụng công cụ trình duyệt web Chromium. Chromium được phân phối theo giấy phép BSD, cho phép sử dụng, sửa đổi và phân phối lại miễn phí.",
     "acknowledgeButton": "Acknowledge"
   },
-  "commercialTrial": {
-    "title": "Thời gian dùng thử thương mại đã hết",
-    "description": "Thời gian dùng thử thương mại 2 tuần của bạn đã kết thúc.",
-    "body": "Nếu bạn sử dụng Duckling Browser cho mục đích thương mại, bạn cần mua giấy phép thương mại để tiếp tục. Bạn vẫn có thể sử dụng miễn phí cho mục đích cá nhân.",
-    "understandButton": "Tôi hiểu",
-    "failed": "Lưu xác nhận thất bại",
-    "tryAgain": "Vui lòng thử lại"
-  },
   "permissionDialog": {
     "titleMicrophone": "Yêu cầu quyền truy cập micro",
     "titleCamera": "Yêu cầu quyền truy cập camera",
@@ -2099,7 +2082,6 @@
       "personalTitle": "Sử dụng cá nhân",
       "personalDesc": "Miễn phí vĩnh viễn.",
       "commercialTitle": "Sử dụng thương mại",
-      "trialBadge": "2 tuần miễn phí",
       "commercialDesc": "Miễn phí dùng thử 2 tuần. Sau đó, gói trả phí giúp dự án được duy trì và phát triển."
     }
   },

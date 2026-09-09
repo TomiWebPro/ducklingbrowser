@@ -430,7 +430,7 @@ test("REST and MCP share the browser automation rate limit", async () => {
   );
 });
 
-test("offline cloud, update, team-lock, trial, and synchronizer contracts are deterministic", async () => {
+test("offline cloud, update, team-lock, and synchronizer contracts are deterministic", async () => {
   await withApp(
     "integrations-contracts",
     async (app) => {
@@ -516,10 +516,6 @@ test("offline cloud, update, team-lock, trial, and synchronizer contracts are de
       assert.ok(versionStatus && typeof versionStatus === "object");
       assert.equal(typeof (await app.invoke("is_default_browser")), "boolean");
 
-      const trial = await app.invoke("get_commercial_trial_status");
-      assert.ok(trial && typeof trial === "object");
-      await app.invoke("acknowledge_trial_expiration");
-      assert.equal(await app.invoke("has_acknowledged_trial_expiration"), true);
       await app.invoke("cloud_logout");
       assert.equal(await app.invoke("cloud_get_user"), null);
     },

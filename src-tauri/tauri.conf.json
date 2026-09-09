@@ -4,7 +4,7 @@
   "version": "0.28.2",
   "identifier": "com.ducklingbrowser",
   "build": {
-    "beforeDevCommand": "pnpm copy-proxy-binary && pnpm dev",
+    "beforeDevCommand": "node scripts/tauri-before-dev.mjs",
     "devUrl": "http://localhost:12341",
     "beforeBuildCommand": "pnpm copy-proxy-binary:release && (test -d ../dist || pnpm build)",
     "frontendDist": "../dist"

@@ -91,7 +91,6 @@ mod synchronizer;
 pub mod traffic_stats;
 // mod theme_detector; // removed: theme detection handled in webview via CSS prefers-color-scheme
 pub mod cloud_auth;
-mod commercial_license;
 mod cookie_manager;
 pub mod events;
 mod mcp_integrations;
@@ -569,27 +568,6 @@ async fn accept_chromium_terms() -> Result<(), String> {
   chromium_terms::ChromiumTermsManager::instance()
     .accept_terms()
     .await
-}
-
-#[tauri::command]
-async fn get_commercial_trial_status(
-  app_handle: tauri::AppHandle,
-) -> Result<commercial_license::TrialStatus, String> {
-  commercial_license::CommercialLicenseManager::instance()
-    .get_trial_status(&app_handle)
-    .await
-}
-
-#[tauri::command]
-async fn acknowledge_trial_expiration(app_handle: tauri::AppHandle) -> Result<(), String> {
-  commercial_license::CommercialLicenseManager::instance()
-    .acknowledge_expiration(&app_handle)
-    .await
-}
-
-#[tauri::command]
-fn has_acknowledged_trial_expiration(app_handle: tauri::AppHandle) -> Result<bool, String> {
-  commercial_license::CommercialLicenseManager::instance().has_acknowledged(&app_handle)
 }
 
 #[tauri::command]
@@ -2592,9 +2570,6 @@ pub fn run_with_builder(
       check_chromium_terms_accepted,
       check_chromium_downloaded,
       accept_chromium_terms,
-      get_commercial_trial_status,
-      acknowledge_trial_expiration,
-      has_acknowledged_trial_expiration,
       start_mcp_server,
       stop_mcp_server,
       get_mcp_server_status,
