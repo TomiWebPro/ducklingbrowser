@@ -2158,7 +2158,7 @@
       "groq": "Groq",
       "google": "Google",
       "openrouter": "OpenRouter",
-      "opencode": "OpenCode",
+      "opencode": "OpenCode Go",
       "custom": "カスタム (OpenAI-compatible)"
     },
     "endpoint": "エンドポイントURL",

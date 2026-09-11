@@ -298,6 +298,7 @@ export const commandCoverage = {
       "ai_keys_save",
       "ai_keys_delete",
       "ai_keys_test",
+      "ai_keys_models",
     ],
   },
   aiAgent: {

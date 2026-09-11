@@ -37,7 +37,7 @@ impl AiProvider {
   /// Non-compatible providers return None.
   pub fn default_endpoint(&self) -> Option<&'static str> {
     match self {
-      AiProvider::Opencode => Some("http://localhost:4096/v1/chat/completions"),
+      AiProvider::Opencode => Some("https://opencode.ai/zen/go/v1/chat/completions"),
       AiProvider::Custom => None,
       AiProvider::Openai => Some("https://api.openai.com/v1/chat/completions"),
       AiProvider::Groq => Some("https://api.groq.com/openai/v1/chat/completions"),
@@ -326,21 +326,28 @@ pub fn save_key(
   key: &str,
   endpoint: Option<&str>,
 ) -> Result<AiKeyInfo, String> {
-  if name.trim().is_empty() {
-    return Err(crate::backend_error("NAME_CANNOT_BE_EMPTY"));
-  }
+  let provider_parsed: AiProvider = provider
+    .parse()
+    .map_err(|_| invalid(&format!("unknown provider '{provider}'")))?;
+  // OpenCode Go needs only a key: default an empty name so callers can omit it.
+  let effective_name = if name.trim().is_empty() {
+    if provider_parsed == AiProvider::Opencode {
+      "OpenCode Go".to_string()
+    } else {
+      return Err(crate::backend_error("NAME_CANNOT_BE_EMPTY"));
+    }
+  } else {
+    name.trim().to_string()
+  };
   if model.trim().is_empty() {
     return Err(invalid("model must not be empty"));
   }
   if key.trim().is_empty() {
     return Err(invalid("key must not be empty"));
   }
-  let provider_parsed: AiProvider = provider
-    .parse()
-    .map_err(|_| invalid(&format!("unknown provider '{provider}'")))?;
 
   // Normalize the endpoint override. Custom requires one; opencode falls
-  // back to its local default; other providers accept an optional override.
+  // back to the Go subscription default; other providers accept an optional override.
   let normalized_endpoint: Option<String> = match endpoint {
     Some(raw) if !raw.trim().is_empty() => Some(normalize_endpoint(raw)?),
     _ => None,
@@ -356,7 +363,7 @@ pub fn save_key(
 
   let mut records = load_records();
   let now = now_iso();
-  let record = if let Some(existing) = records.iter_mut().find(|r| r.name == name.trim()) {
+  let record = if let Some(existing) = records.iter_mut().find(|r| r.name == effective_name) {
     existing.provider = provider_parsed.as_str().to_string();
     existing.model = model.trim().to_string();
     existing.key = key.trim().to_string();
@@ -366,7 +373,7 @@ pub fn save_key(
     let record = AiKeyRecord {
       id: Uuid::new_v4().to_string(),
       provider: provider_parsed.as_str().to_string(),
-      name: name.trim().to_string(),
+      name: effective_name,
       model: model.trim().to_string(),
       key: key.trim().to_string(),
       created_at: now,
@@ -458,7 +465,7 @@ async fn probe(
     AiProvider::Opencode => {
       let url = compat_models_url(
         endpoint_override,
-        "http://localhost:4096/v1/chat/completions",
+        "https://opencode.ai/zen/go/v1/chat/completions",
       );
       let response = client.get(url).bearer_auth(key).send().await;
       probe_outcome(response)
@@ -507,6 +514,140 @@ async fn probe_outcome(response: Result<reqwest::Response, reqwest::Error>) -> (
     }
     Err(e) => (false, format!("Could not reach provider: {e}")),
   }
+}
+
+/// Cap for model suggestions returned to the picker. Large catalogs
+/// (OpenRouter serves 400+) stay usable since the combobox filters as you type.
+const MAX_MODEL_SUGGESTIONS: usize = 100;
+
+/// Substrings marking non-chat models (audio, image, embeddings, moderation,
+/// safety guard) that would only clutter the model picker.
+const NON_CHAT_MODEL_HINTS: &[&str] = &[
+  "whisper",
+  "tts",
+  "dall-e",
+  "embed",
+  "moderation",
+  "transcribe",
+  "guard",
+];
+
+fn is_chat_model(id: &str) -> bool {
+  let lower = id.to_lowercase();
+  !NON_CHAT_MODEL_HINTS.iter().any(|hint| lower.contains(hint))
+}
+
+/// Extract string ids from a JSON array of objects, optionally stripping a
+/// prefix (Google returns `models/<id>` in `name`).
+fn extract_ids(items: &[serde_json::Value], key: &str, strip_prefix: Option<&str>) -> Vec<String> {
+  items
+    .iter()
+    .filter_map(|item| {
+      item.get(key)?.as_str().map(|s| match strip_prefix {
+        Some(prefix) => s.strip_prefix(prefix).unwrap_or(s).to_string(),
+        None => s.to_string(),
+      })
+    })
+    .collect()
+}
+
+/// Deduplicate, drop non-chat and blank ids, and cap the suggestion count.
+fn finalize_models(ids: Vec<String>) -> Vec<String> {
+  let mut seen = std::collections::HashSet::new();
+  ids
+    .into_iter()
+    .map(|s| s.trim().to_string())
+    .filter(|s| !s.is_empty() && is_chat_model(s) && seen.insert(s.clone()))
+    .take(MAX_MODEL_SUGGESTIONS)
+    .collect()
+}
+
+/// Fetch the live model catalog for a provider. Unreachable endpoints, auth
+/// failures, and unexpected payloads resolve to an empty list so the caller
+/// falls back to the static suggestions; only invalid input is an error.
+async fn fetch_models(
+  provider: AiProvider,
+  key: Option<&str>,
+  endpoint_override: Option<&str>,
+) -> Result<Vec<String>, String> {
+  let client = reqwest::Client::builder()
+    .timeout(std::time::Duration::from_secs(10))
+    .build()
+    .map_err(|e| format!("Failed to build HTTP client: {e}"))?;
+  let clean_key = key.filter(|k| !k.trim().is_empty());
+
+  let response = match provider {
+    AiProvider::Anthropic => {
+      let Some(k) = clean_key else {
+        return Ok(Vec::new());
+      };
+      client
+        .get("https://api.anthropic.com/v1/models")
+        .header("x-api-key", k)
+        .header("anthropic-version", "2023-06-01")
+        .send()
+        .await
+    }
+    AiProvider::Google => {
+      let Some(k) = clean_key else {
+        return Ok(Vec::new());
+      };
+      client
+        .get(format!(
+          "https://generativelanguage.googleapis.com/v1beta/models?key={k}"
+        ))
+        .send()
+        .await
+    }
+    AiProvider::Openai
+    | AiProvider::Groq
+    | AiProvider::Openrouter
+    | AiProvider::Opencode
+    | AiProvider::Custom => {
+      let base = match endpoint_override {
+        Some(o) => o.to_string(),
+        None => match provider.default_endpoint() {
+          Some(d) => d.to_string(),
+          // Custom without an endpoint has no catalog to query.
+          None => return Ok(Vec::new()),
+        },
+      };
+      let url = compat_models_url(Some(&base), &base);
+      let mut request = client.get(url);
+      if let Some(k) = clean_key {
+        request = request.bearer_auth(k);
+      }
+      request.send().await
+    }
+  };
+
+  let Ok(resp) = response else {
+    return Ok(Vec::new());
+  };
+  if !resp.status().is_success() {
+    return Ok(Vec::new());
+  }
+  let Ok(body) = resp.json::<serde_json::Value>().await else {
+    return Ok(Vec::new());
+  };
+  let ids = match provider {
+    AiProvider::Anthropic => body
+      .get("data")
+      .and_then(|d| d.as_array())
+      .map(|items| extract_ids(items, "id", None))
+      .unwrap_or_default(),
+    AiProvider::Google => body
+      .get("models")
+      .and_then(|d| d.as_array())
+      .map(|items| extract_ids(items, "name", Some("models/")))
+      .unwrap_or_default(),
+    _ => body
+      .get("data")
+      .and_then(|d| d.as_array())
+      .map(|items| extract_ids(items, "id", None))
+      .unwrap_or_default(),
+  };
+  Ok(finalize_models(ids))
 }
 
 #[tauri::command]
@@ -558,6 +699,41 @@ pub async fn ai_keys_test(
     provider_parsed,
     &plaintext,
     &model,
+    effective_endpoint.as_deref(),
+  )
+  .await
+}
+
+#[tauri::command]
+pub async fn ai_keys_models(
+  provider: String,
+  key: Option<String>,
+  id: Option<String>,
+  endpoint: Option<String>,
+) -> Result<Vec<String>, String> {
+  let provider_parsed: AiProvider = provider
+    .parse()
+    .map_err(|_| invalid(&format!("unknown provider '{provider}'")))?;
+  // Explicit key wins, otherwise fall back to the saved record's key/endpoint.
+  // Neither is fine for public catalogs (OpenCode Go, OpenRouter).
+  let (key, stored_endpoint) = match key {
+    Some(k) if !k.trim().is_empty() => (Some(k.trim().to_string()), None),
+    _ => match id {
+      Some(given) if !given.trim().is_empty() => {
+        let record = get_key(given.trim())?.ok_or_else(|| not_found(given.trim()))?;
+        (Some(record.key), record.endpoint)
+      }
+      _ => (None, None),
+    },
+  };
+  // Explicit endpoint wins; otherwise fall back to the saved record's.
+  let effective_endpoint = match endpoint {
+    Some(e) if !e.trim().is_empty() => Some(normalize_endpoint(&e)?),
+    _ => stored_endpoint,
+  };
+  fetch_models(
+    provider_parsed,
+    key.as_deref(),
     effective_endpoint.as_deref(),
   )
   .await
@@ -666,7 +842,7 @@ mod tests {
     assert!(oc.endpoint.is_none());
     assert_eq!(
       AiProvider::Opencode.default_endpoint(),
-      Some("http://localhost:4096/v1/chat/completions")
+      Some("https://opencode.ai/zen/go/v1/chat/completions")
     );
     assert!(AiProvider::Custom.is_openai_compatible());
     assert!(!AiProvider::Anthropic.is_openai_compatible());
@@ -676,15 +852,159 @@ mod tests {
   fn compat_models_url_mapping() {
     assert_eq!(
       compat_models_url(
-        Some("http://localhost:4096/v1/chat/completions"),
-        "http://localhost:4096/v1/chat/completions"
+        Some("https://opencode.ai/zen/go/v1/chat/completions"),
+        "https://opencode.ai/zen/go/v1/chat/completions"
       ),
-      "http://localhost:4096/v1/models"
+      "https://opencode.ai/zen/go/v1/models"
     );
     assert_eq!(
       compat_models_url(Some("https://gw.example.com/v1"), "x"),
       "https://gw.example.com/v1/models"
     );
+  }
+
+  #[test]
+  fn model_catalog_helpers_filter_and_shape() {
+    // OpenAI-compatible shape: data[].id.
+    let body = serde_json::json!({
+      "object": "list",
+      "data": [
+        { "id": "gpt-4o-mini" },
+        { "id": "gpt-4o-mini" },
+        { "id": "whisper-large-v3" },
+        { "id": "text-embedding-3-small" },
+        { "id": 42 },
+        { "other": "no-id" },
+      ]
+    });
+    let items = body["data"].as_array().unwrap();
+    let ids = extract_ids(items, "id", None);
+    assert_eq!(
+      finalize_models(ids),
+      vec!["gpt-4o-mini".to_string()],
+      "dedupes and drops non-chat ids"
+    );
+
+    // Google shape: models[].name with a `models/` prefix.
+    let gbody = serde_json::json!({
+      "models": [
+        { "name": "models/gemini-2.5-flash" },
+        { "name": "models/gemini-2.5-pro" },
+      ]
+    });
+    let gitems = gbody["models"].as_array().unwrap();
+    assert_eq!(
+      finalize_models(extract_ids(gitems, "name", Some("models/"))),
+      vec!["gemini-2.5-flash".to_string(), "gemini-2.5-pro".to_string()]
+    );
+
+    // Cap and blank handling.
+    let many: Vec<String> = (0..150).map(|i| format!("model-{i}")).collect();
+    assert_eq!(finalize_models(many).len(), MAX_MODEL_SUGGESTIONS);
+    assert!(finalize_models(vec!["  ".to_string(), String::new()]).is_empty());
+  }
+
+  #[test]
+  fn opencode_key_defaults_empty_name_to_opencode_go() {
+    let tmp = tempfile::tempdir().unwrap();
+    let _guard = crate::app_dirs::set_test_data_dir(tmp.path().to_path_buf());
+
+    let oc = save_key("opencode", "", "kimi-k3", "k", None).unwrap();
+    assert_eq!(oc.name, "OpenCode Go");
+    // Whitespace-only names resolve the same way and update the same record.
+    let oc2 = save_key("opencode", "   ", "kimi-k3", "k2", None).unwrap();
+    assert_eq!(oc2.name, "OpenCode Go");
+    assert_eq!(oc2.id, oc.id);
+
+    // Every other provider still requires an explicit name.
+    let err = save_key("openai", "", "gpt-4o-mini", "sk-x", None).unwrap_err();
+    assert!(err.contains("NAME_CANNOT_BE_EMPTY"));
+    let err = save_key("custom", "  ", "m", "k", Some("http://localhost:11434/v1")).unwrap_err();
+    assert!(err.contains("NAME_CANNOT_BE_EMPTY"));
+  }
+
+  #[test]
+  fn ai_keys_models_rejects_invalid_input() {
+    let tmp = tempfile::tempdir().unwrap();
+    let _guard = crate::app_dirs::set_test_data_dir(tmp.path().to_path_buf());
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+
+    assert!(runtime
+      .block_on(ai_keys_models("watson".to_string(), None, None, None))
+      .is_err());
+    assert!(runtime
+      .block_on(ai_keys_models(
+        "openai".to_string(),
+        None,
+        Some("missing-key-id".to_string()),
+        None
+      ))
+      .is_err());
+    assert!(runtime
+      .block_on(ai_keys_models(
+        "custom".to_string(),
+        Some("ollama".to_string()),
+        None,
+        Some("ftp://example.com/v1".to_string())
+      ))
+      .is_err());
+  }
+
+  #[test]
+  fn fetch_models_reads_catalog_and_degrades_gracefully() {
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    runtime.block_on(async {
+      let mock_server = wiremock::MockServer::start().await;
+      // Only the authenticated request sees the catalog.
+      wiremock::Mock::given(wiremock::matchers::method("GET"))
+        .and(wiremock::matchers::path("/v1/models"))
+        .and(wiremock::matchers::header("authorization", "Bearer k"))
+        .respond_with(
+          wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "object": "list",
+            "data": [
+              { "id": "kimi-k3" },
+              { "id": "whisper-large-v3" },
+              { "id": "kimi-k3" },
+            ]
+          })),
+        )
+        .mount(&mock_server)
+        .await;
+
+      let base = format!("{}/v1", mock_server.uri());
+      let models = fetch_models(AiProvider::Opencode, Some("k"), Some(&base))
+        .await
+        .unwrap();
+      assert_eq!(models, vec!["kimi-k3".to_string()]);
+
+      // Wrong key: the mock 404s, which degrades to an empty list.
+      let models = fetch_models(AiProvider::Opencode, Some("wrong"), Some(&base))
+        .await
+        .unwrap();
+      assert!(models.is_empty());
+
+      // Unreachable endpoint degrades instead of erroring.
+      let models = fetch_models(AiProvider::Openai, Some("k"), Some("http://127.0.0.1:9/v1"))
+        .await
+        .unwrap();
+      assert!(models.is_empty());
+
+      // Providers that need a key (or custom without an endpoint) resolve
+      // to empty without touching the network.
+      assert!(fetch_models(AiProvider::Anthropic, None, None)
+        .await
+        .unwrap()
+        .is_empty());
+      assert!(fetch_models(AiProvider::Google, Some(""), None)
+        .await
+        .unwrap()
+        .is_empty());
+      assert!(fetch_models(AiProvider::Custom, Some("k"), None)
+        .await
+        .unwrap()
+        .is_empty());
+    });
   }
 
   #[test]

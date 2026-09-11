@@ -11,7 +11,7 @@
     "test": "pnpm check:i18n && pnpm test:rust:unit && pnpm test:sync-e2e",
     "check:i18n": "node scripts/check-i18n.mjs",
     "test:rust": "cd src-tauri && cargo test",
-    "test:rust:unit": "cd src-tauri && cargo test --lib && cargo test --test duckling_proxy_integration && cargo test --test vpn_integration",
+    "test:rust:unit": "cd src-tauri && cargo test --lib --test duckling_proxy_integration --test vpn_integration",
     "test:sync-e2e": "node scripts/sync-test-harness.mjs",
     "e2e": "node e2e/run.mjs --suite=full",
     "e2e:smoke": "node e2e/run.mjs --suite=smoke",

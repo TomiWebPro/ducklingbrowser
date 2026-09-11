@@ -74,7 +74,19 @@ test("AI key store supports custom endpoints and opencode provider", async () =>
       key: "local",
     });
     assert.equal(oc.provider, "opencode");
-    assert.ok(!oc.endpoint, "opencode falls back to its local default");
+    assert.ok(
+      !oc.endpoint,
+      "opencode falls back to its Go subscription default",
+    );
+
+    // OpenCode Go needs only a key: an empty name defaults to "OpenCode Go".
+    const go = await app.invoke("ai_keys_save", {
+      provider: "opencode",
+      name: "",
+      model: "kimi-k3",
+      key: "local-go-key",
+    });
+    assert.equal(go.name, "OpenCode Go");
 
     // Probing a saved id resolves the stored endpoint without erroring.
     const probed = await app.invoke("ai_keys_test", {
@@ -85,8 +97,27 @@ test("AI key store supports custom endpoints and opencode provider", async () =>
     assert.equal(typeof probed.ok, "boolean");
     assert.ok(probed.detail.length > 0);
 
+    // Model catalog: invalid input rejects; unreachable endpoints fall back
+    // to an empty list (frontend keeps its static suggestions).
+    await app.invokeError("ai_keys_models", { provider: "unknown" });
+    await app.invokeError("ai_keys_models", {
+      provider: "openai",
+      id: "missing-key-id",
+    });
+    await app.invokeError("ai_keys_models", {
+      provider: "custom",
+      key: "ollama",
+      endpoint: "ftp://example.com/v1",
+    });
+    const models = await app.invoke("ai_keys_models", {
+      provider: "opencode",
+    });
+    assert.ok(Array.isArray(models));
+    assert.ok(models.every((m) => typeof m === "string"));
+
     await app.invoke("ai_keys_delete", { id: custom.id });
     await app.invoke("ai_keys_delete", { id: oc.id });
+    await app.invoke("ai_keys_delete", { id: go.id });
   });
 });
 

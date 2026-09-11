@@ -6,7 +6,11 @@ const nextConfig: NextConfig = {
   images: {
     unoptimized: true,
   },
-  distDir: "dist",
+  // Production builds (`next build`) emit into dist/ for Tauri to embed.
+  // The dev server (`next dev`) uses .next/ instead: it constantly rewrites
+  // caches, logs, and traces there, and keeping that churn out of dist/
+  // prevents needless Rust rebuilds (tauri-build watches frontendDist).
+  distDir: process.env.NODE_ENV === "production" ? "dist" : ".next",
   compiler: {
     removeConsole: process.env.NODE_ENV === "production",
   },

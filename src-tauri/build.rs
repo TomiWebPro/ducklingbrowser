@@ -49,9 +49,11 @@ fn main() {
   println!("cargo:rerun-if-changed=src/proxy_runner.rs");
   println!("cargo:rerun-if-changed=src/proxy_storage.rs");
 
-  // Tell Cargo to rebuild when binaries directory contents change
-  // This ensures tauri_build is re-run after sidecar binaries are copied
-  println!("cargo:rerun-if-changed=binaries");
+  // Watch the sidecar binary itself — never the whole directory. Cargo
+  // re-runs the build script on ANY write under a watched directory, and the
+  // dev workflow copies/rebuilds sidecars often enough for that to cause
+  // redundant rebuilds.
+  println!("cargo:rerun-if-changed=binaries/{}", sidecar_binary_name());
 
   // Only run tauri_build if all external binaries exist
   // This allows building duckling-proxy sidecar without the other binaries present
@@ -76,30 +78,30 @@ fn main() {
   }
 }
 
+/// File name of the sidecar binary for the current target
+/// (must match tauri.conf.json externalBin).
+fn sidecar_binary_name() -> String {
+  match std::env::var("TARGET") {
+    Ok(target) if target.contains("windows") => {
+      format!("duckling-proxy-{target}.exe")
+    }
+    Ok(target) => format!("duckling-proxy-{target}"),
+    Err(_) => String::from("duckling-proxy"),
+  }
+}
+
 fn external_binaries_exist() -> bool {
-  use std::env;
   use std::path::PathBuf;
 
-  let manifest_dir = match env::var("CARGO_MANIFEST_DIR") {
+  let manifest_dir = match std::env::var("CARGO_MANIFEST_DIR") {
     Ok(dir) => dir,
-    Err(_) => return false,
-  };
-
-  let target = match env::var("TARGET") {
-    Ok(t) => t,
     Err(_) => return false,
   };
 
   let binaries_dir = PathBuf::from(&manifest_dir).join("binaries");
 
   // Check for all required external binaries (must match tauri.conf.json externalBin)
-  let duckling_proxy_name = if target.contains("windows") {
-    format!("duckling-proxy-{}.exe", target)
-  } else {
-    format!("duckling-proxy-{}", target)
-  };
-
-  binaries_dir.join(&duckling_proxy_name).exists()
+  binaries_dir.join(sidecar_binary_name()).exists()
 }
 
 fn ensure_dist_folder_exists() {
@@ -108,21 +110,30 @@ fn ensure_dist_folder_exists() {
 
   let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
   let dist_dir = PathBuf::from(&manifest_dir).join("..").join("dist");
+  let index_path = dist_dir.join("index.html");
 
-  if !dist_dir.exists() {
+  // A dev-only checkout has dist/dev/ (Next.js cache/logs) but no built
+  // index.html. Materialize the stub so the watch below always points at an
+  // existing file — cargo treats a watched-but-missing file as dirty on
+  // every single invocation.
+  if !index_path.exists() {
     fs::create_dir_all(&dist_dir).expect("Failed to create dist directory");
-    let index_path = dist_dir.join("index.html");
     fs::write(
       &index_path,
       "<!DOCTYPE html><html><head></head><body></body></html>",
     )
     .expect("Failed to create stub index.html");
     println!(
-      "cargo:warning=Created stub dist folder for compilation. Run 'pnpm build' for full frontend."
+      "cargo:warning=Created stub dist/index.html for compilation. Run 'pnpm build' for full frontend."
     );
   }
 
-  println!("cargo:rerun-if-changed=../dist");
+  // Watch the entry file only — never the whole dist directory. The Next.js
+  // dev server constantly rewrites caches, logs, and traces under dist/dev/,
+  // and a directory watch turns every one of those writes into a full crate
+  // rebuild (`Dirty ... the file '../dist' has changed`). A real frontend
+  // build always rewrites index.html, so no rebuild is ever missed.
+  println!("cargo:rerun-if-changed=../dist/index.html");
 }
 
 #[cfg(target_os = "windows")]

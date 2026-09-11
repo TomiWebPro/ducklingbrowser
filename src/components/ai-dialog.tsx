@@ -306,8 +306,14 @@ function EndpointsPanel({
   const [showKey, setShowKey] = useState(false);
   const [saving, setSaving] = useState(false);
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
+  const [modelOptions, setModelOptions] = useState<string[]>(
+    providerMeta("openai")?.models ?? [],
+  );
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const fetchSeq = useRef(0);
 
   const meta = providerMeta(provider);
+  const isOpencodeGo = provider === "opencode";
   const endpointError = (() => {
     if (!meta?.showEndpoint) return null;
     if (!endpoint.trim()) {
@@ -318,6 +324,31 @@ function EndpointsPanel({
     return validateEndpoint(endpoint);
   })();
 
+  /** Query the endpoint's live model catalog; fall back to the static
+   * shortcuts when unreachable. Live ids come first, static extras appended. */
+  const refreshModels = useCallback(
+    async (nextProvider: string, nextEndpoint: string, nextKey: string) => {
+      const seq = ++fetchSeq.current;
+      setModelsLoading(true);
+      try {
+        const live = await invoke<string[]>("ai_keys_models", {
+          provider: nextProvider,
+          key: nextKey.trim() ? nextKey.trim() : null,
+          endpoint: nextEndpoint.trim() ? nextEndpoint.trim() : null,
+        });
+        if (seq !== fetchSeq.current) return;
+        const statik = providerMeta(nextProvider)?.models ?? [];
+        const merged = [...live, ...statik.filter((m) => !live.includes(m))];
+        if (merged.length > 0) setModelOptions(merged);
+      } catch {
+        // Unreachable endpoint or bad input: keep the static shortcuts.
+      } finally {
+        if (seq === fetchSeq.current) setModelsLoading(false);
+      }
+    },
+    [],
+  );
+
   const handleProviderChange = (value: string) => {
     setProvider(value);
     const next = providerMeta(value);
@@ -327,11 +358,19 @@ function EndpointsPanel({
       // provider's URL (editable). Custom has none, so it clears for input.
       setEndpoint(next.defaultEndpoint ?? "");
       setEndpointTouched(false);
+      // Options follow the provider immediately; the live catalog refines them.
+      setModelOptions(next.models);
+      void refreshModels(value, next.defaultEndpoint ?? "", keyValue);
     }
   };
 
   const handleSave = async (testAfter: boolean) => {
-    if (!name.trim() || !model.trim() || !keyValue.trim()) {
+    const effectiveName = isOpencodeGo && !name.trim() ? "OpenCode Go" : name;
+    if (
+      (!isOpencodeGo && !effectiveName.trim()) ||
+      !model.trim() ||
+      !keyValue.trim()
+    ) {
       showErrorToast(t("aiKeys.emptyFields"));
       return;
     }
@@ -349,7 +388,7 @@ function EndpointsPanel({
     try {
       await invoke<AiKeyInfo>("ai_keys_save", {
         provider,
-        name,
+        name: effectiveName,
         model,
         key: keyValue,
         endpoint:
@@ -444,12 +483,28 @@ function EndpointsPanel({
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label>{t("aiKeys.model")}</Label>
+            <Label className="flex items-center gap-1.5">
+              {t("aiKeys.model")}
+              {modelsLoading && (
+                <Loader2
+                  className="size-3 animate-spin text-muted-foreground"
+                  aria-hidden="true"
+                />
+              )}
+            </Label>
             <Input
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              placeholder="gpt-4o-mini"
+              placeholder={meta?.defaultModel || "gpt-4o-mini"}
+              list={modelOptions.length ? "ai-model-suggestions" : undefined}
             />
+            {modelOptions.length ? (
+              <datalist id="ai-model-suggestions">
+                {modelOptions.map((m) => (
+                  <option key={m} value={m} />
+                ))}
+              </datalist>
+            ) : null}
           </div>
         </div>
         {meta?.showEndpoint && (
@@ -460,6 +515,11 @@ function EndpointsPanel({
               onChange={(e) => {
                 setEndpoint(e.target.value);
                 setEndpointTouched(true);
+              }}
+              onBlur={() => {
+                if (!validateEndpoint(endpoint)) {
+                  void refreshModels(provider, endpoint, keyValue);
+                }
               }}
               placeholder={
                 meta.endpointPlaceholder || t("aiKeys.endpointPlaceholder")
@@ -480,14 +540,16 @@ function EndpointsPanel({
             )}
           </div>
         )}
-        <div className="space-y-1.5">
-          <Label>{t("aiKeys.name")}</Label>
-          <Input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder={t("aiKeys.namePlaceholder")}
-          />
-        </div>
+        {!isOpencodeGo && (
+          <div className="space-y-1.5">
+            <Label>{t("aiKeys.name")}</Label>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={t("aiKeys.namePlaceholder")}
+            />
+          </div>
+        )}
         <div className="space-y-1.5">
           <Label>{t("aiKeys.key")}</Label>
           <div className="relative">
@@ -495,6 +557,11 @@ function EndpointsPanel({
               type={showKey ? "text" : "password"}
               value={keyValue}
               onChange={(e) => setKeyValue(e.target.value)}
+              onBlur={() => {
+                if (keyValue.trim()) {
+                  void refreshModels(provider, endpoint, keyValue);
+                }
+              }}
               placeholder="sk-..."
               className="pr-9"
             />
