@@ -1,0 +1,11 @@
+# cargo-nextest default profile for Duckling Browser.
+# Run unit tests with: cargo nextest run --lib
+# (compiles first via the shared target dir + sccache; use
+#  `cargo nextest run --lib --no-run` for a build-only check)
+[profile.default]
+# Flag tests slower than this in the summary so new wall-clock sleeps and
+# network waits in unit tests get noticed before they land.
+slow-timeout = "60s"
+# Never abort the whole run on the first failure: one slow/flaky test must
+# not hide the signal from the other 500+.
+fail-fast = false

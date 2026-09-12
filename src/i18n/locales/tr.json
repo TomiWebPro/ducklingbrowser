@@ -2177,7 +2177,12 @@
     "goToKeys": "Endpoint'leri yönet",
     "noKeySelected": "Önce bir sağlayıcı anahtarı veya ajan CLI seçin",
     "pickModel": "Sağlayıcı veya ajan seçin",
-    "orDirect": "— veya doğrudan sohbet edin —"
+    "orDirect": "— veya doğrudan sohbet edin —",
+    "fullAutomation": "Full automation",
+    "fullAutomationHint": "Run tool actions immediately without confirmation cards. Only for direct chat; unavailable when delegating to an agent CLI.",
+    "fullAutomationActive": "Full automation is on: actions run immediately without confirmation.",
+    "activeRuns": "{{count}} running — click to stop",
+    "stopAllDone": "Stop requested for all running agent jobs"
   },
   "changeCard": {
     "sectionTitle": "Önerilen değişiklikler",
@@ -2248,7 +2253,9 @@
       "downloadDirOverride": "İndirme alt klasörü (isteğe bağlı)",
       "downloadDirPlaceholder": "reports/monthly",
       "maxSteps": "Maks. adım (1–100)",
-      "maxStepsInvalid": "Maks. adım 1–100 olmalı"
+      "maxStepsInvalid": "Maks. adım 1–100 olmalı",
+      "fullAutomation": "Full automation (auto-approve all)",
+      "fullAutomationHint": "Apply every agent-proposed change without asking. Scheduling the task is the approval. Off (safe): only reversible changes apply; the rest are skipped and reported."
     },
     "calendar": {
       "today": "Bugün",
@@ -2264,7 +2271,8 @@
         "fri": "Cum",
         "sat": "Cmt"
       }
-    }
+    },
+    "fullAutoBadge": "Full auto"
   },
   "ai": {
     "title": "AI",

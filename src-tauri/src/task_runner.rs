@@ -538,6 +538,7 @@ mod tests {
       steps,
       schedule: Default::default(),
       same_bucket_rate_limit: true,
+      auto_approve: false,
       enabled: true,
       created_at: String::new(),
       updated_at: String::new(),

@@ -138,6 +138,7 @@ windows = { version = "0.62", features = [
 
 [dev-dependencies]
 tempfile = "3.27.0"
+filetime = "0.2"
 wiremock = "0.6"
 hyper = { version = "1.10", features = ["full"] }
 hyper-util = { version = "0.1", features = ["full"] }
@@ -175,9 +176,12 @@ lto = "thin"
 split-debuginfo = "unpacked"
 
 [profile.test]
-# Optimize test builds for faster compilation
+# Optimize test builds for faster compilation and linking.
 codegen-units = 256
 incremental = true
+# Line tables only: full debuginfo makes the Windows MSVC link of the
+# 85MB+ test binary much slower while adding nothing test runs need.
+debug = 1
 
 [features]
 # by default Tauri runs in production mode

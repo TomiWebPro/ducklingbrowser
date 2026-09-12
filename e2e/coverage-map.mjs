@@ -304,7 +304,14 @@ export const commandCoverage = {
   aiAgent: {
     suite: "ai",
     level: "integration",
-    commands: ["agent_chat", "agent_chat_confirm", "agent_chat_decline"],
+    commands: [
+      "agent_chat",
+      "agent_chat_confirm",
+      "agent_chat_decline",
+      "agent_cancel_run",
+      "agent_active_runs",
+      "agent_tool_catalog",
+    ],
   },
   subscriptions: {
     suite: "subscriptions",

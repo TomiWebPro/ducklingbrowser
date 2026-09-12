@@ -2177,7 +2177,12 @@
     "goToKeys": "エンドポイントを管理",
     "noKeySelected": "先にプロバイダーキーまたはエージェントCLIを選択してください",
     "pickModel": "プロバイダーまたはエージェントを選択",
-    "orDirect": "— または直接チャット —"
+    "orDirect": "— または直接チャット —",
+    "fullAutomation": "Full automation",
+    "fullAutomationHint": "Run tool actions immediately without confirmation cards. Only for direct chat; unavailable when delegating to an agent CLI.",
+    "fullAutomationActive": "Full automation is on: actions run immediately without confirmation.",
+    "activeRuns": "{{count}} running — click to stop",
+    "stopAllDone": "Stop requested for all running agent jobs"
   },
   "changeCard": {
     "sectionTitle": "提案された変更",
@@ -2248,7 +2253,9 @@
       "downloadDirOverride": "ダウンロードのサブフォルダー（任意）",
       "downloadDirPlaceholder": "reports/monthly",
       "maxSteps": "最大ステップ数（1–100）",
-      "maxStepsInvalid": "最大ステップ数は1–100で指定してください"
+      "maxStepsInvalid": "最大ステップ数は1–100で指定してください",
+      "fullAutomation": "Full automation (auto-approve all)",
+      "fullAutomationHint": "Apply every agent-proposed change without asking. Scheduling the task is the approval. Off (safe): only reversible changes apply; the rest are skipped and reported."
     },
     "calendar": {
       "today": "今日",
@@ -2264,7 +2271,8 @@
         "fri": "金",
         "sat": "土"
       }
-    }
+    },
+    "fullAutoBadge": "Full auto"
   },
   "ai": {
     "title": "AI",

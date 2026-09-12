@@ -2177,7 +2177,12 @@
     "goToKeys": "Управление эндпоинтами",
     "noKeySelected": "Сначала выберите ключ провайдера или агентский CLI",
     "pickModel": "Выберите провайдера или агента",
-    "orDirect": "— или общайтесь напрямую —"
+    "orDirect": "— или общайтесь напрямую —",
+    "fullAutomation": "Full automation",
+    "fullAutomationHint": "Run tool actions immediately without confirmation cards. Only for direct chat; unavailable when delegating to an agent CLI.",
+    "fullAutomationActive": "Full automation is on: actions run immediately without confirmation.",
+    "activeRuns": "{{count}} running — click to stop",
+    "stopAllDone": "Stop requested for all running agent jobs"
   },
   "changeCard": {
     "sectionTitle": "Предложенные изменения",
@@ -2248,7 +2253,9 @@
       "downloadDirOverride": "Подпапка загрузок (необязательно)",
       "downloadDirPlaceholder": "reports/monthly",
       "maxSteps": "Макс. шагов (1–100)",
-      "maxStepsInvalid": "Макс. шагов: 1–100"
+      "maxStepsInvalid": "Макс. шагов: 1–100",
+      "fullAutomation": "Full automation (auto-approve all)",
+      "fullAutomationHint": "Apply every agent-proposed change without asking. Scheduling the task is the approval. Off (safe): only reversible changes apply; the rest are skipped and reported."
     },
     "calendar": {
       "today": "Сегодня",
@@ -2264,7 +2271,8 @@
         "fri": "Пт",
         "sat": "Сб"
       }
-    }
+    },
+    "fullAutoBadge": "Full auto"
   },
   "ai": {
     "title": "AI",

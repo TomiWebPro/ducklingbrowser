@@ -2177,7 +2177,12 @@
     "goToKeys": "Manage endpoints",
     "noKeySelected": "Select a provider key or an agent CLI first",
     "pickModel": "Pick provider or agent",
-    "orDirect": "— or chat directly —"
+    "orDirect": "— or chat directly —",
+    "fullAutomation": "Full automation",
+    "fullAutomationHint": "Run tool actions immediately without confirmation cards. Only for direct chat; unavailable when delegating to an agent CLI.",
+    "fullAutomationActive": "Full automation is on: actions run immediately without confirmation.",
+    "activeRuns": "{{count}} running — click to stop",
+    "stopAllDone": "Stop requested for all running agent jobs"
   },
   "changeCard": {
     "sectionTitle": "Proposed changes",
@@ -2248,7 +2253,9 @@
       "downloadDirOverride": "Download subfolder (optional)",
       "downloadDirPlaceholder": "reports/monthly",
       "maxSteps": "Max steps (1–100)",
-      "maxStepsInvalid": "Max steps must be 1–100"
+      "maxStepsInvalid": "Max steps must be 1–100",
+      "fullAutomation": "Full automation (auto-approve all)",
+      "fullAutomationHint": "Apply every agent-proposed change without asking. Scheduling the task is the approval. Off (safe): only reversible changes apply; the rest are skipped and reported."
     },
     "calendar": {
       "today": "Today",
@@ -2264,7 +2271,8 @@
         "fri": "Fri",
         "sat": "Sat"
       }
-    }
+    },
+    "fullAutoBadge": "Full auto"
   },
   "ai": {
     "title": "AI",

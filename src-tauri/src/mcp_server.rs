@@ -494,24 +494,7 @@ impl McpServer {
         | "batch_run_profiles"
         | "batch_stop_profiles"
         | "start_sync_session"
-        | "navigate"
-        | "screenshot"
-        | "evaluate_javascript"
-        | "click_element"
-        | "type_text"
-        | "get_page_content"
-        | "get_page_info"
-        | "get_interactive_elements"
-        | "click_by_index"
-        | "type_by_index"
-        | "drag"
-        | "scroll"
-        | "press_key"
-        | "hover"
-        | "set_download_dir"
-        | "wait_for_download"
-        | "get_downloads"
-    )
+    ) || crate::browser_tools::is_automation_browser_tool(tool_name)
   }
 
   pub async fn stop(&self) -> Result<(), String> {
@@ -537,7 +520,7 @@ impl McpServer {
   }
 
   pub fn get_tools(&self) -> Vec<McpTool> {
-    vec![
+    let mut tools = vec![
       McpTool {
         name: "list_profiles".to_string(),
         description: "List all browser profiles".to_string(),
@@ -1213,7 +1196,7 @@ impl McpServer {
       // Agent tools
       McpTool {
         name: "agent_chat".to_string(),
-        description: "Run the in-app AI agent against a saved key from the key vault. The agent can browse profiles, execute browser tools, and returns change cards for confirmation.".to_string(),
+        description: "Run the in-app AI agent against a saved key from the key vault. The agent can browse profiles, execute browser tools, and returns change cards for confirmation. Pass auto_approve=true for full automation (tools execute immediately, no cards).".to_string(),
         input_schema: serde_json::json!({
           "type": "object",
           "properties": {
@@ -1233,6 +1216,10 @@ impl McpServer {
               "type": "string",
               "enum": ["agent", "chat"],
               "description": "Run with the full agent (tools) or as a plain chat"
+            },
+            "auto_approve": {
+              "type": "boolean",
+              "description": "Full automation: execute tool actions immediately without confirmation cards (default: false)"
             }
           },
           "required": ["message"]
@@ -1619,403 +1606,19 @@ impl McpServer {
           "required": ["session_id", "follower_profile_id"]
         }),
       },
-      // Browser interaction tools
-      McpTool {
-        name: "navigate".to_string(),
-        description: "Navigate a running browser profile to a URL. Waits for the page to fully load before returning.".to_string(),
-        input_schema: serde_json::json!({
-          "type": "object",
-          "properties": {
-            "profile_id": {
-              "type": "string",
-              "description": "The UUID of the running profile"
-            },
-            "url": {
-              "type": "string",
-              "description": "The URL to navigate to"
-            }
-          },
-          "required": ["profile_id", "url"]
+    ];
+    // Browser interaction tools come from the shared catalog so the MCP
+    // server, the in-app agent, and scheduled runs can never drift apart.
+    tools.extend(
+      crate::browser_tools::browser_tools()
+        .into_iter()
+        .map(|t| McpTool {
+          name: t.name,
+          description: t.description,
+          input_schema: t.input_schema,
         }),
-      },
-      McpTool {
-        name: "screenshot".to_string(),
-        description: "Take a screenshot of the current page in a running browser profile. Returns base64-encoded image."
-          .to_string(),
-        input_schema: serde_json::json!({
-          "type": "object",
-          "properties": {
-            "profile_id": {
-              "type": "string",
-              "description": "The UUID of the running profile"
-            },
-            "format": {
-              "type": "string",
-              "enum": ["png", "jpeg", "webp"],
-              "description": "Image format (default: png)"
-            },
-            "quality": {
-              "type": "integer",
-              "description": "Image quality 0-100 for jpeg/webp (default: 80)"
-            },
-            "full_page": {
-              "type": "boolean",
-              "description": "Capture the full scrollable page (default: false)"
-            }
-          },
-          "required": ["profile_id"]
-        }),
-      },
-      McpTool {
-        name: "evaluate_javascript".to_string(),
-        description:
-          "Execute JavaScript in the context of the current page and return the result. Works with both static and dynamically-generated content. Set wait_for_load=true if the script triggers navigation (e.g., form.submit())."
-            .to_string(),
-        input_schema: serde_json::json!({
-          "type": "object",
-          "properties": {
-            "profile_id": {
-              "type": "string",
-              "description": "The UUID of the running profile"
-            },
-            "expression": {
-              "type": "string",
-              "description": "JavaScript expression to evaluate"
-            },
-            "await_promise": {
-              "type": "boolean",
-              "description": "Whether to await the result if it's a Promise (default: false)"
-            },
-            "wait_for_load": {
-              "type": "boolean",
-              "description": "Wait for page load after execution, use when the script triggers navigation like form.submit() (default: false)"
-            }
-          },
-          "required": ["profile_id", "expression"]
-        }),
-      },
-      McpTool {
-        name: "click_element".to_string(),
-        description: "Click on an element identified by a CSS selector. If the click triggers a page navigation, waits for the new page to load before returning.".to_string(),
-        input_schema: serde_json::json!({
-          "type": "object",
-          "properties": {
-            "profile_id": {
-              "type": "string",
-              "description": "The UUID of the running profile"
-            },
-            "selector": {
-              "type": "string",
-              "description": "CSS selector for the element to click"
-            }
-          },
-          "required": ["profile_id", "selector"]
-        }),
-      },
-      McpTool {
-        name: "type_text".to_string(),
-        description: "Focus an element by CSS selector and type text into it. By default uses realistic human-like typing with variable speed, natural errors, and self-corrections. Only set instant=true when you are certain the target does not have bot detection (e.g. browser address bars, developer tools, internal apps) — using instant on public websites risks the profile being flagged as a bot.".to_string(),
-        input_schema: serde_json::json!({
-          "type": "object",
-          "properties": {
-            "profile_id": {
-              "type": "string",
-              "description": "The UUID of the running profile"
-            },
-            "selector": {
-              "type": "string",
-              "description": "CSS selector for the input element"
-            },
-            "text": {
-              "type": "string",
-              "description": "Text to type into the element"
-            },
-            "clear_first": {
-              "type": "boolean",
-              "description": "Clear the input before typing (default: true)"
-            },
-            "instant": {
-              "type": "boolean",
-              "description": "Paste all text at once instead of human typing. WARNING: only use on targets without bot detection — using this on public websites risks the profile being flagged."
-            },
-            "wpm": {
-              "type": "number",
-              "description": "Target words per minute for human typing (default: 80)"
-            }
-          },
-          "required": ["profile_id", "selector", "text"]
-        }),
-      },
-      McpTool {
-        name: "get_page_content".to_string(),
-        description:
-          "Get the content of the current page. Works with both static HTML and JavaScript-rendered content."
-            .to_string(),
-        input_schema: serde_json::json!({
-          "type": "object",
-          "properties": {
-            "profile_id": {
-              "type": "string",
-              "description": "The UUID of the running profile"
-            },
-            "format": {
-              "type": "string",
-              "enum": ["html", "text"],
-              "description": "Content format: 'html' for full HTML, 'text' for visible text only (default: text)"
-            },
-            "selector": {
-              "type": "string",
-              "description": "Optional CSS selector to get content of a specific element instead of the whole page"
-            }
-          },
-          "required": ["profile_id"]
-        }),
-      },
-      McpTool {
-        name: "get_page_info".to_string(),
-        description: "Get metadata about the current page including URL, title, and readiness state"
-          .to_string(),
-        input_schema: serde_json::json!({
-          "type": "object",
-          "properties": {
-            "profile_id": {
-              "type": "string",
-              "description": "The UUID of the running profile"
-            }
-          },
-          "required": ["profile_id"]
-        }),
-      },
-      McpTool {
-        name: "get_interactive_elements".to_string(),
-        description: "Enumerate visible interactive elements on the page (buttons, links, inputs, etc.) as a compact indexed list. The returned indices are stable for the current page and can be used with click_by_index and type_by_index instead of guessing CSS selectors. Call this before click_by_index / type_by_index, and re-call after any navigation or major DOM change. Far cheaper in tokens than get_page_content for agentic browsing.".to_string(),
-        input_schema: serde_json::json!({
-          "type": "object",
-          "properties": {
-            "profile_id": {
-              "type": "string",
-              "description": "The UUID of the running profile"
-            },
-            "max_chars": {
-              "type": "integer",
-              "description": "Cap on the serialized output length (default: 40000). The response carries a `truncated` flag if the list was cut off — narrow the viewport or scroll if you need elements past the cutoff."
-            }
-          },
-          "required": ["profile_id"]
-        }),
-      },
-      McpTool {
-        name: "click_by_index".to_string(),
-        description: "Click the element at the given index from the last get_interactive_elements call. Indices are valid until the next navigation. If the click triggers navigation, waits for the new page to load before returning.".to_string(),
-        input_schema: serde_json::json!({
-          "type": "object",
-          "properties": {
-            "profile_id": {
-              "type": "string",
-              "description": "The UUID of the running profile"
-            },
-            "index": {
-              "type": "integer",
-              "description": "Zero-based index from the last get_interactive_elements response"
-            }
-          },
-          "required": ["profile_id", "index"]
-        }),
-      },
-      McpTool {
-        name: "type_by_index".to_string(),
-        description: "Focus the element at the given index from the last get_interactive_elements call and type text into it. Same human-like-typing defaults as type_text; only set instant=true when you're sure the target lacks bot detection.".to_string(),
-        input_schema: serde_json::json!({
-          "type": "object",
-          "properties": {
-            "profile_id": {
-              "type": "string",
-              "description": "The UUID of the running profile"
-            },
-            "index": {
-              "type": "integer",
-              "description": "Zero-based index from the last get_interactive_elements response"
-            },
-            "text": {
-              "type": "string",
-              "description": "Text to type into the element"
-            },
-            "clear_first": {
-              "type": "boolean",
-              "description": "Clear the input before typing (default: true)"
-            },
-            "instant": {
-              "type": "boolean",
-              "description": "Paste all text at once instead of human typing. WARNING: only use on targets without bot detection."
-            },
-            "wpm": {
-              "type": "number",
-              "description": "Target words per minute for human typing (default: 80)"
-            }
-          },
-          "required": ["profile_id", "index", "text"]
-        }),
-      },
-      McpTool {
-        name: "drag".to_string(),
-        description: "Drag from a source element to a target element or viewport point. Source and target each resolve from a CSS selector, an index from the last get_interactive_elements call, or explicit x/y coordinates. If the drag triggers navigation, waits for the new page to load before returning.".to_string(),
-        input_schema: serde_json::json!({
-          "type": "object",
-          "properties": {
-            "profile_id": {
-              "type": "string",
-              "description": "The UUID of the running profile"
-            },
-            "from_selector": {
-              "type": "string",
-              "description": "CSS selector for the drag source"
-            },
-            "from_index": {
-              "type": "integer",
-              "description": "Index of the drag source from get_interactive_elements"
-            },
-            "to_selector": {
-              "type": "string",
-              "description": "CSS selector for the drop target"
-            },
-            "to_index": {
-              "type": "integer",
-              "description": "Index of the drop target from get_interactive_elements"
-            },
-            "to_x": {
-              "type": "number",
-              "description": "Viewport x coordinate (use with to_y instead of a target)"
-            },
-            "to_y": {
-              "type": "number",
-              "description": "Viewport y coordinate (use with to_x instead of a target)"
-            }
-          },
-          "required": ["profile_id"]
-        }),
-      },
-      McpTool {
-        name: "scroll".to_string(),
-        description: "Scroll the page or an element. Direction is up, down, left, or right; pixels defaults to 500.".to_string(),
-        input_schema: serde_json::json!({
-          "type": "object",
-          "properties": {
-            "profile_id": {
-              "type": "string",
-              "description": "The UUID of the running profile"
-            },
-            "selector": {
-              "type": "string",
-              "description": "CSS selector of the scrollable element (omit to scroll the page)"
-            },
-            "index": {
-              "type": "integer",
-              "description": "Index of the scrollable element from get_interactive_elements"
-            },
-            "direction": {
-              "type": "string",
-              "enum": ["up", "down", "left", "right"],
-              "description": "Scroll direction (default: down)"
-            },
-            "pixels": {
-              "type": "integer",
-              "description": "Pixels to scroll (default: 500, max 10000)"
-            }
-          },
-          "required": ["profile_id"]
-        }),
-      },
-      McpTool {
-        name: "press_key".to_string(),
-        description: "Press a non-text key (Enter, Tab, Escape, Backspace, Delete, arrows, Home, End, PageUp, PageDown). For text entry use type_text instead.".to_string(),
-        input_schema: serde_json::json!({
-          "type": "object",
-          "properties": {
-            "profile_id": {
-              "type": "string",
-              "description": "The UUID of the running profile"
-            },
-            "key": {
-              "type": "string",
-              "description": "Key to press"
-            }
-          },
-          "required": ["profile_id", "key"]
-        }),
-      },
-      McpTool {
-        name: "hover".to_string(),
-        description: "Hover the pointer over an element identified by a CSS selector or an index from get_interactive_elements. Useful for revealing menus and tooltips.".to_string(),
-        input_schema: serde_json::json!({
-          "type": "object",
-          "properties": {
-            "profile_id": {
-              "type": "string",
-              "description": "The UUID of the running profile"
-            },
-            "selector": {
-              "type": "string",
-              "description": "CSS selector for the element"
-            },
-            "index": {
-              "type": "integer",
-              "description": "Index from the last get_interactive_elements response"
-            }
-          },
-          "required": ["profile_id"]
-        }),
-      },
-      McpTool {
-        name: "set_download_dir".to_string(),
-        description: "Route subsequent page downloads into a sandboxed folder. Relative paths resolve under the app downloads root; absolute paths must stay inside the app data directory. Fails when the profile disables agent downloads.".to_string(),
-        input_schema: serde_json::json!({
-          "type": "object",
-          "properties": {
-            "profile_id": {
-              "type": "string",
-              "description": "The UUID of the running profile"
-            },
-            "path": {
-              "type": "string",
-              "description": "Download folder (omit to reset to the profile default)"
-            }
-          },
-          "required": ["profile_id"]
-        }),
-      },
-      McpTool {
-        name: "wait_for_download".to_string(),
-        description: "Wait for new files to finish downloading into the current download folder and return them. Skips in-progress partial files.".to_string(),
-        input_schema: serde_json::json!({
-          "type": "object",
-          "properties": {
-            "profile_id": {
-              "type": "string",
-              "description": "The UUID of the running profile"
-            },
-            "timeout_ms": {
-              "type": "integer",
-              "description": "How long to wait in milliseconds (default: 30000, max 300000)"
-            }
-          },
-          "required": ["profile_id"]
-        }),
-      },
-      McpTool {
-        name: "get_downloads".to_string(),
-        description: "List finished files in the profile's current download folder.".to_string(),
-        input_schema: serde_json::json!({
-          "type": "object",
-          "properties": {
-            "profile_id": {
-              "type": "string",
-              "description": "The UUID of the profile"
-            }
-          },
-          "required": ["profile_id"]
-        }),
-      },
-    ]
+    );
+    tools
   }
 
   async fn handle_initialize(
@@ -2266,6 +1869,17 @@ impl McpServer {
       "set_download_dir" => self.handle_set_download_dir(arguments).await,
       "wait_for_download" => self.handle_wait_for_download(arguments).await,
       "get_downloads" => self.handle_get_downloads(arguments).await,
+      "list_tabs" => self.handle_list_tabs(arguments).await,
+      "new_tab" => self.handle_new_tab(arguments).await,
+      "switch_tab" => self.handle_switch_tab(arguments).await,
+      "close_tab" => self.handle_close_tab(arguments).await,
+      "wait_for_text" => self.handle_wait_for_text(arguments).await,
+      "wait_for_url" => self.handle_wait_for_url(arguments).await,
+      "select_option" => self.handle_select_option(arguments).await,
+      "find_text" => self.handle_find_text(arguments).await,
+      "get_cookies" => self.handle_get_cookies(arguments).await,
+      "extract_table" => self.handle_extract_table(arguments).await,
+      "extract_article" => self.handle_extract_article(arguments).await,
       _ => Err(McpError {
         code: -32602,
         message: format!("Unknown tool: {tool_name}"),
@@ -2299,13 +1913,7 @@ impl McpServer {
     &self,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
-    let profile_id = arguments
-      .get("profile_id")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing profile_id".to_string(),
-      })?;
+    let profile_id = Self::require_profile_id(arguments)?;
 
     let profiles = ProfileManager::instance()
       .list_profiles()
@@ -2342,13 +1950,7 @@ impl McpServer {
     &self,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
-    let profile_id = arguments
-      .get("profile_id")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing profile_id".to_string(),
-      })?;
+    let profile_id = Self::require_profile_id(arguments)?;
 
     let url = arguments.get("url").and_then(|v| v.as_str());
     let headless = arguments
@@ -2424,13 +2026,7 @@ impl McpServer {
     &self,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
-    let profile_id = arguments
-      .get("profile_id")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing profile_id".to_string(),
-      })?;
+    let profile_id = Self::require_profile_id(arguments)?;
 
     // Get the profile
     let profiles = ProfileManager::instance()
@@ -2741,13 +2337,7 @@ impl McpServer {
     &self,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
-    let profile_id = arguments
-      .get("profile_id")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing profile_id".to_string(),
-      })?;
+    let profile_id = Self::require_profile_id(arguments)?;
 
     let inner = self.inner.lock().await;
     let app_handle = inner.app_handle.as_ref().ok_or_else(|| McpError {
@@ -2869,13 +2459,7 @@ impl McpServer {
     &self,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
-    let profile_id = arguments
-      .get("profile_id")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing profile_id".to_string(),
-      })?;
+    let profile_id = Self::require_profile_id(arguments)?;
 
     let inner = self.inner.lock().await;
     let app_handle = inner.app_handle.as_ref().ok_or_else(|| McpError {
@@ -2934,13 +2518,7 @@ impl McpServer {
     &self,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
-    let profile_id = arguments
-      .get("profile_id")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing profile_id".to_string(),
-      })?;
+    let profile_id = Self::require_profile_id(arguments)?;
 
     // Get the profile
     let profiles = ProfileManager::instance()
@@ -3662,13 +3240,7 @@ impl McpServer {
     &self,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
-    let profile_id = arguments
-      .get("profile_id")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing profile_id".to_string(),
-      })?;
+    let profile_id = Self::require_profile_id(arguments)?;
 
     let content = arguments
       .get("content")
@@ -3940,14 +3512,7 @@ impl McpServer {
     &self,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
-    let profile_id = arguments
-      .get("profile_id")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing profile_id".to_string(),
-      })?
-      .to_string();
+    let profile_id = Self::require_profile_id(arguments)?.to_string();
 
     let app_handle = {
       let inner = self.inner.lock().await;
@@ -4076,12 +3641,21 @@ impl McpServer {
       .get("use_agent")
       .and_then(|v| v.as_str())
       .map(String::from);
+    let auto_approve = arguments
+      .get("auto_approve")
+      .and_then(|v| v.as_bool())
+      .unwrap_or(false);
 
     // Boxed to break the async recursion cycle (agent_chat -> run_tool_call ->
     // dispatch_tool_call -> handle_agent_chat). The in-app agent rejects
     // agent_chat via agent_tools(), so only external MCP clients reach here.
-    let future = Box::pin(crate::agent_engine::agent_chat_inner(
-      key_id, model, message, use_agent,
+    let future = Box::pin(crate::agent_engine::agent_chat_inner_with_run(
+      key_id,
+      model,
+      message,
+      use_agent,
+      None,
+      auto_approve,
     ));
     let result = future.await.map_err(|e| McpError {
       code: -32000,
@@ -4347,13 +3921,7 @@ impl McpServer {
     &self,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
-    let profile_id = arguments
-      .get("profile_id")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing profile_id".to_string(),
-      })?;
+    let profile_id = Self::require_profile_id(arguments)?;
 
     let profiles = ProfileManager::instance()
       .list_profiles()
@@ -4408,13 +3976,7 @@ impl McpServer {
     &self,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
-    let profile_id = arguments
-      .get("profile_id")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing profile_id".to_string(),
-      })?;
+    let profile_id = Self::require_profile_id(arguments)?;
 
     let fingerprint = arguments.get("fingerprint").and_then(|v| v.as_str());
     let os = arguments.get("os").and_then(|v| v.as_str());
@@ -4487,13 +4049,7 @@ impl McpServer {
     &self,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
-    let profile_id = arguments
-      .get("profile_id")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing profile_id".to_string(),
-      })?;
+    let profile_id = Self::require_profile_id(arguments)?;
 
     let rules: Vec<String> = arguments
       .get("rules")
@@ -4535,13 +4091,7 @@ impl McpServer {
     &self,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
-    let profile_id = arguments
-      .get("profile_id")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing profile_id".to_string(),
-      })?;
+    let profile_id = Self::require_profile_id(arguments)?;
 
     let level = arguments
       .get("level")
@@ -4738,13 +4288,7 @@ impl McpServer {
     &self,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
-    let profile_id = arguments
-      .get("profile_id")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing profile_id".to_string(),
-      })?;
+    let profile_id = Self::require_profile_id(arguments)?;
     let lock_status = crate::team_lock::TEAM_LOCK
       .get_lock_status(profile_id)
       .await;
@@ -4815,13 +4359,7 @@ impl McpServer {
     &self,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
-    let profile_id = arguments
-      .get("profile_id")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing profile_id".to_string(),
-      })?;
+    let profile_id = Self::require_profile_id(arguments)?;
     let url = arguments
       .get("url")
       .and_then(|v| v.as_str())
@@ -4855,13 +4393,7 @@ impl McpServer {
     &self,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
-    let profile_id = arguments
-      .get("profile_id")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing profile_id".to_string(),
-      })?;
+    let profile_id = Self::require_profile_id(arguments)?;
     let format = arguments
       .get("format")
       .and_then(|v| v.as_str())
@@ -4921,13 +4453,7 @@ impl McpServer {
     &self,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
-    let profile_id = arguments
-      .get("profile_id")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing profile_id".to_string(),
-      })?;
+    let profile_id = Self::require_profile_id(arguments)?;
     let expression = arguments
       .get("expression")
       .and_then(|v| v.as_str())
@@ -4994,13 +4520,7 @@ impl McpServer {
     &self,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
-    let profile_id = arguments
-      .get("profile_id")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing profile_id".to_string(),
-      })?;
+    let profile_id = Self::require_profile_id(arguments)?;
     let selector = arguments
       .get("selector")
       .and_then(|v| v.as_str())
@@ -5065,13 +4585,7 @@ impl McpServer {
     &self,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
-    let profile_id = arguments
-      .get("profile_id")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing profile_id".to_string(),
-      })?;
+    let profile_id = Self::require_profile_id(arguments)?;
     let selector = arguments
       .get("selector")
       .and_then(|v| v.as_str())
@@ -5175,13 +4689,7 @@ impl McpServer {
     &self,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
-    let profile_id = arguments
-      .get("profile_id")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing profile_id".to_string(),
-      })?;
+    let profile_id = Self::require_profile_id(arguments)?;
     let format = arguments
       .get("format")
       .and_then(|v| v.as_str())
@@ -5269,13 +4777,7 @@ impl McpServer {
     &self,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
-    let profile_id = arguments
-      .get("profile_id")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing profile_id".to_string(),
-      })?;
+    let profile_id = Self::require_profile_id(arguments)?;
 
     let profile = self.get_running_profile(profile_id)?;
     let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
@@ -5312,13 +4814,7 @@ impl McpServer {
     &self,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
-    let profile_id = arguments
-      .get("profile_id")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing profile_id".to_string(),
-      })?;
+    let profile_id = Self::require_profile_id(arguments)?;
     let max_chars = arguments
       .get("max_chars")
       .and_then(|v| v.as_u64())
@@ -5395,13 +4891,7 @@ impl McpServer {
     &self,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
-    let profile_id = arguments
-      .get("profile_id")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing profile_id".to_string(),
-      })?;
+    let profile_id = Self::require_profile_id(arguments)?;
     let index = arguments
       .get("index")
       .and_then(|v| v.as_u64())
@@ -5462,13 +4952,7 @@ impl McpServer {
     &self,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
-    let profile_id = arguments
-      .get("profile_id")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing profile_id".to_string(),
-      })?;
+    let profile_id = Self::require_profile_id(arguments)?;
     let index = arguments
       .get("index")
       .and_then(|v| v.as_u64())
@@ -5587,13 +5071,7 @@ impl McpServer {
     &self,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
-    let profile_id = arguments
-      .get("profile_id")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing profile_id".to_string(),
-      })?;
+    let profile_id = Self::require_profile_id(arguments)?;
     let session = crate::cdp_session::CdpSession::new();
     let profile = self.get_running_profile(profile_id)?;
     let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
@@ -5677,13 +5155,7 @@ impl McpServer {
     &self,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
-    let profile_id = arguments
-      .get("profile_id")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing profile_id".to_string(),
-      })?;
+    let profile_id = Self::require_profile_id(arguments)?;
     let direction = arguments
       .get("direction")
       .and_then(|v| v.as_str())
@@ -5758,13 +5230,7 @@ impl McpServer {
     &self,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
-    let profile_id = arguments
-      .get("profile_id")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing profile_id".to_string(),
-      })?;
+    let profile_id = Self::require_profile_id(arguments)?;
     let key = arguments
       .get("key")
       .and_then(|v| v.as_str())
@@ -5792,13 +5258,7 @@ impl McpServer {
     &self,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
-    let profile_id = arguments
-      .get("profile_id")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing profile_id".to_string(),
-      })?;
+    let profile_id = Self::require_profile_id(arguments)?;
     let session = crate::cdp_session::CdpSession::new();
     let profile = self.get_running_profile(profile_id)?;
     let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
@@ -5846,13 +5306,7 @@ impl McpServer {
     &self,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
-    let profile_id = arguments
-      .get("profile_id")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing profile_id".to_string(),
-      })?;
+    let profile_id = Self::require_profile_id(arguments)?;
     let path = arguments.get("path").and_then(|v| v.as_str());
     let profile = self.download_profile(profile_id)?;
     let dir =
@@ -5883,13 +5337,7 @@ impl McpServer {
     &self,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
-    let profile_id = arguments
-      .get("profile_id")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing profile_id".to_string(),
-      })?;
+    let profile_id = Self::require_profile_id(arguments)?;
     let timeout_ms = arguments
       .get("timeout_ms")
       .and_then(|v| v.as_u64())
@@ -5920,13 +5368,7 @@ impl McpServer {
     &self,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
-    let profile_id = arguments
-      .get("profile_id")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing profile_id".to_string(),
-      })?;
+    let profile_id = Self::require_profile_id(arguments)?;
     let profile = self.download_profile(profile_id)?;
     let dir =
       crate::browser_downloads::resolve_download_dir(&profile, None).map_err(|e| McpError {
@@ -5936,6 +5378,322 @@ impl McpServer {
     let files = crate::browser_downloads::list_downloads(&dir);
     Ok(serde_json::json!({
       "content": [{ "type": "text", "text": serde_json::to_string(&files).unwrap_or_default() }]
+    }))
+  }
+
+  fn require_profile_id(arguments: &serde_json::Value) -> Result<&str, McpError> {
+    arguments
+      .get("profile_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing profile_id".to_string(),
+      })
+  }
+
+  fn clamp_wait_timeout_ms(arguments: &serde_json::Value) -> u64 {
+    arguments
+      .get("timeout_ms")
+      .and_then(|v| v.as_u64())
+      .unwrap_or(15_000)
+      .clamp(1, 120_000)
+  }
+
+  /// Evaluate an expression and unwrap the CDP result value (or surface the
+  /// page-side exception as an MCP error).
+  async fn evaluate_value(
+    &self,
+    ws_url: &str,
+    expression: String,
+  ) -> Result<serde_json::Value, McpError> {
+    let result = self
+      .send_cdp(
+        ws_url,
+        "Runtime.evaluate",
+        serde_json::json!({ "expression": expression, "returnByValue": true }),
+      )
+      .await?;
+    if let Some(exception) = result.get("exceptionDetails") {
+      let text = exception
+        .get("text")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Page expression threw");
+      return Err(McpError {
+        code: -32000,
+        message: format!("Page error: {text}"),
+      });
+    }
+    Ok(
+      result
+        .pointer("/result/value")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null),
+    )
+  }
+
+  async fn handle_list_tabs(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = Self::require_profile_id(arguments)?;
+    let profile = self.get_running_profile(profile_id)?;
+    let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
+    let targets = crate::cdp_session::CdpSession::new()
+      .list_targets(cdp_port)
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e.message,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&targets).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_new_tab(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = Self::require_profile_id(arguments)?;
+    let url = arguments.get("url").and_then(|v| v.as_str());
+    let profile = self.get_running_profile(profile_id)?;
+    let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
+    let target = crate::cdp_session::CdpSession::new()
+      .new_tab(cdp_port, url)
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e.message,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&target).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_switch_tab(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = Self::require_profile_id(arguments)?;
+    let target_id = arguments
+      .get("target_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing target_id".to_string(),
+      })?;
+    let profile = self.get_running_profile(profile_id)?;
+    let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
+    crate::cdp_session::CdpSession::new()
+      .activate_target(cdp_port, target_id)
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e.message,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": format!("Switched to tab {target_id}") }]
+    }))
+  }
+
+  async fn handle_close_tab(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = Self::require_profile_id(arguments)?;
+    let target_id = arguments
+      .get("target_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing target_id".to_string(),
+      })?;
+    let profile = self.get_running_profile(profile_id)?;
+    let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
+    crate::cdp_session::CdpSession::new()
+      .close_target(cdp_port, target_id)
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e.message,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": format!("Closed tab {target_id}") }]
+    }))
+  }
+
+  async fn handle_wait_for_text(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = Self::require_profile_id(arguments)?;
+    let text = arguments
+      .get("text")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing text".to_string(),
+      })?;
+    let timeout_ms = Self::clamp_wait_timeout_ms(arguments);
+    let profile = self.get_running_profile(profile_id)?;
+    let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
+    let ws_url = self.get_cdp_ws_url(cdp_port).await?;
+    crate::cdp_session::CdpSession::new()
+      .wait_for_text(&ws_url, text, timeout_ms)
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e.message,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": format!("Page now contains {text:?}") }]
+    }))
+  }
+
+  async fn handle_wait_for_url(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = Self::require_profile_id(arguments)?;
+    let contains = arguments
+      .get("contains")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing contains".to_string(),
+      })?;
+    let timeout_ms = Self::clamp_wait_timeout_ms(arguments);
+    let profile = self.get_running_profile(profile_id)?;
+    let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
+    let ws_url = self.get_cdp_ws_url(cdp_port).await?;
+    crate::cdp_session::CdpSession::new()
+      .wait_for_url(&ws_url, contains, timeout_ms)
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e.message,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": format!("URL now contains {contains:?}") }]
+    }))
+  }
+
+  async fn handle_select_option(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = Self::require_profile_id(arguments)?;
+    let value = arguments
+      .get("value")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing value".to_string(),
+      })?;
+    let profile = self.get_running_profile(profile_id)?;
+    let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
+    let ws_url = self.get_cdp_ws_url(cdp_port).await?;
+    let expression = crate::cdp_session::CdpSession::select_option_expression(
+      Self::opt_selector(arguments, "selector").as_deref(),
+      Self::opt_index(arguments, "index"),
+      value,
+    )
+    .map_err(|e| McpError {
+      code: -32602,
+      message: e.message,
+    })?;
+    let selected = self.evaluate_value(&ws_url, expression).await?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": format!("Selected option {selected}") }]
+    }))
+  }
+
+  async fn handle_find_text(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = Self::require_profile_id(arguments)?;
+    let query = arguments
+      .get("query")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing query".to_string(),
+      })?;
+    let profile = self.get_running_profile(profile_id)?;
+    let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
+    let ws_url = self.get_cdp_ws_url(cdp_port).await?;
+    let found = self
+      .evaluate_value(
+        &ws_url,
+        crate::cdp_session::CdpSession::find_text_expression(query),
+      )
+      .await?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&found).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_get_cookies(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = Self::require_profile_id(arguments)?;
+    let profile = self.get_running_profile(profile_id)?;
+    let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
+    let ws_url = self.get_cdp_ws_url(cdp_port).await?;
+    let result = self
+      .send_cdp(&ws_url, "Network.getCookies", serde_json::json!({}))
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e.message,
+      })?;
+    let cookies = result
+      .get("cookies")
+      .cloned()
+      .unwrap_or(serde_json::json!([]));
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&cookies).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_extract_table(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = Self::require_profile_id(arguments)?;
+    let selector = Self::opt_selector(arguments, "selector");
+    let profile = self.get_running_profile(profile_id)?;
+    let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
+    let ws_url = self.get_cdp_ws_url(cdp_port).await?;
+    let rows = self
+      .evaluate_value(
+        &ws_url,
+        crate::cdp_session::CdpSession::extract_table_expression(selector.as_deref()),
+      )
+      .await?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&rows).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_extract_article(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = Self::require_profile_id(arguments)?;
+    let profile = self.get_running_profile(profile_id)?;
+    let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
+    let ws_url = self.get_cdp_ws_url(cdp_port).await?;
+    let article = self
+      .evaluate_value(
+        &ws_url,
+        crate::cdp_session::CdpSession::extract_article_expression(),
+      )
+      .await?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&article).unwrap_or_default() }]
     }))
   }
 
@@ -6177,6 +5935,17 @@ mod tests {
     assert!(tool_names.contains(&"set_download_dir"));
     assert!(tool_names.contains(&"wait_for_download"));
     assert!(tool_names.contains(&"get_downloads"));
+    assert!(tool_names.contains(&"list_tabs"));
+    assert!(tool_names.contains(&"new_tab"));
+    assert!(tool_names.contains(&"switch_tab"));
+    assert!(tool_names.contains(&"close_tab"));
+    assert!(tool_names.contains(&"wait_for_text"));
+    assert!(tool_names.contains(&"wait_for_url"));
+    assert!(tool_names.contains(&"select_option"));
+    assert!(tool_names.contains(&"find_text"));
+    assert!(tool_names.contains(&"get_cookies"));
+    assert!(tool_names.contains(&"extract_table"));
+    assert!(tool_names.contains(&"extract_article"));
     assert!(tool_names.contains(&"get_page_content"));
     assert!(tool_names.contains(&"get_page_info"));
   }
@@ -6185,6 +5954,25 @@ mod tests {
   fn test_mcp_server_initial_state() {
     let server = McpServer::new();
     assert!(!server.is_running());
+  }
+
+  #[test]
+  fn browser_tools_come_from_shared_catalog() {
+    let tools = McpServer::new().get_tools();
+    let catalog = crate::browser_tools::browser_tools();
+    assert!(!catalog.is_empty());
+    for entry in &catalog {
+      let found = tools
+        .iter()
+        .find(|t| t.name == entry.name)
+        .unwrap_or_else(|| panic!("catalog tool {} missing from MCP", entry.name));
+      assert_eq!(found.description, entry.description);
+      assert_eq!(found.input_schema, entry.input_schema);
+    }
+    let mut names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+    names.sort_unstable();
+    names.dedup();
+    assert_eq!(names.len(), tools.len(), "duplicate MCP tool names");
   }
 
   #[test]
@@ -6219,6 +6007,17 @@ mod tests {
       "set_download_dir",
       "wait_for_download",
       "get_downloads",
+      "list_tabs",
+      "new_tab",
+      "switch_tab",
+      "close_tab",
+      "wait_for_text",
+      "wait_for_url",
+      "select_option",
+      "find_text",
+      "get_cookies",
+      "extract_table",
+      "extract_article",
     ] {
       assert!(
         McpServer::is_automation_tool_call(&request("tools/call", Some(name))),

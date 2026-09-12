@@ -843,9 +843,10 @@ mod tests {
       b"sqlite-data"
     );
 
-    // Simulate user activity: modify Cookies, leave Bookmarks alone
-    std::thread::sleep(std::time::Duration::from_millis(1100));
+    // Simulate user activity: modify Cookies and mark it newer than the
+    // launch snapshot without sleeping out filesystem timestamp granularity.
     std::fs::write(ephemeral.join("Default/Cookies"), b"sqlite-modified").unwrap();
+    crate::profile::encryption::bump_mtime_for_test(&ephemeral.join("Default/Cookies"));
 
     // Capture pre-quit ciphertext for the unchanged Bookmarks file
     let key = get_cached_key(&profile.id).unwrap();
@@ -929,8 +930,8 @@ mod tests {
       .find(|p| p.id == profile.id)
       .unwrap();
     let ephemeral = prepare_for_launch(&profile).unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(1100));
     std::fs::write(ephemeral.join("Default/Cookies"), b"new-bytes").unwrap();
+    crate::profile::encryption::bump_mtime_for_test(&ephemeral.join("Default/Cookies"));
 
     // keep_decrypted=true: ephemeral stays, key stays cached
     let n = complete_after_quit_blocking(&profile, true);

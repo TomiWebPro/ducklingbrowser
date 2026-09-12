@@ -406,6 +406,17 @@ pub fn fresh_salt() -> String {
   generate_salt()
 }
 
+/// Test-only helper: force a file's mtime to a fixed point in the future so
+/// `reencrypt_changed_files` observes it as modified without sleeping out the
+/// filesystem's mtime granularity. This exercises the same mtime-comparison
+/// production path; it only skips waiting on OS timestamp ticks.
+#[cfg(test)]
+pub(crate) fn bump_mtime_for_test(path: &Path) {
+  let bumped = std::time::SystemTime::now() + std::time::Duration::from_secs(2 * 3600);
+  filetime::set_file_mtime(path, filetime::FileTime::from_system_time(bumped))
+    .expect("test helper must set mtime");
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -574,9 +585,10 @@ mod tests {
     let cipher_a_before = std::fs::read(enc.join(&name_a)).unwrap();
     let cipher_b_before = std::fs::read(enc.join(&name_b)).unwrap();
 
-    // Modify only "a" in the restored tree
-    std::thread::sleep(std::time::Duration::from_millis(1100));
+    // Modify only "a" in the restored tree and bump its mtime explicitly
+    // instead of sleeping out the filesystem timestamp granularity.
     std::fs::write(restored.join("a"), b"AAA-CHANGED").unwrap();
+    bump_mtime_for_test(&restored.join("a"));
 
     let rewrote = reencrypt_changed_files(&key, &restored, &enc, &[], &snapshot).unwrap();
     assert_eq!(rewrote, 1);

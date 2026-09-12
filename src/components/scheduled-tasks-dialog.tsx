@@ -60,6 +60,7 @@ interface TaskDefinition extends TaskWithSchedule {
     randomize_daily: boolean;
   };
   same_bucket_rate_limit: boolean;
+  auto_approve: boolean;
   enabled: boolean;
   created_at: string;
   updated_at: string;
@@ -109,26 +110,10 @@ interface ScheduledTasksDialogProps {
   subPage?: boolean;
 }
 
-const AGENT_BROWSER_TOOLS = [
-  "navigate",
-  "screenshot",
-  "evaluate_javascript",
-  "click_element",
-  "type_text",
-  "get_page_content",
-  "get_page_info",
-  "get_interactive_elements",
-  "click_by_index",
-  "type_by_index",
-  "drag",
-  "scroll",
-  "press_key",
-  "hover",
-  "set_download_dir",
-  "wait_for_download",
-  "get_downloads",
-  "get_profile_status",
-];
+/// `get_profile_status` is profile-scoped (not a CDP browser tool), so it
+/// lives outside the backend catalog. It is appended to the fetched tool
+/// names below; allowlist validation itself stays server-side.
+const EXTRA_PROFILE_SCOPED_TOOL = "get_profile_status";
 
 function emptyForm() {
   return {
@@ -149,6 +134,7 @@ function emptyForm() {
     jitter_minutes: "30",
     randomize_daily: true,
     same_bucket_rate_limit: true,
+    auto_approve: false,
     enabled: true,
   };
 }
@@ -169,6 +155,7 @@ export function ScheduledTasksDialog({
   const [tab, setTab] = useState<"tasks" | "calendar">("tasks");
   const [tasks, setTasks] = useState<TaskDefinition[]>([]);
   const [agents, setAgents] = useState<McpAgentInfo[]>([]);
+  const [browserTools, setBrowserTools] = useState<string[]>([]);
   const [profiles, setProfiles] = useState<{ id: string; name: string }[]>([]);
   const [aiKeys, setAiKeys] = useState<{ id: string; name: string }[]>([]);
   const [form, setForm] = useState(emptyForm());
@@ -187,6 +174,9 @@ export function ScheduledTasksDialog({
   useEffect(() => {
     if (isOpen) {
       void loadTasks();
+      void invoke<{ name: string }[]>("agent_tool_catalog")
+        .then((all) => setBrowserTools(all.map((t) => t.name)))
+        .catch(() => {});
       void invoke<McpAgentInfo[]>("list_mcp_agents")
         .then((all) =>
           setAgents(all.filter((a) => a.category === "cli" && a.detected)),
@@ -227,6 +217,7 @@ export function ScheduledTasksDialog({
       jitter_minutes: String(task.schedule.jitter_minutes),
       randomize_daily: task.schedule.randomize_daily,
       same_bucket_rate_limit: task.same_bucket_rate_limit,
+      auto_approve: task.auto_approve ?? false,
       enabled: task.enabled,
     });
     setEditing(true);
@@ -295,6 +286,7 @@ export function ScheduledTasksDialog({
             randomize_daily: form.randomize_daily,
           },
           same_bucket_rate_limit: form.same_bucket_rate_limit,
+          auto_approve: form.auto_approve,
           enabled: form.enabled,
         },
       });
@@ -345,6 +337,13 @@ export function ScheduledTasksDialog({
       name: `${t("tasks.form.prefillName")} ${date}`,
     }));
   };
+
+  // Checkbox options: backend catalog names plus the profile-scoped read.
+  // Validation itself stays server-side, so this list can never grant
+  // anything the backend would deny.
+  const toolOptions = browserTools.includes(EXTRA_PROFILE_SCOPED_TOOL)
+    ? browserTools
+    : [...browserTools, EXTRA_PROFILE_SCOPED_TOOL];
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose} subPage={subPage}>
@@ -435,6 +434,11 @@ export function ScheduledTasksDialog({
                                     ? t("tasks.mode.agentBrowser")
                                     : t("tasks.mode.macro")}
                               </Badge>
+                              {task.auto_approve && (
+                                <Badge variant="secondary" className="text-xs">
+                                  {t("tasks.fullAutoBadge")}
+                                </Badge>
+                              )}
                               {task.last_run_status && (
                                 <span
                                   className={cn(
@@ -667,7 +671,7 @@ export function ScheduledTasksDialog({
                           <div className="space-y-1.5">
                             <Label>{t("tasks.form.allowedTools")}</Label>
                             <div className="grid grid-cols-2 gap-1.5 rounded-md border p-3">
-                              {AGENT_BROWSER_TOOLS.map((tool) => (
+                              {toolOptions.map((tool) => (
                                 <div
                                   key={tool}
                                   className="flex items-center gap-2 text-xs"
@@ -682,7 +686,7 @@ export function ScheduledTasksDialog({
                                       setForm((f) => {
                                         const base =
                                           f.allowed_tools.length === 0
-                                            ? [...AGENT_BROWSER_TOOLS]
+                                            ? [...toolOptions]
                                             : f.allowed_tools;
                                         return {
                                           ...f,
@@ -853,6 +857,30 @@ export function ScheduledTasksDialog({
                             >
                               {t("tasks.form.sameBucket")}
                             </Label>
+                          </div>
+                          <div className="flex items-start gap-2">
+                            <Checkbox
+                              id="full-auto"
+                              className="mt-0.5"
+                              checked={form.auto_approve}
+                              onCheckedChange={(checked) =>
+                                setForm((f) => ({
+                                  ...f,
+                                  auto_approve: Boolean(checked),
+                                }))
+                              }
+                            />
+                            <div className="space-y-0.5">
+                              <Label
+                                htmlFor="full-auto"
+                                className="font-medium"
+                              >
+                                {t("tasks.form.fullAutomation")}
+                              </Label>
+                              <p className="text-xs text-muted-foreground">
+                                {t("tasks.form.fullAutomationHint")}
+                              </p>
+                            </div>
                           </div>
                         </div>
                       </div>

@@ -59,9 +59,14 @@ Plus a **"keys" tab**: BYOK (bring-your-own-key) management for AI providers.
 - Missed-job policy: if a job comes due while the machine was asleep/closed, run it
   only if `now` is still inside the task's window; otherwise skip to next day.
 - Jitter default: 30 minutes. Task timezone: per-task, from chrono-tz.
-- In cron/live-agent context there is no human to approve cards — apply only cards
-  flagged `reversible: true`; skip and report irreversible ones.
-- Change cards are never auto-applied in the chat context.
+- In cron/live-agent context there is no human to approve cards — safe default:
+  apply only cards flagged `reversible: true`; skip and report irreversible
+  ones. Each task has a **Full automation (`auto_approve`) toggle**: when the
+  user turns it on, scheduling the task IS the approval and every card
+  applies, so cron jobs never block waiting for confirmation.
+- Change cards are never auto-applied in the chat context, unless the user
+  turns on the per-conversation **Full automation toggle** (tools then execute
+  immediately and the reply summarizes what ran).
 
 ---
 

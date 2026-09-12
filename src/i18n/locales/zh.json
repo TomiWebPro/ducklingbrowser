@@ -2177,7 +2177,12 @@
     "goToKeys": "管理端点",
     "noKeySelected": "请先选择服务商密钥或智能体 CLI",
     "pickModel": "选择服务商或智能体",
-    "orDirect": "— 或直接对话 —"
+    "orDirect": "— 或直接对话 —",
+    "fullAutomation": "Full automation",
+    "fullAutomationHint": "Run tool actions immediately without confirmation cards. Only for direct chat; unavailable when delegating to an agent CLI.",
+    "fullAutomationActive": "Full automation is on: actions run immediately without confirmation.",
+    "activeRuns": "{{count}} running — click to stop",
+    "stopAllDone": "Stop requested for all running agent jobs"
   },
   "changeCard": {
     "sectionTitle": "提议的变更",
@@ -2248,7 +2253,9 @@
       "downloadDirOverride": "下载子文件夹（可选）",
       "downloadDirPlaceholder": "reports/monthly",
       "maxSteps": "最大步数（1–100）",
-      "maxStepsInvalid": "最大步数必须为 1–100"
+      "maxStepsInvalid": "最大步数必须为 1–100",
+      "fullAutomation": "Full automation (auto-approve all)",
+      "fullAutomationHint": "Apply every agent-proposed change without asking. Scheduling the task is the approval. Off (safe): only reversible changes apply; the rest are skipped and reported."
     },
     "calendar": {
       "today": "今天",
@@ -2264,7 +2271,8 @@
         "fri": "周五",
         "sat": "周六"
       }
-    }
+    },
+    "fullAutoBadge": "Full auto"
   },
   "ai": {
     "title": "AI",

@@ -2319,7 +2319,6 @@ impl ProxyManager {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use std::env;
   use std::path::PathBuf;
   use std::time::Duration;
   use tokio::process::Command;
@@ -2335,13 +2334,17 @@ mod tests {
   use hyper_util::rt::TokioIo;
   use tokio::net::TcpListener;
 
-  // Helper function to build duckling-proxy binary for testing
-  async fn ensure_duckling_proxy_binary() -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let cargo_manifest_dir = env::var("CARGO_MANIFEST_DIR")?;
-    let project_root = PathBuf::from(cargo_manifest_dir)
-      .parent()
-      .unwrap()
-      .to_path_buf();
+  // Helper function to locate the duckling-proxy binary for testing.
+  // Returns `None` when the binary hasn't been built: unit tests must skip
+  // instead of running a nested `cargo build` (which serializes the whole
+  // suite behind a second compilation and fights the outer cargo for the
+  // target dir). Build the binary first with `cargo build --bin duckling-proxy`.
+  fn locate_duckling_proxy_binary() -> Option<PathBuf> {
+    // `CARGO_MANIFEST_DIR` is a compile-time value; `std::env::var` fails
+    // when the test binary is launched directly instead of via cargo, so use
+    // `option_env!` and skip the test when it is unavailable.
+    let manifest_dir = PathBuf::from(option_env!("CARGO_MANIFEST_DIR")?);
+    let project_root = manifest_dir.parent()?.to_path_buf();
     let proxy_binary_name = if cfg!(windows) {
       "duckling-proxy.exe"
     } else {
@@ -2352,30 +2355,7 @@ mod tests {
       .join("target")
       .join("debug")
       .join(proxy_binary_name);
-
-    // Check if binary already exists
-    if proxy_binary.exists() {
-      return Ok(proxy_binary);
-    }
-
-    // Build the duckling-proxy binary
-    println!("Building duckling-proxy binary for tests...");
-
-    let build_status = Command::new("cargo")
-      .args(["build", "--bin", "duckling-proxy"])
-      .current_dir(project_root.join("src-tauri"))
-      .status()
-      .await?;
-
-    if !build_status.success() {
-      return Err("Failed to build duckling-proxy binary".into());
-    }
-
-    if !proxy_binary.exists() {
-      return Err("duckling-proxy binary was not created successfully".into());
-    }
-
-    Ok(proxy_binary)
+    proxy_binary.exists().then_some(proxy_binary)
   }
 
   #[test]
@@ -2619,17 +2599,22 @@ mod tests {
   // Test the CLI detachment specifically - ensure the CLI exits properly
   #[tokio::test]
   async fn test_cli_exits_after_proxy_start() -> Result<(), Box<dyn std::error::Error>> {
-    let proxy_path = ensure_duckling_proxy_binary().await?;
+    let Some(proxy_path) = locate_duckling_proxy_binary() else {
+      println!("skipping: build with `cargo build --bin duckling-proxy` first");
+      return Ok(());
+    };
 
-    // Test that the CLI exits quickly with a mock upstream
+    // Point at a closed loopback port: the assertion is that the CLI detaches
+    // quickly, which holds whether the upstream accepts or refuses. This keeps
+    // the test deterministic and offline (no dependency on httpbin.org).
     let mut cmd = Command::new(&proxy_path);
     cmd
       .arg("proxy")
       .arg("start")
       .arg("--host")
-      .arg("httpbin.org")
+      .arg("127.0.0.1")
       .arg("--proxy-port")
-      .arg("80")
+      .arg("9")
       .arg("--type")
       .arg("http");
 
@@ -2668,17 +2653,21 @@ mod tests {
   // Test that validates proper CLI detachment behavior
   #[tokio::test]
   async fn test_cli_detachment_behavior() -> Result<(), Box<dyn std::error::Error>> {
-    let proxy_path = ensure_duckling_proxy_binary().await?;
+    let Some(proxy_path) = locate_duckling_proxy_binary() else {
+      println!("skipping: build with `cargo build --bin duckling-proxy` first");
+      return Ok(());
+    };
 
-    // Test that the CLI command exits quickly even with a real upstream
+    // Closed loopback port: detachment speed is asserted, upstream success is
+    // not required (see below), so no internet access is needed.
     let mut cmd = Command::new(&proxy_path);
     cmd
       .arg("proxy")
       .arg("start")
       .arg("--host")
-      .arg("httpbin.org")
+      .arg("127.0.0.1")
       .arg("--proxy-port")
-      .arg("80")
+      .arg("9")
       .arg("--type")
       .arg("http");
 

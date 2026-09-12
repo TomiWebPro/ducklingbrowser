@@ -15,6 +15,36 @@ const MAX_BACKOFF_MS: u64 = 60_000;
 pub struct ChatMessage {
   pub role: String,
   pub content: String,
+  /// Optional screenshot / page-image data URLs (`data:image/png;base64,...`).
+  /// Skipped in JSON when absent so existing payloads are unchanged.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub images: Option<Vec<String>>,
+}
+
+impl ChatMessage {
+  pub fn text(role: impl Into<String>, content: impl Into<String>) -> Self {
+    Self {
+      role: role.into(),
+      content: content.into(),
+      images: None,
+    }
+  }
+
+  pub fn with_images(
+    role: impl Into<String>,
+    content: impl Into<String>,
+    images: Vec<String>,
+  ) -> Self {
+    Self {
+      role: role.into(),
+      content: content.into(),
+      images: if images.is_empty() {
+        None
+      } else {
+        Some(images)
+      },
+    }
+  }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
@@ -34,12 +64,30 @@ pub struct ChatUsage {
   pub total_tokens: u32,
 }
 
+/// A single native function/tool call requested by the model.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolCall {
+  pub name: String,
+  /// Parsed JSON arguments object (empty object when the model sent none).
+  pub arguments: serde_json::Value,
+  /// Provider-supplied call id, when present (used for parallel calls).
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub id: Option<String>,
+}
+
 /// A completed non-streaming completion: the assistant text plus usage.
+///
+/// `text` may be empty when the model returned only native tool calls —
+/// callers must check `tool_calls` first. `chat()` preserves the legacy
+/// text-only view for callers that do not use tools.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LlmResponse {
   pub text: String,
   pub usage: Option<ChatUsage>,
+  #[serde(default)]
+  pub tool_calls: Vec<ToolCall>,
 }
 
 #[derive(Debug, Clone)]
@@ -206,6 +254,26 @@ impl LlmClient {
   }
 }
 
+/// Render one chat message for OpenAI-compatible / Responses bodies.
+/// Messages carrying `images` become multimodal content arrays
+/// (`[{type:text,...}, {type:image_url,...}]`); plain messages stay strings
+/// so existing snapshots are unchanged.
+fn openai_message_content(m: &ChatMessage) -> serde_json::Value {
+  match m.images.as_deref().filter(|imgs| !imgs.is_empty()) {
+    None => serde_json::Value::String(m.content.clone()),
+    Some(imgs) => {
+      let mut parts = vec![serde_json::json!({ "type": "text", "text": m.content })];
+      for img in imgs {
+        parts.push(serde_json::json!({
+          "type": "image_url",
+          "image_url": { "url": img },
+        }));
+      }
+      serde_json::Value::Array(parts)
+    }
+  }
+}
+
 /// OpenAI-compatible request body (openai / groq / openrouter).
 fn openai_compat_body(
   model: &str,
@@ -216,7 +284,7 @@ fn openai_compat_body(
     "model": model,
     "messages": messages
       .iter()
-      .map(|m| serde_json::json!({ "role": m.role, "content": m.content }))
+      .map(|m| serde_json::json!({ "role": m.role, "content": openai_message_content(m) }))
       .collect::<Vec<_>>(),
   });
   if let Some(tools) = tools {
@@ -251,7 +319,7 @@ fn responses_body(
     "model": model,
     "input": messages
       .iter()
-      .map(|m| serde_json::json!({ "role": m.role, "content": m.content }))
+      .map(|m| serde_json::json!({ "role": m.role, "content": openai_message_content(m) }))
       .collect::<Vec<_>>(),
   });
   if let Some(tools) = tools {
@@ -297,6 +365,8 @@ fn extract_responses_text(body: &serde_json::Value) -> Result<String, String> {
 }
 
 /// Anthropic request body: system messages move to the top-level `system` field.
+/// Messages carrying `images` become content blocks
+/// (`[{type:text,...}, {type:image, source:{data,media_type}}]`).
 fn anthropic_body(
   model: &str,
   messages: &[ChatMessage],
@@ -314,7 +384,7 @@ fn anthropic_body(
     "messages": messages
       .iter()
       .filter(|m| m.role != "system")
-      .map(|m| serde_json::json!({ "role": m.role, "content": m.content }))
+      .map(|m| serde_json::json!({ "role": m.role, "content": anthropic_message_content(m) }))
       .collect::<Vec<_>>(),
   });
   if !system.is_empty() {
@@ -337,6 +407,53 @@ fn anthropic_body(
   body
 }
 
+/// Split a `data:<mime>;base64,<payload>` URL into its parts.
+fn split_data_url(url: &str) -> Option<(&str, &str)> {
+  let rest = url.strip_prefix("data:")?;
+  let (mime, payload) = rest.split_once(";base64,")?;
+  if payload.is_empty() {
+    return None;
+  }
+  Some((mime, payload))
+}
+
+fn anthropic_message_content(m: &ChatMessage) -> serde_json::Value {
+  match m.images.as_deref().filter(|imgs| !imgs.is_empty()) {
+    None => serde_json::Value::String(m.content.clone()),
+    Some(imgs) => {
+      let mut blocks = vec![serde_json::json!({ "type": "text", "text": m.content })];
+      for img in imgs {
+        match split_data_url(img) {
+          Some((mime, data)) => blocks.push(serde_json::json!({
+            "type": "image",
+            "source": { "type": "base64", "media_type": mime, "data": data },
+          })),
+          None => blocks.push(serde_json::json!({
+            "type": "image",
+            "source": { "type": "url", "url": img },
+          })),
+        }
+      }
+      serde_json::Value::Array(blocks)
+    }
+  }
+}
+
+fn google_message_parts(m: &ChatMessage) -> serde_json::Value {
+  let mut parts = vec![serde_json::json!({ "text": m.content })];
+  if let Some(imgs) = m.images.as_deref().filter(|imgs| !imgs.is_empty()) {
+    for img in imgs {
+      match split_data_url(img) {
+        Some((mime, data)) => parts.push(serde_json::json!({
+          "inline_data": { "mime_type": mime, "data": data },
+        })),
+        None => parts.push(serde_json::json!({ "text": img })),
+      }
+    }
+  }
+  serde_json::Value::Array(parts)
+}
+
 fn google_body(messages: &[ChatMessage]) -> serde_json::Value {
   let system: String = messages
     .iter()
@@ -351,7 +468,7 @@ fn google_body(messages: &[ChatMessage]) -> serde_json::Value {
       .map(|m| {
         serde_json::json!({
           "role": if m.role == "assistant" { "model" } else { "user" },
-          "parts": [{ "text": m.content }]
+          "parts": google_message_parts(m)
         })
       })
       .collect::<Vec<_>>(),
@@ -500,6 +617,121 @@ fn extract_usage(provider: AiProvider, body: &serde_json::Value) -> Option<ChatU
   }
 }
 
+/// Extract native tool calls from a provider response body.
+/// OpenAI-compatible: `choices[0].message.tool_calls[]`; Anthropic (and the
+/// Responses / gateway-messages shapes): `content[]` blocks with
+/// `type == "tool_use"`; Google: `candidates[0].content.parts[]`
+/// `functionCall` entries. Unknown shapes yield an empty vec — never an error.
+pub fn extract_tool_calls(provider: AiProvider, body: &serde_json::Value) -> Vec<ToolCall> {
+  match provider {
+    AiProvider::Anthropic => body
+      .get("content")
+      .and_then(|v| v.as_array())
+      .map(|blocks| {
+        blocks
+          .iter()
+          .filter(|b| b.get("type").and_then(|v| v.as_str()) == Some("tool_use"))
+          .filter_map(|b| {
+            Some(ToolCall {
+              name: b.get("name")?.as_str()?.to_string(),
+              arguments: b.get("input").cloned().unwrap_or(serde_json::json!({})),
+              id: b.get("id").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            })
+          })
+          .collect()
+      })
+      .unwrap_or_default(),
+    AiProvider::Google => body
+      .get("candidates")
+      .and_then(|v| v.as_array())
+      .and_then(|c| c.first())
+      .and_then(|c| c.get("content"))
+      .and_then(|c| c.get("parts"))
+      .and_then(|v| v.as_array())
+      .map(|parts| {
+        parts
+          .iter()
+          .filter_map(|p| p.get("functionCall"))
+          .filter_map(|call| {
+            Some(ToolCall {
+              name: call.get("name")?.as_str()?.to_string(),
+              arguments: call.get("args").cloned().unwrap_or(serde_json::json!({})),
+              id: None,
+            })
+          })
+          .collect()
+      })
+      .unwrap_or_default(),
+    _ => body
+      .get("choices")
+      .and_then(|v| v.as_array())
+      .and_then(|c| c.first())
+      .and_then(|c| c.get("message"))
+      .and_then(|m| m.get("tool_calls"))
+      .and_then(|v| v.as_array())
+      .map(|calls| {
+        calls
+          .iter()
+          .filter_map(|call| {
+            let function = call.get("function")?;
+            let raw_args = function
+              .get("arguments")
+              .map(|v| {
+                if let Some(s) = v.as_str() {
+                  serde_json::from_str(s).unwrap_or(serde_json::json!({}))
+                } else {
+                  v.clone()
+                }
+              })
+              .unwrap_or(serde_json::json!({}));
+            Some(ToolCall {
+              name: function.get("name")?.as_str()?.to_string(),
+              arguments: raw_args,
+              id: call
+                .get("id")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
+            })
+          })
+          .collect()
+      })
+      .unwrap_or_default(),
+  }
+}
+
+/// Extract native function calls from a Responses API body (`output[]` items
+/// with `type == "function_call"`).
+pub fn extract_responses_tool_calls(body: &serde_json::Value) -> Vec<ToolCall> {
+  body
+    .get("output")
+    .and_then(|v| v.as_array())
+    .map(|items| {
+      items
+        .iter()
+        .filter(|item| item.get("type").and_then(|v| v.as_str()) == Some("function_call"))
+        .filter_map(|item| {
+          let raw_args = item.get("arguments").map(|v| {
+            if let Some(s) = v.as_str() {
+              serde_json::from_str(s).unwrap_or(serde_json::json!({}))
+            } else {
+              v.clone()
+            }
+          });
+          Some(ToolCall {
+            name: item.get("name")?.as_str()?.to_string(),
+            arguments: raw_args.unwrap_or(serde_json::json!({})),
+            id: item
+              .get("call_id")
+              .or_else(|| item.get("id"))
+              .and_then(|v| v.as_str())
+              .map(|s| s.to_string()),
+          })
+        })
+        .collect()
+    })
+    .unwrap_or_default()
+}
+
 /// HTTP statuses that warrant a retry: rate limit + all 5xx.
 pub fn status_is_retryable(status: u16) -> bool {
   status == 429 || (500..=599).contains(&status)
@@ -630,17 +862,32 @@ impl LlmClient {
     // Anthropic ones (content blocks / input_tokens), not like choices.
     let shaped_as_anthropic =
       self.provider == AiProvider::Anthropic || is_responses || via_gateway_messages;
-    let text = if is_responses {
+    let tool_calls = if is_responses {
+      extract_responses_tool_calls(&response_body)
+    } else if shaped_as_anthropic {
+      extract_tool_calls(AiProvider::Anthropic, &response_body)
+    } else {
+      extract_tool_calls(self.provider, &response_body)
+    };
+    let text_result = if is_responses {
       extract_responses_text(&response_body)
     } else if shaped_as_anthropic {
       extract_text(AiProvider::Anthropic, &response_body)
     } else {
       extract_text(self.provider, &response_body)
-    }
-    .map_err(|message| LlmError {
-      message,
-      retryable: false,
-    })?;
+    };
+    // Tool-only turns carry no text: surface an empty string instead of an
+    // "Empty assistant response" error so native tool loops can proceed.
+    let text = match text_result {
+      Ok(text) => text,
+      Err(_) if !tool_calls.is_empty() => String::new(),
+      Err(message) => {
+        return Err(LlmError {
+          message,
+          retryable: false,
+        });
+      }
+    };
     let shape_provider = if shaped_as_anthropic {
       AiProvider::Anthropic
     } else {
@@ -649,19 +896,8 @@ impl LlmClient {
     Ok(LlmResponse {
       text,
       usage: extract_usage(shape_provider, &response_body),
+      tool_calls,
     })
-  }
-
-  /// Single-shot completion; returns only the assistant text.
-  pub async fn chat(
-    &self,
-    messages: &[ChatMessage],
-    tools: Option<&[ToolSpec]>,
-  ) -> Result<String, LlmError> {
-    self
-      .send(messages, tools)
-      .await
-      .map(|response| response.text)
   }
 
   /// Completion with exponential-backoff retries on transient failures
@@ -708,10 +944,7 @@ mod tests {
   use super::*;
 
   fn msg(role: &str, content: &str) -> ChatMessage {
-    ChatMessage {
-      role: role.to_string(),
-      content: content.to_string(),
-    }
+    ChatMessage::text(role, content)
   }
 
   fn tool() -> ToolSpec {
@@ -1576,5 +1809,111 @@ mod tests {
       let received = mock_server.received_requests().await.unwrap();
       assert_eq!(received.len(), 1);
     });
+  }
+
+  #[test]
+  fn extract_tool_calls_openai_shape() {
+    let body = serde_json::json!({
+      "choices": [{
+        "message": {
+          "role": "assistant",
+          "content": null,
+          "tool_calls": [{
+            "id": "call_1",
+            "type": "function",
+            "function": {
+              "name": "navigate",
+              "arguments": "{\"profile_id\":\"p1\",\"url\":\"https://x.example\"}"
+            }
+          }]
+        }
+      }],
+      "usage": { "prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2 }
+    });
+    let calls = extract_tool_calls(AiProvider::Openai, &body);
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0].name, "navigate");
+    assert_eq!(calls[0].arguments["url"], "https://x.example");
+    assert_eq!(calls[0].id.as_deref(), Some("call_1"));
+  }
+
+  #[test]
+  fn extract_tool_calls_anthropic_shape() {
+    let body = serde_json::json!({
+      "content": [
+        { "type": "text", "text": "I'll navigate." },
+        { "type": "tool_use", "id": "toolu_1", "name": "navigate",
+          "input": { "profile_id": "p1", "url": "https://x.example" } }
+      ],
+      "usage": { "input_tokens": 5, "output_tokens": 3 }
+    });
+    let calls = extract_tool_calls(AiProvider::Anthropic, &body);
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0].name, "navigate");
+    assert_eq!(calls[0].id.as_deref(), Some("toolu_1"));
+  }
+
+  #[test]
+  fn extract_tool_calls_google_shape() {
+    let body = serde_json::json!({
+      "candidates": [{
+        "content": { "parts": [
+          { "functionCall": { "name": "click_element",
+            "args": { "profile_id": "p1", "selector": "#go" } } }
+        ]}
+      }]
+    });
+    let calls = extract_tool_calls(AiProvider::Google, &body);
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0].name, "click_element");
+    assert_eq!(calls[0].arguments["selector"], "#go");
+  }
+
+  #[test]
+  fn extract_responses_tool_calls_shape() {
+    let body = serde_json::json!({
+      "output": [
+        { "type": "reasoning", "summary": [] },
+        { "type": "function_call", "call_id": "call_9", "name": "screenshot",
+          "arguments": "{\"profile_id\":\"p1\"}" }
+      ]
+    });
+    let calls = extract_responses_tool_calls(&body);
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0].name, "screenshot");
+    assert_eq!(calls[0].id.as_deref(), Some("call_9"));
+  }
+
+  #[test]
+  fn image_messages_encode_per_provider() {
+    let messages = vec![ChatMessage::with_images(
+      "user",
+      "What is on screen?",
+      vec!["data:image/png;base64,AAAA".to_string()],
+    )];
+    let openai = openai_compat_body("gpt-4o-mini", &messages, None);
+    assert_eq!(openai["messages"][0]["content"][1]["type"], "image_url");
+    let anthropic = anthropic_body("claude-test", &messages, None);
+    assert_eq!(anthropic["messages"][0]["content"][1]["type"], "image");
+    assert_eq!(
+      anthropic["messages"][0]["content"][1]["source"]["media_type"],
+      "image/png"
+    );
+    let google = google_body(&messages);
+    assert!(google["contents"][0]["parts"]
+      .as_array()
+      .unwrap()
+      .iter()
+      .any(|p| p.get("inline_data").is_some()));
+    // Plain messages stay strings.
+    let plain = openai_compat_body("gpt-4o-mini", &[msg("user", "hi")], None);
+    assert_eq!(plain["messages"][0]["content"], "hi");
+  }
+
+  #[test]
+  fn llm_response_deserializes_without_tool_calls() {
+    let value = serde_json::json!({ "text": "done", "usage": null });
+    let response: LlmResponse = serde_json::from_value(value).unwrap();
+    assert!(response.tool_calls.is_empty());
   }
 }

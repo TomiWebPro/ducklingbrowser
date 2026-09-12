@@ -59,21 +59,51 @@ impl BlocklistLevel {
     }
   }
 
+  /// Hagezi moved the legacy plain `domains/` format to a separate
+  /// (`dns-blocklists-legacy`) repository; the same domain-only content now
+  /// ships as the "Wildcard Domains" `-onlydomains` variant, which is what
+  /// `normalize_domain` parses (bare domains, `#` comments).
   pub fn url(&self) -> Option<&'static str> {
     match self {
       Self::None | Self::Custom => None,
       Self::Light => {
-        Some("https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/domains/light.txt")
+        Some("https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/light-onlydomains.txt")
       }
       Self::Normal => {
-        Some("https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/domains/multi.txt")
+        Some("https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/multi-onlydomains.txt")
       }
-      Self::Pro => Some("https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/domains/pro.txt"),
+      Self::Pro => {
+        Some("https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/pro-onlydomains.txt")
+      }
       Self::ProPlus => {
-        Some("https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/domains/pro.plus.txt")
+        Some("https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/pro.plus-onlydomains.txt")
       }
       Self::Ultimate => {
-        Some("https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/domains/ultimate.txt")
+        Some("https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/ultimate-onlydomains.txt")
+      }
+    }
+  }
+
+  /// Second-chance mirror for the same file, used when the primary CDN fails.
+  /// Served straight from GitHub so a jsDelivr outage (or a blocked package
+  /// path, which jsDelivr answers with 403) doesn't wedge refreshes.
+  pub fn fallback_url(&self) -> Option<&'static str> {
+    match self {
+      Self::None | Self::Custom => None,
+      Self::Light => {
+        Some("https://raw.githubusercontent.com/hagezi/dns-blocklists/main/wildcard/light-onlydomains.txt")
+      }
+      Self::Normal => {
+        Some("https://raw.githubusercontent.com/hagezi/dns-blocklists/main/wildcard/multi-onlydomains.txt")
+      }
+      Self::Pro => {
+        Some("https://raw.githubusercontent.com/hagezi/dns-blocklists/main/wildcard/pro-onlydomains.txt")
+      }
+      Self::ProPlus => {
+        Some("https://raw.githubusercontent.com/hagezi/dns-blocklists/main/wildcard/pro.plus-onlydomains.txt")
+      }
+      Self::Ultimate => {
+        Some("https://raw.githubusercontent.com/hagezi/dns-blocklists/main/wildcard/ultimate-onlydomains.txt")
       }
     }
   }
@@ -261,6 +291,7 @@ pub struct BlocklistManager;
 lazy_static::lazy_static! {
   static ref HTTP_CLIENT: reqwest::Client = reqwest::Client::builder()
     .timeout(Duration::from_secs(60))
+    .user_agent(crate::BROWSER_USER_AGENT)
     .build()
     .expect("Failed to create HTTP client");
 }
@@ -299,9 +330,12 @@ impl BlocklistManager {
       .url()
       .ok_or_else(|| format!("No URL for level {:?}", level))?;
     #[cfg(feature = "e2e")]
-    let url = std::env::var("DUCKLING_E2E_DNS_BLOCKLIST_BASE_URL")
+    let e2e_base = std::env::var("DUCKLING_E2E_DNS_BLOCKLIST_BASE_URL")
       .ok()
-      .filter(|base| !base.is_empty())
+      .filter(|base| !base.is_empty());
+    #[cfg(feature = "e2e")]
+    let url = e2e_base
+      .as_ref()
       .map(|base| {
         format!(
           "{}/{}",
@@ -312,32 +346,40 @@ impl BlocklistManager {
       .unwrap_or_else(|| production_url.to_string());
     #[cfg(not(feature = "e2e"))]
     let url = production_url.to_string();
+    // Never fall back to the public internet from an e2e fixture URL: e2e
+    // runs must stay hermetic.
+    #[cfg(feature = "e2e")]
+    let fallback: Option<String> = if e2e_base.is_some() {
+      None
+    } else {
+      level.fallback_url().map(str::to_string)
+    };
+    #[cfg(not(feature = "e2e"))]
+    let fallback: Option<String> = level.fallback_url().map(str::to_string);
     let path =
       Self::cached_file_path(level).ok_or_else(|| format!("No filename for level {:?}", level))?;
 
     let cache_dir = Self::cache_dir();
     std::fs::create_dir_all(&cache_dir).map_err(|e| format!("Failed to create cache dir: {e}"))?;
 
-    log::info!(
-      "[dns-blocklist] Fetching {} from {}",
-      level.display_name(),
-      url
-    );
-
-    let response = HTTP_CLIENT
-      .get(&url)
-      .send()
-      .await
-      .map_err(|e| format!("Failed to fetch blocklist: {e}"))?;
-
-    if !response.status().is_success() {
-      return Err(format!("HTTP {} when fetching {}", response.status(), url));
-    }
-
-    let body = response
-      .text()
-      .await
-      .map_err(|e| format!("Failed to read response body: {e}"))?;
+    let body = match Self::download(&url, level).await {
+      Ok(body) => body,
+      Err(primary_err) => {
+        let Some(fallback_url) = fallback else {
+          return Err(primary_err);
+        };
+        log::warn!(
+          "[dns-blocklist] Primary fetch for {} failed ({}); trying fallback mirror",
+          level.display_name(),
+          primary_err
+        );
+        Self::download(&fallback_url, level)
+          .await
+          .map_err(|fallback_err| {
+            format!("{primary_err}; fallback {fallback_url} also failed: {fallback_err}")
+          })?
+      }
+    };
 
     // Write atomically: write to temp file, then rename
     let tmp_path = path.with_extension("tmp");
@@ -355,6 +397,28 @@ impl BlocklistManager {
     );
 
     Ok(path)
+  }
+
+  /// Download one blocklist document. Used for the primary URL and the
+  /// fallback mirror alike so both go through the same client and checks.
+  async fn download(url: &str, level: BlocklistLevel) -> Result<String, String> {
+    log::info!(
+      "[dns-blocklist] Fetching {} from {}",
+      level.display_name(),
+      url
+    );
+    let response = HTTP_CLIENT
+      .get(url)
+      .send()
+      .await
+      .map_err(|e| format!("Failed to fetch blocklist: {e}"))?;
+    if !response.status().is_success() {
+      return Err(format!("HTTP {} when fetching {}", response.status(), url));
+    }
+    response
+      .text()
+      .await
+      .map_err(|e| format!("Failed to read response body: {e}"))
   }
 
   pub async fn ensure_cached(level: BlocklistLevel) -> Result<PathBuf, String> {
@@ -794,6 +858,50 @@ mod tests {
     }
     assert!(BlocklistLevel::None.url().is_none());
     assert!(BlocklistLevel::None.filename().is_none());
+  }
+
+  #[test]
+  fn test_level_urls_use_domain_only_format_with_fallback() {
+    // The legacy `domains/` paths were removed upstream (jsDelivr answers 403
+    // for them); levels must fetch the `-onlydomains` variant instead, with a
+    // raw.githubusercontent mirror as second chance.
+    let expected_files = [
+      (BlocklistLevel::Light, "light-onlydomains.txt", "light.txt"),
+      (BlocklistLevel::Normal, "multi-onlydomains.txt", "multi.txt"),
+      (BlocklistLevel::Pro, "pro-onlydomains.txt", "pro.txt"),
+      (
+        BlocklistLevel::ProPlus,
+        "pro.plus-onlydomains.txt",
+        "pro.plus.txt",
+      ),
+      (
+        BlocklistLevel::Ultimate,
+        "ultimate-onlydomains.txt",
+        "ultimate.txt",
+      ),
+    ];
+    for (level, file, cache_file) in expected_files {
+      let url = level.url().expect("level should have a URL");
+      assert_eq!(
+        url,
+        format!("https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/{file}"),
+        "primary URL for {}",
+        level.as_str()
+      );
+      let fallback = level
+        .fallback_url()
+        .expect("level should have a fallback URL");
+      assert_eq!(
+        fallback,
+        format!("https://raw.githubusercontent.com/hagezi/dns-blocklists/main/wildcard/{file}"),
+        "fallback URL for {}",
+        level.as_str()
+      );
+      // Cache filenames stay stable so existing caches refresh in place.
+      assert_eq!(level.filename(), Some(cache_file));
+    }
+    assert!(BlocklistLevel::None.fallback_url().is_none());
+    assert!(BlocklistLevel::Custom.fallback_url().is_none());
   }
 
   #[test]

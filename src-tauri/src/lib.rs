@@ -22,9 +22,6 @@ pub(crate) fn backend_error(code: &str) -> String {
 /// Browser-like User-Agent for outbound CDN/API fetches. Some CDNs (notably
 /// jsDelivr) reject the default reqwest UA, so every shared HTTP client and
 /// one-off fetch in the backend must send this instead.
-// TODO: drop this allow once the in-progress DNS blocklist work (its only
-// user) lands; this slice just must not trip the -D warnings hook alone.
-#[allow(dead_code)]
 pub(crate) const BROWSER_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36";
 
 pub(crate) fn backend_error_with_detail(code: &str, detail: impl std::fmt::Display) -> String {
@@ -61,6 +58,7 @@ mod automation_rate_limiter;
 mod browser;
 mod browser_downloads;
 mod browser_runner;
+mod browser_tools;
 mod browser_version_manager;
 mod cdp_session;
 mod chromium_manager;
@@ -149,7 +147,10 @@ use subscription_manager::{
   subscription_save, subscriptions_list,
 };
 
-use agent_engine::{agent_chat, agent_chat_confirm, agent_chat_decline};
+use agent_engine::{
+  agent_active_runs, agent_cancel_run, agent_chat, agent_chat_confirm, agent_chat_decline,
+};
+use browser_tools::agent_tool_catalog;
 
 use downloader::{cancel_download, download_browser};
 
@@ -2657,6 +2658,9 @@ pub fn run_with_builder(
       agent_chat,
       agent_chat_confirm,
       agent_chat_decline,
+      agent_cancel_run,
+      agent_active_runs,
+      agent_tool_catalog,
       subscriptions_list,
       subscription_entries,
       subscription_save,

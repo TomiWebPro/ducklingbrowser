@@ -2177,7 +2177,12 @@
     "goToKeys": "Quản lý endpoint",
     "noKeySelected": "Trước tiên hãy chọn khóa nhà cung cấp hoặc agent CLI",
     "pickModel": "Chọn nhà cung cấp hoặc tác nhân",
-    "orDirect": "— hoặc trò chuyện trực tiếp —"
+    "orDirect": "— hoặc trò chuyện trực tiếp —",
+    "fullAutomation": "Full automation",
+    "fullAutomationHint": "Run tool actions immediately without confirmation cards. Only for direct chat; unavailable when delegating to an agent CLI.",
+    "fullAutomationActive": "Full automation is on: actions run immediately without confirmation.",
+    "activeRuns": "{{count}} running — click to stop",
+    "stopAllDone": "Stop requested for all running agent jobs"
   },
   "changeCard": {
     "sectionTitle": "Các thay đổi được đề xuất",
@@ -2248,7 +2253,9 @@
       "downloadDirOverride": "Thư mục con tải xuống (tùy chọn)",
       "downloadDirPlaceholder": "reports/monthly",
       "maxSteps": "Số bước tối đa (1–100)",
-      "maxStepsInvalid": "Số bước tối đa phải là 1–100"
+      "maxStepsInvalid": "Số bước tối đa phải là 1–100",
+      "fullAutomation": "Full automation (auto-approve all)",
+      "fullAutomationHint": "Apply every agent-proposed change without asking. Scheduling the task is the approval. Off (safe): only reversible changes apply; the rest are skipped and reported."
     },
     "calendar": {
       "today": "Hôm nay",
@@ -2264,7 +2271,8 @@
         "fri": "T6",
         "sat": "T7"
       }
-    }
+    },
+    "fullAutoBadge": "Full auto"
   },
   "ai": {
     "title": "AI",

@@ -59,6 +59,7 @@ ducklingbrowser/
 │   ├── lib/                        # WebDriver, CDP, fixtures, app-session helpers
 │   └── tests/                      # Smoke, UI, entity, integration, sync, browser suites
 ├── flake.nix                       # Nix development environment
+├── scripts/                        # Dev scripts (incl. agent-cargo.ps1 timed cargo wrapper)
 └── .github/workflows/              # CI/CD pipelines
 ```
 
@@ -69,6 +70,43 @@ ducklingbrowser/
 - `pnpm lint` includes spellcheck via [typos](https://github.com/crate-ci/typos). False positives can be allowlisted in `_typos.toml`
 - The full `pnpm test` output dumps every test name (≈400+ lines) which burns context for no signal. Filter:
   `pnpm test 2>&1 | grep -E "test result|panicked|FAILED"` — four "test result: ok" lines means everything passed.
+
+### Rust builds and `--lib` tests are slow — agent rules (2026-09-12)
+
+Cold `cargo test --lib` takes ~10 min (85MB+ MSVC link of `ducklingbrowser_lib`,
+`rusqlite bundled` C compile, Tauri build script); a single-crate relink ~1.5 min;
+warm no-op rebuilds seconds; test execution itself ~15 s for 540 tests. Every
+cargo invocation must therefore be treated as expensive:
+
+- sccache (`~/.cargo/bin`, 100G via `SCCACHE_CACHE_SIZE`, wired as
+  `rustc-wrapper` in `src-tauri/.cargo/config.toml`) and cargo-nextest
+  (`cargo-nextest.exe` + `src-tauri/.config/nextest.toml`) are installed.
+  Never remove them. All cargo traffic — including rust-analyzer `cargo check` —
+  flows through sccache automatically.
+- ONE cargo invocation per question. Never re-run builds/tests to collect
+  different signals. From the repo root run everything through the wrapper,
+  which times the command, snapshots sccache stats, and tees ALL output to
+  `$env:TEMP\opencode\cargo-logs\cargo-<ts>.log`:
+  `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/agent-cargo.ps1 nextest run --lib`
+  Afterwards mine the log file (Grep/Read) for each signal — timings, failures,
+  warnings — instead of invoking cargo again.
+- Prefer `cargo nextest run --lib` over `cargo test --lib` (per-test timing,
+  no fail-fast hiding, `slow-timeout = "60s"` flags new wall-clock waits).
+  For pure test iteration with zero rebuild cost, run the existing binary
+  directly: `src-tauri\target\debug\deps\ducklingbrowser_lib-*.exe <filter>`.
+- Check before testing: `check --lib --tests` validates compilation with no
+  codegen/link (~1/3 the cost of a test build). Only run `nextest run --lib`
+  once check passes:
+  `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/agent-cargo.ps1 check --lib --tests`
+- `cargo test lib` (positional filter) is FORBIDDEN: no test name contains
+  "lib", so it compiles every target and runs 0 tests.
+- Never run two cargo commands concurrently (and avoid heavy builds while
+  rust-analyzer is checking): they contend on the `target/` lock and one side
+  idles with near-zero CPU, looking like a hang.
+- Keep unit tests offline and sleep-free: no real-network hosts (use loopback
+  or wiremock), no `thread::sleep` for mtime granularity (use
+  `profile::encryption::bump_mtime_for_test`), no nested `cargo build` inside
+  tests (skip when a sidecar binary is absent).
 
 ### Native app E2E tests are mandatory for affected behavior
 

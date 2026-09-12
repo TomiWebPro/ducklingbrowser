@@ -124,10 +124,7 @@ mod tests {
         key_id: None,
         provider: None,
         model: None,
-        messages: vec![ChatMessage {
-          role: "user".to_string(),
-          content: "hi".to_string(),
-        }],
+        messages: vec![ChatMessage::text("user", "hi")],
         tools: None,
         max_retries: None,
       }))
@@ -149,10 +146,7 @@ mod tests {
         key_id: Some("missing-key".to_string()),
         provider: None,
         model: None,
-        messages: vec![ChatMessage {
-          role: "user".to_string(),
-          content: "hi".to_string(),
-        }],
+        messages: vec![ChatMessage::text("user", "hi")],
         tools: None,
         max_retries: None,
       }))
@@ -197,10 +191,7 @@ mod tests {
         key_id: None,
         provider: Some("watson".to_string()),
         model: None,
-        messages: vec![ChatMessage {
-          role: "user".to_string(),
-          content: "hi".to_string(),
-        }],
+        messages: vec![ChatMessage::text("user", "hi")],
         tools: None,
         max_retries: None,
       }))

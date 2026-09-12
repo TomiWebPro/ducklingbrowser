@@ -105,6 +105,13 @@ pub struct TaskDefinition {
   /// Share the same per-hour automation quota as manual/MCP automation.
   #[serde(default = "default_true")]
   pub same_bucket_rate_limit: bool,
+  /// Full automation: apply ALL agent-proposed changes without asking.
+  /// Scheduling the task IS the approval. Default false (safe) means only
+  /// `reversible` changes auto-apply in unattended runs; anything else is
+  /// skipped and reported. Macro and agent_browser tasks already execute
+  /// directly, so this gate only affects card-based (live_agent) flows.
+  #[serde(default)]
+  pub auto_approve: bool,
   #[serde(default = "default_true")]
   pub enabled: bool,
   #[serde(default)]
@@ -130,27 +137,12 @@ fn default_mode() -> String {
 
 /// Tools an `agent_browser` task may execute unattended. Everything else is
 /// denied at run time (the run fails with a clear error instead of acting).
-pub fn agent_browser_allowable_tools() -> &'static [&'static str] {
-  &[
-    "navigate",
-    "screenshot",
-    "evaluate_javascript",
-    "click_element",
-    "type_text",
-    "get_page_content",
-    "get_page_info",
-    "get_interactive_elements",
-    "click_by_index",
-    "type_by_index",
-    "drag",
-    "scroll",
-    "press_key",
-    "hover",
-    "set_download_dir",
-    "wait_for_download",
-    "get_downloads",
-    "get_profile_status",
-  ]
+/// Derived from the shared browser-tool catalog plus the profile-scoped
+/// `get_profile_status` read — never a second hand-maintained list.
+pub fn agent_browser_allowable_tools() -> Vec<String> {
+  let mut tools = crate::browser_tools::unattended_browser_tool_names();
+  tools.push("get_profile_status".to_string());
+  tools
 }
 
 fn validate_agent_browser_task(task: &TaskDefinition) -> Result<(), String> {
@@ -172,7 +164,7 @@ fn validate_agent_browser_task(task: &TaskDefinition) -> Result<(), String> {
   }
   let allowable = agent_browser_allowable_tools();
   for tool in &task.allowed_tools {
-    if !allowable.contains(&tool.as_str()) {
+    if !allowable.iter().any(|a| a == tool) {
       return Err(code_error(
         "TASK_INVALID_SCHEDULE",
         serde_json::json!({ "detail": format!("tool '{tool}' is not allowed in unattended tasks") }),
@@ -668,12 +660,42 @@ async fn run_live_agent_task(task: &TaskDefinition) -> Result<TaskRunResult, Str
   if prompt.trim().is_empty() {
     return Err("Task has no prompt".to_string());
   }
-  let _result = delegate_to_agent(agent_id, prompt).await?;
+  let result = delegate_to_agent(agent_id, prompt).await?;
+  // Unattended: never wait for a human. Without full automation only
+  // reversible cards apply; the rest are skipped and reported.
+  let outcome =
+    crate::agent_engine::apply_cards_for_unattended(&result.cards, task.auto_approve).await;
+  let mut extracted = std::collections::BTreeMap::new();
+  extracted.insert("reply".to_string(), serde_json::Value::String(result.reply));
+  extracted.insert(
+    "applied".to_string(),
+    serde_json::Value::Array(outcome.applied),
+  );
+  extracted.insert(
+    "skipped".to_string(),
+    serde_json::Value::Array(outcome.skipped),
+  );
+  let error = if outcome.errors.is_empty() {
+    None
+  } else {
+    Some(
+      outcome
+        .errors
+        .iter()
+        .map(|e| e.to_string())
+        .collect::<Vec<_>>()
+        .join("; "),
+    )
+  };
   Ok(TaskRunResult {
-    status: "success".to_string(),
-    error: None,
+    status: if error.is_none() {
+      "success".to_string()
+    } else {
+      "error".to_string()
+    },
+    error,
     duration_ms: 0,
-    extracted: std::collections::BTreeMap::new(),
+    extracted,
     deferred_profile_fields: Vec::new(),
   })
 }
@@ -687,14 +709,13 @@ async fn run_agent_browser_task(task: &TaskDefinition) -> Result<TaskRunResult, 
     prompt: task.prompt.clone().unwrap_or_default(),
     allowed_tools: if task.allowed_tools.is_empty() {
       agent_browser_allowable_tools()
-        .iter()
-        .map(|s| s.to_string())
-        .collect()
     } else {
       task.allowed_tools.clone()
     },
     download_dir_override: task.download_dir_override.clone(),
     max_steps: task.max_steps.unwrap_or(20).clamp(1, 100),
+    guardrails: crate::agent_engine::AgentGuardrails::default(),
+    run_id: Some(format!("scheduler-{}", task.id)),
   };
   let result = crate::agent_engine::agent_browser_run(params).await?;
   Ok(TaskRunResult {
@@ -744,6 +765,7 @@ mod tests {
       steps: vec![],
       schedule,
       same_bucket_rate_limit: true,
+      auto_approve: false,
       enabled: true,
       created_at: String::new(),
       updated_at: String::new(),
@@ -1027,11 +1049,25 @@ mod tests {
       "set_download_dir",
       "wait_for_download",
       "get_downloads",
+      "list_tabs",
+      "new_tab",
+      "switch_tab",
+      "close_tab",
+      "wait_for_text",
+      "wait_for_url",
+      "select_option",
+      "find_text",
+      "get_cookies",
+      "extract_table",
+      "extract_article",
     ] {
-      assert!(tools.contains(&required), "allowlist misses {required}");
+      assert!(
+        tools.iter().any(|t| t == required),
+        "allowlist misses {required}"
+      );
     }
-    assert!(!tools.contains(&"delete_profile"));
-    assert!(!tools.contains(&"agent_chat"));
+    assert!(!tools.iter().any(|t| t == "delete_profile"));
+    assert!(!tools.iter().any(|t| t == "agent_chat"));
   }
 
   #[tokio::test]
@@ -1074,5 +1110,39 @@ mod tests {
     assert!(store.delete_task(&saved.id).is_ok());
     assert!(store.delete_task(&saved.id).is_err());
     assert!(store.list_tasks().is_empty());
+  }
+
+  #[test]
+  fn auto_approve_defaults_off_and_roundtrips() {
+    // Tasks saved before the flag existed load with full automation off.
+    let legacy_task: TaskDefinition = serde_json::from_value(serde_json::json!({
+      "id": "legacy-1",
+      "name": "Legacy",
+      "mode": "macro",
+      "steps": [],
+      "schedule": {
+        "windowStart": "02:00",
+        "windowEnd": "04:00",
+        "timezone": "UTC",
+        "jitterMinutes": 30,
+        "randomizeDaily": true
+      },
+      "sameBucketRateLimit": true,
+      "enabled": true
+    }))
+    .unwrap();
+    assert!(!legacy_task.auto_approve);
+
+    let tmp = tempfile::tempdir().unwrap();
+    let _guard = crate::app_dirs::set_test_data_dir(tmp.path().to_path_buf());
+    let mut opted_in = task("auto-1", test_schedule("02:00", "04:00", "UTC"));
+    opted_in.name = "Full auto".to_string();
+    opted_in.mode = "live_agent".to_string();
+    opted_in.agent_id = Some("opencode".to_string());
+    opted_in.prompt = Some("Do it".to_string());
+    opted_in.auto_approve = true;
+    let saved = SchedulerStore.save_task(&opted_in).unwrap();
+    assert!(saved.auto_approve);
+    assert!(SchedulerStore.get_task(&saved.id).unwrap().auto_approve);
   }
 }

@@ -182,3 +182,24 @@ test("agent chat requires a configured key and handles cards", async () => {
     assert.ok(confirmed.errors.length === 1);
   });
 });
+
+test("agent run controls report active runs and cancel unknown ids", async () => {
+  await withApp("ai-agent-runs", async (app) => {
+    const active = await app.invoke("agent_active_runs");
+    assert.ok(Array.isArray(active));
+
+    const cancelled = await app.invoke("agent_cancel_run", {
+      runId: "no-such-run",
+    });
+    assert.equal(cancelled, false);
+
+    const catalog = await app.invoke("agent_tool_catalog");
+    assert.ok(Array.isArray(catalog) && catalog.length > 0);
+    assert.ok(
+      catalog.every(
+        (t) =>
+          typeof t.name === "string" && t.inputSchema.properties.profile_id,
+      ),
+    );
+  });
+});

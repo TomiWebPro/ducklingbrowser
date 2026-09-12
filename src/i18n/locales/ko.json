@@ -2177,7 +2177,12 @@
     "goToKeys": "엔드포인트 관리",
     "noKeySelected": "먼저 제공자 키 또는 에이전트 CLI를 선택하세요",
     "pickModel": "제공자 또는 에이전트 선택",
-    "orDirect": "— 또는 직접 채팅 —"
+    "orDirect": "— 또는 직접 채팅 —",
+    "fullAutomation": "Full automation",
+    "fullAutomationHint": "Run tool actions immediately without confirmation cards. Only for direct chat; unavailable when delegating to an agent CLI.",
+    "fullAutomationActive": "Full automation is on: actions run immediately without confirmation.",
+    "activeRuns": "{{count}} running — click to stop",
+    "stopAllDone": "Stop requested for all running agent jobs"
   },
   "changeCard": {
     "sectionTitle": "제안된 변경",
@@ -2248,7 +2253,9 @@
       "downloadDirOverride": "다운로드 하위 폴더(선택 사항)",
       "downloadDirPlaceholder": "reports/monthly",
       "maxSteps": "최대 단계 수(1–100)",
-      "maxStepsInvalid": "최대 단계 수는 1–100이어야 합니다"
+      "maxStepsInvalid": "최대 단계 수는 1–100이어야 합니다",
+      "fullAutomation": "Full automation (auto-approve all)",
+      "fullAutomationHint": "Apply every agent-proposed change without asking. Scheduling the task is the approval. Off (safe): only reversible changes apply; the rest are skipped and reported."
     },
     "calendar": {
       "today": "오늘",
@@ -2264,7 +2271,8 @@
         "fri": "금",
         "sat": "토"
       }
-    }
+    },
+    "fullAutoBadge": "Full auto"
   },
   "ai": {
     "title": "AI",

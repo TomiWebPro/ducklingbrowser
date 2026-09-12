@@ -792,6 +792,275 @@ impl CdpSession {
       tokio::time::sleep(Duration::from_millis(250)).await;
     }
   }
+
+  /// Poll until the page's visible text contains `text` (case-insensitive).
+  pub async fn wait_for_text(
+    &self,
+    ws_url: &str,
+    text: &str,
+    timeout_ms: u64,
+  ) -> Result<(), CdpError> {
+    let needle = serde_json::to_string(&text.to_lowercase()).unwrap_or_default();
+    let expression =
+      format!("(document.body ? document.body.innerText.toLowerCase().includes({needle}) : false)");
+    self
+      .wait_for_expression(ws_url, &expression, timeout_ms, || {
+        format!("Timed out waiting for text '{text}'")
+      })
+      .await
+  }
+
+  /// Poll until `location.href` contains `substring`.
+  pub async fn wait_for_url(
+    &self,
+    ws_url: &str,
+    substring: &str,
+    timeout_ms: u64,
+  ) -> Result<(), CdpError> {
+    let needle = serde_json::to_string(substring).unwrap_or_default();
+    let expression = format!("location.href.includes({needle})");
+    self
+      .wait_for_expression(ws_url, &expression, timeout_ms, || {
+        format!("Timed out waiting for URL containing '{substring}'")
+      })
+      .await
+  }
+
+  async fn wait_for_expression(
+    &self,
+    ws_url: &str,
+    expression: &str,
+    timeout_ms: u64,
+    err: impl Fn() -> String,
+  ) -> Result<(), CdpError> {
+    let deadline = tokio::time::Instant::now() + Duration::from_millis(timeout_ms.max(1));
+    loop {
+      let result = self
+        .send_cdp(
+          ws_url,
+          "Runtime.evaluate",
+          json!({ "expression": expression, "returnByValue": true }),
+        )
+        .await?;
+      if result
+        .pointer("/result/value")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+      {
+        return Ok(());
+      }
+      if tokio::time::Instant::now() >= deadline {
+        return Err(CdpError::new(-32000, err()));
+      }
+      tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+  }
+
+  /// List open page targets on a CDP port (`GET /json` filtered to pages).
+  pub async fn list_targets(&self, port: u16) -> Result<Vec<CdpTarget>, CdpError> {
+    let url = format!("http://127.0.0.1:{port}/json");
+    let targets: Vec<Value> = reqwest::Client::new()
+      .get(&url)
+      .timeout(Duration::from_secs(5))
+      .send()
+      .await
+      .map_err(|e| CdpError::new(-32000, format!("Failed to list tabs: {e}")))?
+      .json()
+      .await
+      .map_err(|e| CdpError::new(-32000, format!("Failed to parse targets: {e}")))?;
+    Ok(
+      targets
+        .into_iter()
+        .filter(|t| t.get("type").and_then(|v| v.as_str()) == Some("page"))
+        .filter_map(|t| {
+          Some(CdpTarget {
+            id: t.get("id")?.as_str()?.to_string(),
+            url: t
+              .get("url")
+              .and_then(|v| v.as_str())
+              .unwrap_or("")
+              .to_string(),
+            title: t
+              .get("title")
+              .and_then(|v| v.as_str())
+              .unwrap_or("")
+              .to_string(),
+          })
+        })
+        .collect(),
+    )
+  }
+
+  /// Bring a target to the front (`GET /json/activate/{id}`).
+  pub async fn activate_target(&self, port: u16, target_id: &str) -> Result<(), CdpError> {
+    self
+      .target_control_request(&format!(
+        "http://127.0.0.1:{port}/json/activate/{target_id}"
+      ))
+      .await
+  }
+
+  /// Close a target (`GET /json/close/{id}`).
+  pub async fn close_target(&self, port: u16, target_id: &str) -> Result<(), CdpError> {
+    self
+      .target_control_request(&format!("http://127.0.0.1:{port}/json/close/{target_id}"))
+      .await
+  }
+
+  /// Open a new tab, optionally at a URL (`PUT /json/new`).
+  pub async fn new_tab(&self, port: u16, url: Option<&str>) -> Result<CdpTarget, CdpError> {
+    let mut endpoint = format!("http://127.0.0.1:{port}/json/new");
+    if let Some(url) = url.filter(|u| !u.trim().is_empty()) {
+      endpoint.push_str(&format!("?{}", urlencoding::encode(url)));
+    }
+    let client = reqwest::Client::new();
+    let target: Value = client
+      .put(&endpoint)
+      .timeout(Duration::from_secs(10))
+      .send()
+      .await
+      .map_err(|e| CdpError::new(-32000, format!("Failed to open tab: {e}")))?
+      .json()
+      .await
+      .map_err(|e| CdpError::new(-32000, format!("Failed to parse new tab: {e}")))?;
+    target
+      .get("id")
+      .and_then(|v| v.as_str())
+      .map(|id| CdpTarget {
+        id: id.to_string(),
+        url: target
+          .get("url")
+          .and_then(|v| v.as_str())
+          .unwrap_or("")
+          .to_string(),
+        title: target
+          .get("title")
+          .and_then(|v| v.as_str())
+          .unwrap_or("")
+          .to_string(),
+      })
+      .ok_or_else(|| CdpError::new(-32000, "New tab returned no target id".to_string()))
+  }
+
+  async fn target_control_request(&self, url: &str) -> Result<(), CdpError> {
+    reqwest::Client::new()
+      .get(url)
+      .timeout(Duration::from_secs(10))
+      .send()
+      .await
+      .map_err(|e| CdpError::new(-32000, format!("Tab request failed: {e}")))?;
+    Ok(())
+  }
+
+  /// Build the evaluate expression resolving visible-text matches for a query.
+  pub fn find_text_expression(query: &str) -> String {
+    let needle = serde_json::to_string(query).unwrap_or_default();
+    format!(
+      r#"(() => {{
+        const q = {needle}.toLowerCase();
+        if (!q) return {{ count: 0, snippet: "" }};
+        const text = (document.body ? document.body.innerText : "") || "";
+        const lower = text.toLowerCase();
+        let count = 0;
+        let pos = 0;
+        while (true) {{
+          const hit = lower.indexOf(q, pos);
+          if (hit < 0) break;
+          count += 1;
+          pos = hit + q.length;
+        }}
+        const first = lower.indexOf(q);
+        const snippet = first < 0 ? "" : text.slice(Math.max(0, first - 80), first + 120);
+        return {{ count, snippet }};
+      }})()"#
+    )
+  }
+
+  /// Build the evaluate expression extracting a table into rows of cell text.
+  pub fn extract_table_expression(selector: Option<&str>) -> String {
+    let lookup = match selector.filter(|s| !s.trim().is_empty()) {
+      Some(sel) => {
+        let escaped = serde_json::to_string(sel).unwrap_or_default();
+        format!("document.querySelector({escaped})")
+      }
+      None => "document.querySelector('table')".to_string(),
+    };
+    format!(
+      r#"(() => {{
+        const table = {lookup};
+        if (!table) throw new Error('Table not found');
+        return Array.from(table.rows).map((row) =>
+          Array.from(row.cells).map((cell) => cell.innerText.trim())
+        );
+      }})()"#
+    )
+  }
+
+  /// Build the evaluate expression extracting readable article text.
+  pub fn extract_article_expression() -> String {
+    r#"(() => {
+      const root = document.querySelector('article') || document.body;
+      if (!root) return "";
+      const clone = root.cloneNode(true);
+      clone.querySelectorAll('script, style, nav, footer, aside').forEach((el) => el.remove());
+      const parts = [];
+      clone.querySelectorAll('h1, h2, h3, p, li').forEach((el) => {
+        const text = el.innerText.trim();
+        if (text) parts.push(text);
+      });
+      return parts.join("\n\n").slice(0, 60000);
+    })()"#
+      .to_string()
+  }
+
+  /// Build the evaluate expression selecting a dropdown option by value or
+  /// visible text. Throws a descriptive Error when nothing matches.
+  pub fn select_option_expression(
+    selector: Option<&str>,
+    index: Option<u32>,
+    value: &str,
+  ) -> Result<String, CdpError> {
+    if value.trim().is_empty() {
+      return Err(CdpError::new(-32000, "Select requires a value".to_string()));
+    }
+    let target = if let Some(index) = index {
+      format!(
+        r#"(window.__duckling_interactive && window.__duckling_interactive[{index}]) || (() => {{ throw new Error('No element at index {index}'); }})()"#
+      )
+    } else {
+      let selector = selector.ok_or_else(|| {
+        CdpError::new(-32000, "Select requires a selector or an index".to_string())
+      })?;
+      let escaped = serde_json::to_string(selector).unwrap_or_default();
+      format!(
+        r#"document.querySelector({escaped}) || (() => {{ throw new Error('Element not found'); }})()"#
+      )
+    };
+    let wanted = serde_json::to_string(value).unwrap_or_default();
+    Ok(format!(
+      r#"(() => {{
+        const el = {target};
+        if (!(el instanceof HTMLSelectElement)) throw new Error('Target is not a <select>');
+        const wanted = {wanted};
+        const option = Array.from(el.options).find(
+          (o) => o.value === wanted || o.text.trim() === wanted.trim()
+        );
+        if (!option) throw new Error('No option matching ' + wanted);
+        el.value = option.value;
+        el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+        el.dispatchEvent(new Event('change', {{ bubbles: true }}));
+        return option.value;
+      }})()"#
+    ))
+  }
+}
+
+/// An open page target (tab) on a CDP debugging port.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct CdpTarget {
+  pub id: String,
+  pub url: String,
+  pub title: String,
 }
 
 /// Build the `Runtime.evaluate` expression that checks whether a selector

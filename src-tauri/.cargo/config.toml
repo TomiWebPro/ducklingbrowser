@@ -1,4 +1,7 @@
 [build]
 # Omit jobs setting to use all cores
+# sccache wraps rustc: clean/cold builds hit the shared cache, while local
+# incremental rebuilds still go through cargo's own incremental cache.
+rustc-wrapper = "sccache"
 
 incremental = true

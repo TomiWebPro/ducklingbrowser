@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/animated-tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -56,6 +57,8 @@ interface AiDialogProps {
 interface AgentChatResult {
   reply: string;
   cards: ChangeCardData[];
+  usage?: { total_tokens: number } | null;
+  steps_used?: number;
 }
 
 interface ChatMessageView {
@@ -78,6 +81,10 @@ function ChatPanel({
   const [cards, setCards] = useState<ChangeCardData[]>([]);
   const [input, setInput] = useState("");
   const [running, setRunning] = useState(false);
+  const [fullAuto, setFullAuto] = useState(false);
+  const [activeRuns, setActiveRuns] = useState<
+    { run_id: string; label: string; step: string; elapsed_ms: number }[]
+  >([]);
   const [busyCards, setBusyCards] = useState<Set<string>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -93,6 +100,25 @@ function ChatPanel({
       el.scrollTop = el.scrollHeight;
     }
   });
+
+  useEffect(() => {
+    let cancelled = false;
+    const poll = () => {
+      void invoke<
+        { run_id: string; label: string; step: string; elapsed_ms: number }[]
+      >("agent_active_runs")
+        .then((runs) => {
+          if (!cancelled) setActiveRuns(runs);
+        })
+        .catch(() => {});
+    };
+    poll();
+    const timer = setInterval(poll, 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, []);
 
   const send = async () => {
     const message = input.trim();
@@ -111,6 +137,7 @@ function ChatPanel({
         model: null,
         message,
         useAgent: useAgent || null,
+        autoApprove: fullAuto,
       });
       setMessages((prev) => [
         ...prev,
@@ -161,6 +188,19 @@ function ChatPanel({
     }
   };
 
+  const stopAllRuns = async () => {
+    try {
+      await Promise.all(
+        activeRuns.map((run) =>
+          invoke("agent_cancel_run", { runId: run.run_id }).catch(() => {}),
+        ),
+      );
+      showSuccessToast(t("agentChat.stopAllDone"));
+    } catch (e) {
+      showErrorToast(translateBackendError(t, e));
+    }
+  };
+
   if (keys.length === 0 && !useAgent && agents.length === 0) {
     return (
       <div className="flex flex-col items-center gap-3 py-12 text-center">
@@ -206,7 +246,41 @@ function ChatPanel({
             ))}
           </SelectContent>
         </Select>
+        <div
+          className="flex items-center gap-1.5"
+          title={t("agentChat.fullAutomationHint")}
+        >
+          <Checkbox
+            id="agent-full-auto"
+            checked={fullAuto}
+            disabled={running || Boolean(useAgent)}
+            onCheckedChange={(checked) => setFullAuto(Boolean(checked))}
+          />
+          <Label
+            htmlFor="agent-full-auto"
+            className="cursor-pointer text-xs font-medium whitespace-nowrap"
+          >
+            {t("agentChat.fullAutomation")}
+          </Label>
+        </div>
+        {activeRuns.length > 0 && (
+          <button
+            type="button"
+            onClick={() => void stopAllRuns()}
+            title={activeRuns.map((r) => `${r.label}: ${r.step}`).join("\n")}
+            className="flex shrink-0 items-center gap-1.5 rounded-full bg-warning/10 px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <span className="size-1.5 animate-pulse rounded-full bg-warning" />
+            {t("agentChat.activeRuns", { count: activeRuns.length })}
+          </button>
+        )}
       </div>
+
+      {fullAuto && !useAgent && (
+        <p className="shrink-0 rounded-md bg-warning/10 px-2 py-1 text-xs text-muted-foreground">
+          {t("agentChat.fullAutomationActive")}
+        </p>
+      )}
 
       <div
         ref={scrollRef}
