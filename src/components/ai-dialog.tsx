@@ -4,7 +4,14 @@ import { invoke } from "@tauri-apps/api/core";
 import { Eye, EyeOff, Loader2, SendHorizontal } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { LuBot, LuKey, LuPlus, LuRefreshCw, LuTrash2 } from "react-icons/lu";
+import {
+  LuBot,
+  LuChevronDown,
+  LuKey,
+  LuPlus,
+  LuRefreshCw,
+  LuTrash2,
+} from "react-icons/lu";
 import { ChangeCard, type ChangeCardData } from "@/components/change-card";
 import {
   AnimatedTabs,
@@ -21,6 +28,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { FadingScrollArea } from "@/components/ui/fading-scroll-area";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,6 +48,7 @@ import {
   AI_PROVIDERS,
   type AiKeyInfo,
   type AiTab,
+  CATALOG_KEY_OPTIONAL,
   type ProbeResult,
   providerLabel,
   providerMeta,
@@ -82,6 +96,8 @@ function ChatPanel({
   const [input, setInput] = useState("");
   const [running, setRunning] = useState(false);
   const [fullAuto, setFullAuto] = useState(false);
+  const [profiles, setProfiles] = useState<{ id: string; name: string }[]>([]);
+  const [selectedProfileId, setSelectedProfileId] = useState<string>("");
   const [activeRuns, setActiveRuns] = useState<
     { run_id: string; label: string; step: string; elapsed_ms: number }[]
   >([]);
@@ -93,6 +109,69 @@ function ChatPanel({
       setSelectedKey(keys[0].id);
     }
   }, [keys, selectedKey]);
+
+  // Profiles drive the per-profile automation toggle + model/agent pair.
+  const [fullProfiles, setFullProfiles] = useState<
+    {
+      id: string;
+      name: string;
+      agent_key_id?: string | null;
+      agent_id?: string | null;
+      agent_auto_approve?: boolean;
+    }[]
+  >([]);
+  useEffect(() => {
+    invoke<
+      {
+        id: string;
+        name: string;
+        agent_key_id?: string | null;
+        agent_id?: string | null;
+        agent_auto_approve?: boolean;
+      }[]
+    >("list_browser_profiles")
+      .then((loaded) => {
+        setFullProfiles(loaded);
+        setProfiles(loaded.map((p) => ({ id: p.id, name: p.name })));
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleProfileChange = useCallback(
+    (value: string) => {
+      const profileId = value === "__none__" ? "" : value;
+      setSelectedProfileId(profileId);
+      if (!profileId) return;
+      const full = fullProfiles.find((p) => p.id === profileId);
+      if (!full) return;
+      if (full.agent_key_id && keys.some((k) => k.id === full.agent_key_id)) {
+        setSelectedKey(full.agent_key_id);
+        setUseAgent("");
+      }
+      if (full.agent_id) setUseAgent(full.agent_id);
+      setFullAuto(full.agent_auto_approve === true);
+    },
+    [fullProfiles, keys],
+  );
+
+  const handleFullAutoChange = useCallback(
+    async (checked: boolean) => {
+      setFullAuto(checked);
+      // Persist per profile when a profile is in scope; otherwise the
+      // toggle applies to this chat session only.
+      if (selectedProfileId) {
+        try {
+          await invoke("update_profile_agent_auto_approve", {
+            profileId: selectedProfileId,
+            autoApprove: checked,
+          });
+        } catch (e) {
+          showErrorToast(translateBackendError(t, e));
+        }
+      }
+    },
+    [selectedProfileId, t],
+  );
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -138,6 +217,7 @@ function ChatPanel({
         message,
         useAgent: useAgent || null,
         autoApprove: fullAuto,
+        profileId: selectedProfileId || null,
       });
       setMessages((prev) => [
         ...prev,
@@ -213,7 +293,27 @@ function ChatPanel({
 
   return (
     <>
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
+        {profiles.length > 0 && (
+          <Select
+            value={selectedProfileId || "__none__"}
+            onValueChange={handleProfileChange}
+          >
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder={t("agentChat.profilePlaceholder")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">
+                {t("agentChat.noProfile")}
+              </SelectItem>
+              {profiles.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <Select
           value={useAgent ? `agent:${useAgent}` : selectedKey}
           onValueChange={(v) => {
@@ -248,13 +348,19 @@ function ChatPanel({
         </Select>
         <div
           className="flex items-center gap-1.5"
-          title={t("agentChat.fullAutomationHint")}
+          title={
+            selectedProfileId
+              ? t("agentChat.fullAutomationProfileHint")
+              : t("agentChat.fullAutomationHint")
+          }
         >
           <Checkbox
             id="agent-full-auto"
             checked={fullAuto}
             disabled={running || Boolean(useAgent)}
-            onCheckedChange={(checked) => setFullAuto(Boolean(checked))}
+            onCheckedChange={(checked) =>
+              void handleFullAutoChange(Boolean(checked))
+            }
           />
           <Label
             htmlFor="agent-full-auto"
@@ -359,6 +465,125 @@ function ChatPanel({
   );
 }
 
+interface UsageEntryView {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  cost_usd?: number | null;
+  calls: number;
+}
+
+function AiStatsPanel() {
+  const { t } = useTranslation();
+  const [stats, setStats] = useState<{
+    by_key?: Record<string, UsageEntryView>;
+    byKey?: Record<string, UsageEntryView>;
+    by_provider?: Record<string, UsageEntryView>;
+    byProvider?: Record<string, UsageEntryView>;
+  } | null>(null);
+
+  useEffect(() => {
+    invoke<{
+      by_key?: Record<string, UsageEntryView>;
+      byKey?: Record<string, UsageEntryView>;
+      by_provider?: Record<string, UsageEntryView>;
+      byProvider?: Record<string, UsageEntryView>;
+    }>("ai_usage_stats")
+      .then(setStats)
+      .catch(() => {});
+  }, []);
+
+  const totals = (() => {
+    if (!stats) return null;
+    // The backend serializes usage buckets as camelCase (`byKey`); tolerate
+    // both casings so a shape mismatch can never crash this panel.
+    const buckets = stats.byKey ?? stats.by_key ?? {};
+    let prompt = 0;
+    let completion = 0;
+    let total = 0;
+    let calls = 0;
+    let cost: number | null = null;
+    for (const e of Object.values(buckets)) {
+      prompt += e.prompt_tokens;
+      completion += e.completion_tokens;
+      total += e.total_tokens;
+      calls += e.calls;
+      if (e.cost_usd !== null && e.cost_usd !== undefined) {
+        cost = (cost ?? 0) + e.cost_usd;
+      }
+    }
+    return { prompt, completion, total, calls, cost };
+  })();
+
+  const handleReset = async () => {
+    try {
+      await invoke("ai_usage_reset");
+      setStats({ by_key: {}, by_provider: {} });
+      showSuccessToast(t("aiStats.resetDone"));
+    } catch (e) {
+      showErrorToast(translateBackendError(t, e));
+    }
+  };
+
+  return (
+    <section className="space-y-3 rounded-lg border p-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-medium">{t("aiStats.title")}</h3>
+        {totals && totals.calls > 0 && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-xs"
+            onClick={() => void handleReset()}
+          >
+            {t("aiStats.reset")}
+          </Button>
+        )}
+      </div>
+      {!totals || totals.calls === 0 ? (
+        <p className="text-xs text-muted-foreground">{t("aiStats.noData")}</p>
+      ) : (
+        <div className="space-y-2">
+          <p className="text-sm tabular-nums">
+            {t("aiStats.totalsLine", {
+              total: totals.total,
+              prompt: totals.prompt,
+              completion: totals.completion,
+              calls: totals.calls,
+            })}
+            {totals.cost !== null ? ` • $${totals.cost.toFixed(4)}` : ""}
+          </p>
+          {Object.entries(stats?.byProvider ?? stats?.by_provider ?? {})
+            .length > 0 && (
+            <div className="space-y-1">
+              <p className="text-[10px] tracking-wide text-muted-foreground uppercase">
+                {t("aiStats.byProviderTitle")}
+              </p>
+              {Object.entries(
+                stats?.byProvider ?? stats?.by_provider ?? {},
+              ).map(([id, e]) => (
+                <p
+                  key={id}
+                  className="text-xs tabular-nums text-muted-foreground"
+                >
+                  {providerLabel(t, id)}: {e.total_tokens}
+                  {e.cost_usd !== null && e.cost_usd !== undefined
+                    ? ` • $${e.cost_usd.toFixed(4)}`
+                    : ""}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      <p className="text-xs text-muted-foreground">
+        {t("aiStats.description")}
+      </p>
+    </section>
+  );
+}
+
 function EndpointsPanel({
   keys,
   loadKeys,
@@ -384,6 +609,11 @@ function EndpointsPanel({
     providerMeta("openai")?.models ?? [],
   );
   const [modelsLoading, setModelsLoading] = useState(false);
+  const [modelsLiveCount, setModelsLiveCount] = useState<number | null>(null);
+  const [modelsLiveError, setModelsLiveError] = useState<
+    null | "key" | "fetch"
+  >(null);
+  const [modelFilter, setModelFilter] = useState("");
   const fetchSeq = useRef(0);
 
   const meta = providerMeta(provider);
@@ -399,11 +629,30 @@ function EndpointsPanel({
   })();
 
   /** Query the endpoint's live model catalog; fall back to the static
-   * shortcuts when unreachable. Live ids come first, static extras appended. */
+   * shortcuts when unreachable. Live ids replace the defaults entirely.
+   * With `markFailure`, an empty catalog flips the caption to a warning so a
+   * manual refresh never silently leaves just the defaults — and when the
+   * provider needs a key and none was entered, it says so explicitly instead
+   * of attempting an anonymous fetch that can only 401. */
   const refreshModels = useCallback(
-    async (nextProvider: string, nextEndpoint: string, nextKey: string) => {
+    async (
+      nextProvider: string,
+      nextEndpoint: string,
+      nextKey: string,
+      markFailure = false,
+    ) => {
+      if (
+        markFailure &&
+        !nextKey.trim() &&
+        !CATALOG_KEY_OPTIONAL.has(nextProvider)
+      ) {
+        setModelsLiveCount(null);
+        setModelsLiveError("key");
+        return;
+      }
       const seq = ++fetchSeq.current;
       setModelsLoading(true);
+      if (markFailure) setModelsLiveError(null);
       try {
         const live = await invoke<string[]>("ai_keys_models", {
           provider: nextProvider,
@@ -411,17 +660,39 @@ function EndpointsPanel({
           endpoint: nextEndpoint.trim() ? nextEndpoint.trim() : null,
         });
         if (seq !== fetchSeq.current) return;
-        const statik = providerMeta(nextProvider)?.models ?? [];
-        const merged = [...live, ...statik.filter((m) => !live.includes(m))];
-        if (merged.length > 0) setModelOptions(merged);
+        if (live.length > 0) {
+          // Live catalog replaces the static defaults entirely — appending
+          // them would bury real offerings under known entries.
+          setModelOptions(live);
+          setModelsLiveCount(live.length);
+        } else {
+          // Keep whatever is showing; never overwrite a good list with an
+          // empty one.
+          setModelsLiveCount(null);
+          if (markFailure) setModelsLiveError("fetch");
+        }
       } catch {
         // Unreachable endpoint or bad input: keep the static shortcuts.
+        if (seq !== fetchSeq.current) return;
+        setModelsLiveCount(null);
+        if (markFailure) setModelsLiveError("fetch");
       } finally {
         if (seq === fetchSeq.current) setModelsLoading(false);
       }
     },
     [],
   );
+
+  // Query the live catalog once on mount so the list reflects the
+  // endpoint, not just the static shortcuts (best-effort without a key).
+  useEffect(() => {
+    void refreshModels(
+      "openai",
+      providerMeta("openai")?.defaultEndpoint ?? "",
+      "",
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshModels]);
 
   const handleProviderChange = (value: string) => {
     setProvider(value);
@@ -434,6 +705,9 @@ function EndpointsPanel({
       setEndpointTouched(false);
       // Options follow the provider immediately; the live catalog refines them.
       setModelOptions(next.models);
+      setModelsLiveCount(null);
+      setModelsLiveError(null);
+      setModelFilter("");
       void refreshModels(value, next.defaultEndpoint ?? "", keyValue);
     }
   };
@@ -536,6 +810,13 @@ function EndpointsPanel({
     }
   };
 
+  const filteredModels =
+    modelFilter.trim() === ""
+      ? modelOptions
+      : modelOptions.filter((m) =>
+          m.toLowerCase().includes(modelFilter.toLowerCase()),
+        );
+
   return (
     <div className="space-y-6 px-1 py-1">
       <section className="space-y-3">
@@ -566,19 +847,97 @@ function EndpointsPanel({
                 />
               )}
             </Label>
-            <Input
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              placeholder={meta?.defaultModel || "gpt-4o-mini"}
-              list={modelOptions.length ? "ai-model-suggestions" : undefined}
-            />
-            {modelOptions.length ? (
-              <datalist id="ai-model-suggestions">
-                {modelOptions.map((m) => (
-                  <option key={m} value={m} />
-                ))}
-              </datalist>
-            ) : null}
+            <div className="flex gap-2">
+              <Input
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                placeholder={meta?.defaultModel || "gpt-4o-mini"}
+                className="min-w-0 flex-1"
+              />
+              <DropdownMenu
+                onOpenChange={(open) => {
+                  if (!open) setModelFilter("");
+                }}
+              >
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0 px-2"
+                    title={t("aiKeys.chooseModel")}
+                    aria-label={t("aiKeys.chooseModel")}
+                    disabled={modelOptions.length === 0 || modelsLoading}
+                  >
+                    <LuChevronDown className="size-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  className="max-h-64 w-64 overflow-y-auto"
+                >
+                  <div className="p-1">
+                    <Input
+                      value={modelFilter}
+                      onChange={(e) => setModelFilter(e.target.value)}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      placeholder={t("aiKeys.filterModels")}
+                      className="h-7 text-xs"
+                    />
+                  </div>
+                  {filteredModels.map((m) => (
+                    <DropdownMenuItem
+                      key={m}
+                      onClick={() => setModel(m)}
+                      className="font-mono text-xs"
+                    >
+                      {m}
+                    </DropdownMenuItem>
+                  ))}
+                  {filteredModels.length === 0 && (
+                    <p className="px-2 py-1.5 text-xs text-muted-foreground">
+                      {t("aiKeys.filterNoMatch")}
+                    </p>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                disabled={modelsLoading}
+                onClick={() => {
+                  void refreshModels(provider, endpoint, keyValue, true);
+                }}
+                title={t("aiKeys.refreshModels")}
+              >
+                <LuRefreshCw
+                  className={modelsLoading ? "size-3 animate-spin" : "size-3"}
+                />
+                <span className="ml-1 hidden @xl:inline">
+                  {modelsLoading
+                    ? t("aiKeys.refreshingModels")
+                    : t("aiKeys.refreshModels")}
+                </span>
+              </Button>
+            </div>
+            <p
+              className={cn(
+                "text-xs",
+                modelsLiveError ? "text-warning" : "text-muted-foreground",
+              )}
+            >
+              {modelsLiveError === "key"
+                ? t("aiKeys.modelsNeedKey")
+                : modelsLiveError === "fetch"
+                  ? t("aiKeys.modelsLiveFailed")
+                  : modelsLiveCount !== null
+                    ? t("aiKeys.modelsLive", { count: modelsLiveCount })
+                    : modelOptions.length === 0
+                      ? t("aiKeys.modelsEmpty")
+                      : t("aiKeys.modelsStatic")}
+            </p>
           </div>
         </div>
         {meta?.showEndpoint && (
@@ -681,6 +1040,8 @@ function EndpointsPanel({
           </Button>
         </div>
       </section>
+
+      <AiStatsPanel />
 
       <section className="space-y-3">
         <h3 className="text-sm font-medium">{t("aiKeys.storedTitle")}</h3>

@@ -587,7 +587,8 @@
     "all": "全部",
     "noGroup": "无分组",
     "pageTitle": "配置文件分组",
-    "pageDescription": "配置文件分组可让您按客户端、环境或使用场景整理浏览器。在多台设备之间同步分组以便共享。"
+    "pageDescription": "配置文件分组可让您按客户端、环境或使用场景整理浏览器。在多台设备之间同步分组以便共享。",
+    "ungrouped": "Ungrouped"
   },
   "sync": {
     "mode": {
@@ -1141,7 +1142,9 @@
       "noRules": "未配置绕过规则。",
       "ruleTypes": "支持主机名、IP地址和正则表达式模式。",
       "vpnLabel": "VPN：{{name}}",
-      "proxyLabel": "代理：{{name}}"
+      "proxyLabel": "代理：{{name}}",
+      "ruleCount": "{{count}} 条规则",
+      "ruleCount_one": "{{count}} 条规则"
     },
     "launchHook": {
       "title": "启动钩子 URL",
@@ -1174,7 +1177,8 @@
       "security": "安全",
       "delete": "删除配置文件",
       "activity": "活动",
-      "launchHook": "启动钩子"
+      "launchHook": "启动钩子",
+      "ai": "AI 智能体"
     },
     "sectionDesc": {
       "fingerprint": "配置此配置文件如何对指纹脚本显示。",
@@ -1184,7 +1188,8 @@
       "sync": "配置此配置文件如何在设备间同步。",
       "automation": "在启动此配置文件时运行命令。",
       "security": "用密码加密配置文件数据。",
-      "launchHook": "每次启动配置文件时向此 URL 发送一个 GET 请求。"
+      "launchHook": "每次启动配置文件时向此 URL 发送一个 GET 请求。",
+      "ai": "此配置文件的模型与智能体分配及用量。"
     },
     "badges": {
       "locked": "已锁",
@@ -1219,6 +1224,30 @@
       "agentLabel": "允许智能体下载",
       "agentDescription": "允许 AI 智能体、MCP 客户端和计划任务在此配置文件中下载文件。",
       "saved": "下载设置已保存"
+    },
+    "ai": {
+      "title": "AI agent",
+      "description": "Model and agent pair plus full automation for this profile, with usage and scheduled runs.",
+      "loading": "Loading AI settings...",
+      "noKeys": "No AI keys configured yet, so this section is disabled. Add an endpoint under AI to enable it.",
+      "keyLabel": "Preferred AI key",
+      "keyPlaceholder": "Select a key",
+      "keyDefault": "First saved key",
+      "agentLabel": "Preferred agent",
+      "agentPlaceholder": "Direct chat",
+      "agentDirect": "Direct chat (no CLI agent)",
+      "autoApproveLabel": "Full automation for this profile",
+      "autoApproveDescription": "Apply all agent-proposed changes without asking. Off means only reversible changes apply.",
+      "statsTitle": "Usage for this profile",
+      "statsEmpty": "No recorded AI usage for this profile yet.",
+      "statsLine": "{{total}} tokens ({{prompt}} in / {{completion}} out) across {{count}} calls",
+      "tasksTitle": "Scheduled tasks ({{count}})",
+      "tasksEmpty": "No scheduled tasks target this profile.",
+      "upcomingLabel": "Next",
+      "noUpcoming": "Not scheduled",
+      "lastRunLabel": "Last",
+      "saved": "AI settings saved",
+      "refresh": "刷新列表"
     }
   },
   "extensions": {
@@ -1523,7 +1552,9 @@
       "description": "确定要删除 {{count}} 个分组吗？{{names}}。配置文件将被移至默认分组。",
       "description_one": "确定要删除 {{count}} 个分组吗？{{names}}。配置文件将被移至默认分组。",
       "confirmButton": "删除分组"
-    }
+    },
+    "manageMembersTooltip": "Assign profiles to this group",
+    "membersCol": "Members"
   },
   "proxyAssignment": {
     "title": "分配代理 / VPN",
@@ -1557,7 +1588,8 @@
     "selectedProfilesLabel": "选定的配置文件:",
     "assignGroupLabel": "分配到分组:",
     "noValidProfiles": "未选择有效的配置文件。",
-    "failedFallback": "为配置文件分配分组失败"
+    "failedFallback": "为配置文件分配分组失败",
+    "moveHint": "Move from {{from}} to {{to}}"
   },
   "profileSelector": {
     "title": "选择配置文件",
@@ -1905,7 +1937,8 @@
     "integrations": "集成",
     "account": "账号",
     "tasks": "任务",
-    "ai": "AI"
+    "ai": "AI",
+    "downloads": "Downloads"
   },
   "pageTitle": {
     "proxies": "网络",
@@ -1919,7 +1952,8 @@
     "shortcuts": "键盘快捷键",
     "profiles": "配置文件",
     "tasks": "任务",
-    "ai": "AI"
+    "ai": "AI",
+    "downloads": "Downloads"
   },
   "encryption": {
     "required": {
@@ -2159,13 +2193,24 @@
       "google": "Google",
       "openrouter": "OpenRouter",
       "opencode": "OpenCode Go",
-      "custom": "自定义 (OpenAI-compatible)"
+      "custom": "自定义 (OpenAI-compatible)",
+      "xai": "xAI (Grok)"
     },
     "endpoint": "端点 URL",
     "endpointPlaceholder": "https://.../v1",
     "endpointHint": "可选：覆盖 OpenAI 兼容服务商的端点。留空则使用服务商默认值。",
     "endpointInvalid": "请输入有效的 http(s) URL",
-    "endpointRequired": "自定义服务商需要端点 URL"
+    "endpointRequired": "自定义服务商需要端点 URL",
+    "refreshModels": "Refresh models",
+    "refreshingModels": "Refreshing...",
+    "modelsLive": "{{count}} models from endpoint",
+    "modelsStatic": "Showing known models — refresh to query the endpoint",
+    "modelsEmpty": "No models returned — check the endpoint and key, then refresh",
+    "chooseModel": "选择模型",
+    "modelsLiveFailed": "无法加载模型列表 — 显示已知默认值",
+    "filterModels": "筛选模型",
+    "filterNoMatch": "没有匹配的模型",
+    "modelsNeedKey": "请先输入 API 密钥 — 此提供商仅对已验证请求返回模型列表。"
   },
   "agentChat": {
     "title": "AI 智能体",
@@ -2182,7 +2227,10 @@
     "fullAutomationHint": "Run tool actions immediately without confirmation cards. Only for direct chat; unavailable when delegating to an agent CLI.",
     "fullAutomationActive": "Full automation is on: actions run immediately without confirmation.",
     "activeRuns": "{{count}} running — click to stop",
-    "stopAllDone": "Stop requested for all running agent jobs"
+    "stopAllDone": "Stop requested for all running agent jobs",
+    "profilePlaceholder": "Profile (optional)",
+    "noProfile": "No profile",
+    "fullAutomationProfileHint": "Full automation for the selected profile. Saved to the profile immediately."
   },
   "changeCard": {
     "sectionTitle": "提议的变更",
@@ -2338,5 +2386,45 @@
       "confirm": "删除{{count}} 项"
     },
     "bulkDeleteFailed": "删除部分订阅失败"
+  },
+  "groupMembers": {
+    "title": "Members of {{name}}",
+    "description": "Add profiles to this group or remove them. Moving a profile changes its group immediately.",
+    "loading": "Loading profiles...",
+    "membersTitle": "In this group ({{count}})",
+    "empty": "No profiles in this group yet. Add one below.",
+    "addTitle": "Add a profile",
+    "addPlaceholder": "Select a profile",
+    "addButton": "Add",
+    "removeButton": "Remove",
+    "addSuccess": "Profile added to group",
+    "removeSuccess": "Profile removed from group",
+    "moveHint": "Adding moves the profile from its current group (or Ungrouped) into this group."
+  },
+  "aiStats": {
+    "title": "Usage",
+    "description": "Recorded locally from completed runs. Cost appears when the provider reports it.",
+    "noData": "No recorded AI usage yet.",
+    "totalsLine": "{{total}} tokens ({{prompt}} in / {{completion}} out) across {{count}} calls",
+    "byProviderTitle": "By provider",
+    "reset": "Reset",
+    "resetDone": "Usage stats cleared"
+  },
+  "downloads": {
+    "title": "Downloads",
+    "description": "Component downloads: browser binaries, GeoIP data, and DNS blocklists.",
+    "activeTitle": "Active",
+    "refresh": "Refresh",
+    "noActive": "Nothing downloading right now.",
+    "geoipLabel": "GeoIP database",
+    "browsersTitle": "Browsers",
+    "loading": "Loading...",
+    "empty": "No browsers available.",
+    "noneDownloaded": "No versions downloaded yet.",
+    "dnsTitle": "DNS blocklists",
+    "dnsEmpty": "No blocklist status available.",
+    "cached": "Cached",
+    "notCached": "Not cached",
+    "entries": "entries"
   }
 }

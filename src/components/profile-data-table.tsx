@@ -261,6 +261,27 @@ interface SyncStatusDot {
   encrypted: boolean;
 }
 
+/**
+ * The launch (play) button wears the profile's window color as a solid fill
+ * so the color is visible in the main list. Returns undefined for missing or
+ * malformed colors so the button falls back to its default variant. The icon
+ * flips between black/white by luminance to stay legible on any color.
+ */
+function getPlayButtonColorStyle(
+  windowColor: string | null | undefined,
+): React.CSSProperties | undefined {
+  if (!windowColor || !/^#[0-9a-fA-F]{6}$/.test(windowColor)) return undefined;
+  const r = parseInt(windowColor.slice(1, 3), 16);
+  const g = parseInt(windowColor.slice(3, 5), 16);
+  const b = parseInt(windowColor.slice(5, 7), 16);
+  const light = (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6;
+  return {
+    backgroundColor: windowColor,
+    borderColor: "transparent",
+    color: light ? "#09090b" : "#fafafa",
+  };
+}
+
 function getProfileSyncStatusDot(
   profile: BrowserProfile,
   liveStatus:
@@ -2356,6 +2377,12 @@ export function ProfilesDataTable({
               : "destructive"
             : "default";
 
+          // Idle play button shows the profile's window color; the running
+          // stop button keeps its destructive styling so state stays obvious.
+          const playColorStyle = isRunning
+            ? undefined
+            : getPlayButtonColorStyle(profile.window_color);
+
           return (
             <div className="flex items-center gap-2">
               {isDesynced && (
@@ -2391,7 +2418,9 @@ export function ProfilesDataTable({
                         isFollower && "border-accent",
                         isRunning &&
                           "bg-destructive/10 text-destructive hover:bg-destructive/20",
+                        playColorStyle && "border hover:brightness-110",
                       )}
+                      style={playColorStyle}
                       onClick={() =>
                         isRunning
                           ? void handleStop()

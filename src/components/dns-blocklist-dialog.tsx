@@ -60,30 +60,20 @@ const linesToArray = (v: string) =>
     .map((l) => l.trim())
     .filter(Boolean);
 
-export function DnsBlocklistDialog({
-  isOpen,
-  onClose,
-}: DnsBlocklistDialogProps) {
+/**
+ * Edits the single global custom DNS list (source URLs + manual block/allow
+ * rules). Shared by the global DNS dialog and the per-profile DNS dialog so
+ * picking the "Custom" level always comes with a place to configure it.
+ * Loads on mount, so parents should remount it (e.g. via `key`) when they
+ * want a fresh read.
+ */
+export function CustomDnsEditor() {
   const { t } = useTranslation();
-  const [statuses, setStatuses] = useState<BlocklistCacheStatus[]>([]);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-
   const [sources, setSources] = useState("");
   const [blockDomains, setBlockDomains] = useState("");
   const [allowDomains, setAllowDomains] = useState("");
   const [allowlistMode, setAllowlistMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-
-  const loadStatuses = useCallback(async () => {
-    try {
-      const result = await invoke<BlocklistCacheStatus[]>(
-        "get_dns_blocklist_cache_status",
-      );
-      setStatuses(result);
-    } catch (e) {
-      console.error("Failed to load blocklist status:", e);
-    }
-  }, []);
 
   const loadCustomConfig = useCallback(async () => {
     try {
@@ -98,23 +88,8 @@ export function DnsBlocklistDialog({
   }, []);
 
   useEffect(() => {
-    if (isOpen) {
-      void loadStatuses();
-      void loadCustomConfig();
-    }
-  }, [isOpen, loadStatuses, loadCustomConfig]);
-
-  const handleRefreshAll = async () => {
-    setIsRefreshing(true);
-    try {
-      await invoke("refresh_dns_blocklists");
-      await loadStatuses();
-    } catch (e) {
-      console.error("Failed to refresh blocklists:", e);
-    } finally {
-      setIsRefreshing(false);
-    }
-  };
+    void loadCustomConfig();
+  }, [loadCustomConfig]);
 
   const handleSaveCustom = async () => {
     setIsSaving(true);
@@ -174,6 +149,135 @@ export function DnsBlocklistDialog({
       toast.success(t("dnsBlocklist.custom.exported"));
     } catch (e) {
       toast.error(translateBackendError(t, e));
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        {t("dnsBlocklist.custom.description")}
+      </p>
+
+      <div className="flex items-center justify-between gap-3 rounded-md border border-border p-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium">
+            {t("dnsBlocklist.custom.allowlistModeLabel")}
+          </p>
+          <p className="text-[11px] text-muted-foreground">
+            {allowlistMode
+              ? t("dnsBlocklist.custom.allowlistModeOn")
+              : t("dnsBlocklist.custom.allowlistModeOff")}
+          </p>
+        </div>
+        <AnimatedSwitch
+          checked={allowlistMode}
+          onCheckedChange={(v) => setAllowlistMode(v === true)}
+          aria-label={t("dnsBlocklist.custom.allowlistModeLabel")}
+        />
+      </div>
+
+      {!allowlistMode && (
+        <div>
+          <Label className="mb-1.5">
+            {t("dnsBlocklist.custom.sourcesLabel")}
+          </Label>
+          <Textarea
+            value={sources}
+            onChange={(e) => setSources(e.target.value)}
+            placeholder={t("dnsBlocklist.custom.sourcesPlaceholder")}
+            rows={3}
+            className="font-mono text-xs"
+          />
+        </div>
+      )}
+
+      {!allowlistMode && (
+        <div>
+          <Label className="mb-1.5">
+            {t("dnsBlocklist.custom.blockLabel")}
+          </Label>
+          <Textarea
+            value={blockDomains}
+            onChange={(e) => setBlockDomains(e.target.value)}
+            placeholder={t("dnsBlocklist.custom.blockPlaceholder")}
+            rows={4}
+            className="font-mono text-xs"
+          />
+        </div>
+      )}
+
+      <div>
+        <Label className="mb-1.5">
+          {allowlistMode
+            ? t("dnsBlocklist.custom.allowedOnlyLabel")
+            : t("dnsBlocklist.custom.allowLabel")}
+        </Label>
+        <Textarea
+          value={allowDomains}
+          onChange={(e) => setAllowDomains(e.target.value)}
+          placeholder={t("dnsBlocklist.custom.allowPlaceholder")}
+          rows={allowlistMode ? 6 : 3}
+          className="font-mono text-xs"
+        />
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          {allowlistMode
+            ? t("dnsBlocklist.custom.allowedOnlyHint")
+            : t("dnsBlocklist.custom.allowHint")}
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <LoadingButton isLoading={isSaving} onClick={handleSaveCustom}>
+          {t("common.buttons.save")}
+        </LoadingButton>
+        <Button variant="outline" onClick={handleImport}>
+          {t("common.buttons.import")}
+        </Button>
+        <Button variant="outline" onClick={() => void handleExport("txt")}>
+          {t("dnsBlocklist.custom.exportTxt")}
+        </Button>
+        <Button variant="outline" onClick={() => void handleExport("json")}>
+          {t("dnsBlocklist.custom.exportJson")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+export function DnsBlocklistDialog({
+  isOpen,
+  onClose,
+}: DnsBlocklistDialogProps) {
+  const { t } = useTranslation();
+  const [statuses, setStatuses] = useState<BlocklistCacheStatus[]>([]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const loadStatuses = useCallback(async () => {
+    try {
+      const result = await invoke<BlocklistCacheStatus[]>(
+        "get_dns_blocklist_cache_status",
+      );
+      setStatuses(result);
+    } catch (e) {
+      console.error("Failed to load blocklist status:", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      void loadStatuses();
+    }
+  }, [isOpen, loadStatuses]);
+
+  const handleRefreshAll = async () => {
+    setIsRefreshing(true);
+    try {
+      await invoke("refresh_dns_blocklists");
+      await loadStatuses();
+    } catch (e) {
+      console.error("Failed to refresh blocklists:", e);
+    } finally {
+      setIsRefreshing(false);
     }
   };
 
@@ -275,98 +379,8 @@ export function DnsBlocklistDialog({
             value="custom"
             className="min-h-0 flex-1 space-y-4 overflow-y-auto"
           >
-            <p className="text-sm text-muted-foreground">
-              {t("dnsBlocklist.custom.description")}
-            </p>
-
-            <div className="flex items-center justify-between gap-3 rounded-md border border-border p-3">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium">
-                  {t("dnsBlocklist.custom.allowlistModeLabel")}
-                </p>
-                <p className="text-[11px] text-muted-foreground">
-                  {allowlistMode
-                    ? t("dnsBlocklist.custom.allowlistModeOn")
-                    : t("dnsBlocklist.custom.allowlistModeOff")}
-                </p>
-              </div>
-              <AnimatedSwitch
-                checked={allowlistMode}
-                onCheckedChange={(v) => setAllowlistMode(v === true)}
-                aria-label={t("dnsBlocklist.custom.allowlistModeLabel")}
-              />
-            </div>
-
-            {!allowlistMode && (
-              <div>
-                <Label className="mb-1.5">
-                  {t("dnsBlocklist.custom.sourcesLabel")}
-                </Label>
-                <Textarea
-                  value={sources}
-                  onChange={(e) => setSources(e.target.value)}
-                  placeholder={t("dnsBlocklist.custom.sourcesPlaceholder")}
-                  rows={3}
-                  className="font-mono text-xs"
-                />
-              </div>
-            )}
-
-            {!allowlistMode && (
-              <div>
-                <Label className="mb-1.5">
-                  {t("dnsBlocklist.custom.blockLabel")}
-                </Label>
-                <Textarea
-                  value={blockDomains}
-                  onChange={(e) => setBlockDomains(e.target.value)}
-                  placeholder={t("dnsBlocklist.custom.blockPlaceholder")}
-                  rows={4}
-                  className="font-mono text-xs"
-                />
-              </div>
-            )}
-
-            <div>
-              <Label className="mb-1.5">
-                {allowlistMode
-                  ? t("dnsBlocklist.custom.allowedOnlyLabel")
-                  : t("dnsBlocklist.custom.allowLabel")}
-              </Label>
-              <Textarea
-                value={allowDomains}
-                onChange={(e) => setAllowDomains(e.target.value)}
-                placeholder={t("dnsBlocklist.custom.allowPlaceholder")}
-                rows={allowlistMode ? 6 : 3}
-                className="font-mono text-xs"
-              />
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                {allowlistMode
-                  ? t("dnsBlocklist.custom.allowedOnlyHint")
-                  : t("dnsBlocklist.custom.allowHint")}
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <LoadingButton isLoading={isSaving} onClick={handleSaveCustom}>
-                {t("common.buttons.save")}
-              </LoadingButton>
-              <Button variant="outline" onClick={handleImport}>
-                {t("common.buttons.import")}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => void handleExport("txt")}
-              >
-                {t("dnsBlocklist.custom.exportTxt")}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => void handleExport("json")}
-              >
-                {t("dnsBlocklist.custom.exportJson")}
-              </Button>
-            </div>
+            {/* Remount on open so the editor reloads the latest lists. */}
+            <CustomDnsEditor key={isOpen ? "open" : "closed"} />
           </AnimatedTabsContent>
         </AnimatedTabs>
       </DialogContent>

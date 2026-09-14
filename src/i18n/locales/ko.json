@@ -587,7 +587,8 @@
     "all": "모두",
     "noGroup": "그룹 없음",
     "pageTitle": "프로필 그룹",
-    "pageDescription": "프로필 그룹을 사용하면 클라이언트, 환경 또는 사용 사례별로 브라우저를 정리할 수 있습니다. 기기 간 그룹을 동기화하여 공유하세요."
+    "pageDescription": "프로필 그룹을 사용하면 클라이언트, 환경 또는 사용 사례별로 브라우저를 정리할 수 있습니다. 기기 간 그룹을 동기화하여 공유하세요.",
+    "ungrouped": "Ungrouped"
   },
   "sync": {
     "mode": {
@@ -1141,7 +1142,9 @@
       "noRules": "구성된 우회 규칙이 없습니다.",
       "ruleTypes": "호스트 이름, IP 주소 및 정규식 패턴을 지원합니다.",
       "vpnLabel": "VPN: {{name}}",
-      "proxyLabel": "프록시: {{name}}"
+      "proxyLabel": "프록시: {{name}}",
+      "ruleCount": "{{count}}개 규칙",
+      "ruleCount_one": "{{count}}개 규칙"
     },
     "launchHook": {
       "title": "실행 후크 URL",
@@ -1174,7 +1177,8 @@
       "security": "보안",
       "delete": "프로필 삭제",
       "activity": "활동",
-      "launchHook": "실행 후크"
+      "launchHook": "실행 후크",
+      "ai": "AI 에이전트"
     },
     "sectionDesc": {
       "fingerprint": "이 프로필이 핑거프린팅 스크립트에 어떻게 표시되는지 구성합니다.",
@@ -1184,7 +1188,8 @@
       "sync": "이 프로필이 다른 기기에 어떻게 미러링되는지 구성합니다.",
       "automation": "이 프로필이 실행될 때마다 명령 또는 스크립트를 실행합니다.",
       "security": "비밀번호로 프로필 데이터를 암호화합니다.",
-      "launchHook": "프로필이 실행될 때마다 이 URL로 GET 요청을 보냅니다."
+      "launchHook": "프로필이 실행될 때마다 이 URL로 GET 요청을 보냅니다.",
+      "ai": "이 프로필의 모델 및 에이전트 할당과 사용량."
     },
     "badges": {
       "locked": "잠김",
@@ -1219,6 +1224,30 @@
       "agentLabel": "에이전트 다운로드 허용",
       "agentDescription": "AI 에이전트, MCP 클라이언트 및 예약 작업이 이 프로필에서 파일을 다운로드할 수 있도록 허용합니다.",
       "saved": "다운로드 설정이 저장됨"
+    },
+    "ai": {
+      "title": "AI agent",
+      "description": "Model and agent pair plus full automation for this profile, with usage and scheduled runs.",
+      "loading": "Loading AI settings...",
+      "noKeys": "No AI keys configured yet, so this section is disabled. Add an endpoint under AI to enable it.",
+      "keyLabel": "Preferred AI key",
+      "keyPlaceholder": "Select a key",
+      "keyDefault": "First saved key",
+      "agentLabel": "Preferred agent",
+      "agentPlaceholder": "Direct chat",
+      "agentDirect": "Direct chat (no CLI agent)",
+      "autoApproveLabel": "Full automation for this profile",
+      "autoApproveDescription": "Apply all agent-proposed changes without asking. Off means only reversible changes apply.",
+      "statsTitle": "Usage for this profile",
+      "statsEmpty": "No recorded AI usage for this profile yet.",
+      "statsLine": "{{total}} tokens ({{prompt}} in / {{completion}} out) across {{count}} calls",
+      "tasksTitle": "Scheduled tasks ({{count}})",
+      "tasksEmpty": "No scheduled tasks target this profile.",
+      "upcomingLabel": "Next",
+      "noUpcoming": "Not scheduled",
+      "lastRunLabel": "Last",
+      "saved": "AI settings saved",
+      "refresh": "목록 새로고침"
     }
   },
   "extensions": {
@@ -1523,7 +1552,9 @@
       "description": "{{count}}개의 그룹을 정말 삭제하시겠습니까? {{names}}. 프로필은 기본으로 이동됩니다.",
       "description_one": "{{count}}개의 그룹을 정말 삭제하시겠습니까? {{names}}. 프로필은 기본으로 이동됩니다.",
       "confirmButton": "그룹 삭제"
-    }
+    },
+    "manageMembersTooltip": "Assign profiles to this group",
+    "membersCol": "Members"
   },
   "proxyAssignment": {
     "title": "프록시 / VPN 할당",
@@ -1557,7 +1588,8 @@
     "selectedProfilesLabel": "선택된 프로필:",
     "assignGroupLabel": "그룹에 할당:",
     "noValidProfiles": "유효한 프로필이 선택되지 않았습니다.",
-    "failedFallback": "프로필에 그룹 할당 실패"
+    "failedFallback": "프로필에 그룹 할당 실패",
+    "moveHint": "Move from {{from}} to {{to}}"
   },
   "profileSelector": {
     "title": "프로필 선택",
@@ -1905,7 +1937,8 @@
     "integrations": "통합",
     "account": "계정",
     "tasks": "작업",
-    "ai": "AI"
+    "ai": "AI",
+    "downloads": "Downloads"
   },
   "pageTitle": {
     "proxies": "네트워크",
@@ -1919,7 +1952,8 @@
     "shortcuts": "키보드 단축키",
     "profiles": "프로필",
     "tasks": "작업",
-    "ai": "AI"
+    "ai": "AI",
+    "downloads": "Downloads"
   },
   "encryption": {
     "required": {
@@ -2159,13 +2193,24 @@
       "google": "Google",
       "openrouter": "OpenRouter",
       "opencode": "OpenCode Go",
-      "custom": "사용자 지정 (OpenAI-compatible)"
+      "custom": "사용자 지정 (OpenAI-compatible)",
+      "xai": "xAI (Grok)"
     },
     "endpoint": "엔드포인트 URL",
     "endpointPlaceholder": "https://.../v1",
     "endpointHint": "OpenAI 호환 제공자를 위한 선택적 재정의입니다. 비워 두면 제공자 기본값을 사용합니다.",
     "endpointInvalid": "유효한 http(s) URL을 입력하세요",
-    "endpointRequired": "사용자 지정 제공자에게는 엔드포인트 URL이 필요합니다"
+    "endpointRequired": "사용자 지정 제공자에게는 엔드포인트 URL이 필요합니다",
+    "refreshModels": "Refresh models",
+    "refreshingModels": "Refreshing...",
+    "modelsLive": "{{count}} models from endpoint",
+    "modelsStatic": "Showing known models — refresh to query the endpoint",
+    "modelsEmpty": "No models returned — check the endpoint and key, then refresh",
+    "chooseModel": "모델 선택",
+    "modelsLiveFailed": "모델 목록을 불러오지 못했습니다 — 알려진 후보를 표시합니다",
+    "filterModels": "모델 필터",
+    "filterNoMatch": "일치하는 모델 없음",
+    "modelsNeedKey": "먼저 API 키를 입력하세요 — 이 제공자는 인증된 요청에만 모델 목록을 제공합니다."
   },
   "agentChat": {
     "title": "AI 에이전트",
@@ -2182,7 +2227,10 @@
     "fullAutomationHint": "Run tool actions immediately without confirmation cards. Only for direct chat; unavailable when delegating to an agent CLI.",
     "fullAutomationActive": "Full automation is on: actions run immediately without confirmation.",
     "activeRuns": "{{count}} running — click to stop",
-    "stopAllDone": "Stop requested for all running agent jobs"
+    "stopAllDone": "Stop requested for all running agent jobs",
+    "profilePlaceholder": "Profile (optional)",
+    "noProfile": "No profile",
+    "fullAutomationProfileHint": "Full automation for the selected profile. Saved to the profile immediately."
   },
   "changeCard": {
     "sectionTitle": "제안된 변경",
@@ -2338,5 +2386,45 @@
       "confirm": "{{count}}개 삭제"
     },
     "bulkDeleteFailed": "일부 구독을 삭제하지 못했습니다"
+  },
+  "groupMembers": {
+    "title": "Members of {{name}}",
+    "description": "Add profiles to this group or remove them. Moving a profile changes its group immediately.",
+    "loading": "Loading profiles...",
+    "membersTitle": "In this group ({{count}})",
+    "empty": "No profiles in this group yet. Add one below.",
+    "addTitle": "Add a profile",
+    "addPlaceholder": "Select a profile",
+    "addButton": "Add",
+    "removeButton": "Remove",
+    "addSuccess": "Profile added to group",
+    "removeSuccess": "Profile removed from group",
+    "moveHint": "Adding moves the profile from its current group (or Ungrouped) into this group."
+  },
+  "aiStats": {
+    "title": "Usage",
+    "description": "Recorded locally from completed runs. Cost appears when the provider reports it.",
+    "noData": "No recorded AI usage yet.",
+    "totalsLine": "{{total}} tokens ({{prompt}} in / {{completion}} out) across {{count}} calls",
+    "byProviderTitle": "By provider",
+    "reset": "Reset",
+    "resetDone": "Usage stats cleared"
+  },
+  "downloads": {
+    "title": "Downloads",
+    "description": "Component downloads: browser binaries, GeoIP data, and DNS blocklists.",
+    "activeTitle": "Active",
+    "refresh": "Refresh",
+    "noActive": "Nothing downloading right now.",
+    "geoipLabel": "GeoIP database",
+    "browsersTitle": "Browsers",
+    "loading": "Loading...",
+    "empty": "No browsers available.",
+    "noneDownloaded": "No versions downloaded yet.",
+    "dnsTitle": "DNS blocklists",
+    "dnsEmpty": "No blocklist status available.",
+    "cached": "Cached",
+    "notCached": "Not cached",
+    "entries": "entries"
   }
 }

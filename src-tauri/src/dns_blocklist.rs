@@ -917,6 +917,10 @@ mod tests {
 
   #[test]
   fn test_cache_fresh_returns_false_when_missing() {
+    // Isolate from the developer machine: a real refreshed cache in the dev
+    // data dir would otherwise make this fail locally while passing in CI.
+    let tmp = tempfile::tempdir().unwrap();
+    let _guard = crate::app_dirs::set_test_cache_dir(tmp.path().to_path_buf());
     assert!(!BlocklistManager::is_cache_fresh(BlocklistLevel::Light));
     assert!(!BlocklistManager::is_cache_fresh(BlocklistLevel::None));
   }

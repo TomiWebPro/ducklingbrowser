@@ -587,7 +587,8 @@
     "all": "Tất cả",
     "noGroup": "Không có nhóm",
     "pageTitle": "Nhóm profile",
-    "pageDescription": "Nhóm profile giúp bạn sắp xếp trình duyệt theo khách hàng, môi trường hoặc mục đích sử dụng. Đồng bộ nhóm giữa các thiết bị để chia sẻ."
+    "pageDescription": "Nhóm profile giúp bạn sắp xếp trình duyệt theo khách hàng, môi trường hoặc mục đích sử dụng. Đồng bộ nhóm giữa các thiết bị để chia sẻ.",
+    "ungrouped": "Ungrouped"
   },
   "sync": {
     "mode": {
@@ -1141,7 +1142,9 @@
       "noRules": "Chưa cấu hình quy tắc bỏ qua nào.",
       "ruleTypes": "Hỗ trợ tên máy chủ, địa chỉ IP và biểu thức chính quy.",
       "vpnLabel": "VPN: {{name}}",
-      "proxyLabel": "Proxy: {{name}}"
+      "proxyLabel": "Proxy: {{name}}",
+      "ruleCount": "{{count}} quy tắc",
+      "ruleCount_one": "{{count}} quy tắc"
     },
     "launchHook": {
       "title": "URL hook khởi chạy",
@@ -1174,7 +1177,8 @@
       "security": "Bảo mật",
       "delete": "Xóa profile",
       "activity": "Hoạt động",
-      "launchHook": "Hook khởi chạy"
+      "launchHook": "Hook khởi chạy",
+      "ai": "Tác nhân AI"
     },
     "sectionDesc": {
       "fingerprint": "Cấu hình cách profile này hiển thị với các script vân tay.",
@@ -1184,7 +1188,8 @@
       "sync": "Cấu hình cách profile này được phản chiếu sang các thiết bị khác của bạn.",
       "automation": "Chạy lệnh hoặc script mỗi khi profile này khởi chạy.",
       "security": "Mã hóa dữ liệu profile bằng mật khẩu.",
-      "launchHook": "Gửi yêu cầu GET đến URL này mỗi khi profile khởi chạy."
+      "launchHook": "Gửi yêu cầu GET đến URL này mỗi khi profile khởi chạy.",
+      "ai": "Mô hình và phân công tác nhân cùng mức sử dụng cho hồ sơ này."
     },
     "badges": {
       "locked": "ĐÃ KHÓA",
@@ -1219,6 +1224,30 @@
       "agentLabel": "Cho phép tác nhân tải xuống",
       "agentDescription": "Cho phép tác nhân AI, ứng dụng MCP và tác vụ đã lên lịch tải tệp trong profile này.",
       "saved": "Đã lưu cài đặt tải xuống"
+    },
+    "ai": {
+      "title": "AI agent",
+      "description": "Model and agent pair plus full automation for this profile, with usage and scheduled runs.",
+      "loading": "Loading AI settings...",
+      "noKeys": "No AI keys configured yet, so this section is disabled. Add an endpoint under AI to enable it.",
+      "keyLabel": "Preferred AI key",
+      "keyPlaceholder": "Select a key",
+      "keyDefault": "First saved key",
+      "agentLabel": "Preferred agent",
+      "agentPlaceholder": "Direct chat",
+      "agentDirect": "Direct chat (no CLI agent)",
+      "autoApproveLabel": "Full automation for this profile",
+      "autoApproveDescription": "Apply all agent-proposed changes without asking. Off means only reversible changes apply.",
+      "statsTitle": "Usage for this profile",
+      "statsEmpty": "No recorded AI usage for this profile yet.",
+      "statsLine": "{{total}} tokens ({{prompt}} in / {{completion}} out) across {{count}} calls",
+      "tasksTitle": "Scheduled tasks ({{count}})",
+      "tasksEmpty": "No scheduled tasks target this profile.",
+      "upcomingLabel": "Next",
+      "noUpcoming": "Not scheduled",
+      "lastRunLabel": "Last",
+      "saved": "AI settings saved",
+      "refresh": "Làm mới danh sách"
     }
   },
   "extensions": {
@@ -1523,7 +1552,9 @@
       "description": "Bạn có chắc muốn xóa {{count}} nhóm? {{names}}. Profile sẽ được chuyển về Mặc định.",
       "description_one": "Bạn có chắc muốn xóa {{count}} nhóm? {{names}}. Profile sẽ được chuyển về Mặc định.",
       "confirmButton": "Xóa nhóm"
-    }
+    },
+    "manageMembersTooltip": "Assign profiles to this group",
+    "membersCol": "Members"
   },
   "proxyAssignment": {
     "title": "Gán proxy / VPN",
@@ -1557,7 +1588,8 @@
     "selectedProfilesLabel": "Profile đã chọn:",
     "assignGroupLabel": "Gán vào nhóm:",
     "noValidProfiles": "Chưa chọn profile hợp lệ nào.",
-    "failedFallback": "Gán nhóm cho profile thất bại"
+    "failedFallback": "Gán nhóm cho profile thất bại",
+    "moveHint": "Move from {{from}} to {{to}}"
   },
   "profileSelector": {
     "title": "Chọn profile",
@@ -1905,7 +1937,8 @@
     "integrations": "Tích hợp",
     "account": "Tài khoản",
     "tasks": "Tác vụ",
-    "ai": "AI"
+    "ai": "AI",
+    "downloads": "Downloads"
   },
   "pageTitle": {
     "proxies": "Mạng",
@@ -1919,7 +1952,8 @@
     "shortcuts": "Phím tắt",
     "profiles": "Hồ sơ",
     "tasks": "Tác vụ",
-    "ai": "AI"
+    "ai": "AI",
+    "downloads": "Downloads"
   },
   "encryption": {
     "required": {
@@ -2159,13 +2193,24 @@
       "google": "Google",
       "openrouter": "OpenRouter",
       "opencode": "OpenCode Go",
-      "custom": "Tùy chỉnh (tương thích OpenAI)"
+      "custom": "Tùy chỉnh (tương thích OpenAI)",
+      "xai": "xAI (Grok)"
     },
     "endpoint": "URL endpoint",
     "endpointPlaceholder": "https://.../v1",
     "endpointHint": "Ghi đè tùy chọn cho nhà cung cấp tương thích OpenAI. Để trống để dùng mặc định của nhà cung cấp.",
     "endpointInvalid": "Nhập URL http(s) hợp lệ",
-    "endpointRequired": "Nhà cung cấp tùy chỉnh cần URL endpoint"
+    "endpointRequired": "Nhà cung cấp tùy chỉnh cần URL endpoint",
+    "refreshModels": "Refresh models",
+    "refreshingModels": "Refreshing...",
+    "modelsLive": "{{count}} models from endpoint",
+    "modelsStatic": "Showing known models — refresh to query the endpoint",
+    "modelsEmpty": "No models returned — check the endpoint and key, then refresh",
+    "chooseModel": "Chọn mô hình",
+    "modelsLiveFailed": "Không tải được mô hình — đang hiển thị các giá trị đã biết",
+    "filterModels": "Lọc mô hình",
+    "filterNoMatch": "Không có mô hình phù hợp",
+    "modelsNeedKey": "Hãy nhập API key trước — nhà cung cấp này chỉ liệt kê mô hình cho yêu cầu đã xác thực."
   },
   "agentChat": {
     "title": "Tác nhân AI",
@@ -2182,7 +2227,10 @@
     "fullAutomationHint": "Run tool actions immediately without confirmation cards. Only for direct chat; unavailable when delegating to an agent CLI.",
     "fullAutomationActive": "Full automation is on: actions run immediately without confirmation.",
     "activeRuns": "{{count}} running — click to stop",
-    "stopAllDone": "Stop requested for all running agent jobs"
+    "stopAllDone": "Stop requested for all running agent jobs",
+    "profilePlaceholder": "Profile (optional)",
+    "noProfile": "No profile",
+    "fullAutomationProfileHint": "Full automation for the selected profile. Saved to the profile immediately."
   },
   "changeCard": {
     "sectionTitle": "Các thay đổi được đề xuất",
@@ -2338,5 +2386,45 @@
       "confirm": "Xóa {{count}}"
     },
     "bulkDeleteFailed": "Không thể xóa một số gói đăng ký"
+  },
+  "groupMembers": {
+    "title": "Members of {{name}}",
+    "description": "Add profiles to this group or remove them. Moving a profile changes its group immediately.",
+    "loading": "Loading profiles...",
+    "membersTitle": "In this group ({{count}})",
+    "empty": "No profiles in this group yet. Add one below.",
+    "addTitle": "Add a profile",
+    "addPlaceholder": "Select a profile",
+    "addButton": "Add",
+    "removeButton": "Remove",
+    "addSuccess": "Profile added to group",
+    "removeSuccess": "Profile removed from group",
+    "moveHint": "Adding moves the profile from its current group (or Ungrouped) into this group."
+  },
+  "aiStats": {
+    "title": "Usage",
+    "description": "Recorded locally from completed runs. Cost appears when the provider reports it.",
+    "noData": "No recorded AI usage yet.",
+    "totalsLine": "{{total}} tokens ({{prompt}} in / {{completion}} out) across {{count}} calls",
+    "byProviderTitle": "By provider",
+    "reset": "Reset",
+    "resetDone": "Usage stats cleared"
+  },
+  "downloads": {
+    "title": "Downloads",
+    "description": "Component downloads: browser binaries, GeoIP data, and DNS blocklists.",
+    "activeTitle": "Active",
+    "refresh": "Refresh",
+    "noActive": "Nothing downloading right now.",
+    "geoipLabel": "GeoIP database",
+    "browsersTitle": "Browsers",
+    "loading": "Loading...",
+    "empty": "No browsers available.",
+    "noneDownloaded": "No versions downloaded yet.",
+    "dnsTitle": "DNS blocklists",
+    "dnsEmpty": "No blocklist status available.",
+    "cached": "Cached",
+    "notCached": "Not cached",
+    "entries": "entries"
   }
 }

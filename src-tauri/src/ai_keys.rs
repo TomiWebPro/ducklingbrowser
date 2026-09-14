@@ -14,6 +14,7 @@ pub enum AiProvider {
   Anthropic,
   Openai,
   Groq,
+  Xai,
   Google,
   Openrouter,
   Opencode,
@@ -26,6 +27,7 @@ impl AiProvider {
       AiProvider::Anthropic => "anthropic",
       AiProvider::Openai => "openai",
       AiProvider::Groq => "groq",
+      AiProvider::Xai => "xai",
       AiProvider::Google => "google",
       AiProvider::Openrouter => "openrouter",
       AiProvider::Opencode => "opencode",
@@ -41,6 +43,7 @@ impl AiProvider {
       AiProvider::Custom => None,
       AiProvider::Openai => Some("https://api.openai.com/v1/chat/completions"),
       AiProvider::Groq => Some("https://api.groq.com/openai/v1/chat/completions"),
+      AiProvider::Xai => Some("https://api.x.ai/v1/chat/completions"),
       AiProvider::Openrouter => Some("https://openrouter.ai/api/v1/chat/completions"),
       _ => None,
     }
@@ -52,6 +55,7 @@ impl AiProvider {
       self,
       AiProvider::Openai
         | AiProvider::Groq
+        | AiProvider::Xai
         | AiProvider::Openrouter
         | AiProvider::Opencode
         | AiProvider::Custom
@@ -67,6 +71,7 @@ impl std::str::FromStr for AiProvider {
       "anthropic" => Ok(AiProvider::Anthropic),
       "openai" => Ok(AiProvider::Openai),
       "groq" => Ok(AiProvider::Groq),
+      "xai" | "grok" => Ok(AiProvider::Xai),
       "google" => Ok(AiProvider::Google),
       "openrouter" => Ok(AiProvider::Openrouter),
       "opencode" => Ok(AiProvider::Opencode),
@@ -399,16 +404,19 @@ pub fn delete_key(id: &str) -> Result<(), String> {
 
 /// Derive the models-list probe URL for OpenAI-compatible providers.
 /// A full `/chat/completions` override is mapped to `/models`; a `/v1` base
-/// gets `/models` appended.
+/// gets `/models` appended; a bare host without a version path falls back
+/// to `/v1/models` so live catalog fetch still works.
 fn compat_models_url(endpoint_override: Option<&str>, fallback: &str) -> String {
   let base = endpoint_override.unwrap_or(fallback);
   let trimmed = base.trim_end_matches('/');
   if let Some(root) = trimmed.strip_suffix("/chat/completions") {
     format!("{root}/models")
+  } else if trimmed.ends_with("/models") {
+    trimmed.to_string()
   } else if trimmed.ends_with("/v1") {
     format!("{trimmed}/models")
   } else {
-    trimmed.to_string()
+    format!("{trimmed}/v1/models")
   }
 }
 
@@ -454,12 +462,23 @@ async fn probe(
       let response = client.get(url).bearer_auth(key).send().await;
       probe_outcome(response)
     }
+    AiProvider::Xai => {
+      let url = compat_models_url(endpoint_override, "https://api.x.ai/v1/chat/completions");
+      let response = client.get(url).bearer_auth(key).send().await;
+      probe_outcome(response)
+    }
     AiProvider::Openrouter => {
       let url = compat_models_url(
         endpoint_override,
         "https://openrouter.ai/api/v1/chat/completions",
       );
-      let response = client.get(url).bearer_auth(key).send().await;
+      let response = client
+        .get(url)
+        .header("HTTP-Referer", "https://ducklingbrowser.com")
+        .header("X-Title", "Duckling Browser")
+        .bearer_auth(key)
+        .send()
+        .await;
       probe_outcome(response)
     }
     AiProvider::Opencode => {
@@ -517,8 +536,11 @@ async fn probe_outcome(response: Result<reqwest::Response, reqwest::Error>) -> (
 }
 
 /// Cap for model suggestions returned to the picker. Large catalogs
-/// (OpenRouter serves 400+) stay usable since the combobox filters as you type.
-const MAX_MODEL_SUGGESTIONS: usize = 100;
+/// (OpenRouter serves 400+ text models) are returned in full: the picker is
+/// a scrollable dropdown with a type-to-filter field, so truncation would
+/// only hide models the user could have picked. The `/models` endpoints
+/// return the whole list without pagination, so one fetch is enough.
+const MAX_MODEL_SUGGESTIONS: usize = 500;
 
 /// Substrings marking non-chat models (audio, image, embeddings, moderation,
 /// safety guard) that would only clutter the model picker.
@@ -601,6 +623,7 @@ async fn fetch_models(
     }
     AiProvider::Openai
     | AiProvider::Groq
+    | AiProvider::Xai
     | AiProvider::Openrouter
     | AiProvider::Opencode
     | AiProvider::Custom => {
@@ -614,6 +637,11 @@ async fn fetch_models(
       };
       let url = compat_models_url(Some(&base), &base);
       let mut request = client.get(url);
+      if provider == AiProvider::Openrouter {
+        request = request
+          .header("HTTP-Referer", "https://ducklingbrowser.com")
+          .header("X-Title", "Duckling Browser");
+      }
       if let Some(k) = clean_key {
         request = request.bearer_auth(k);
       }
@@ -800,6 +828,7 @@ mod tests {
       "anthropic",
       "openai",
       "groq",
+      "xai",
       "google",
       "openrouter",
       "opencode",
@@ -899,7 +928,7 @@ mod tests {
     );
 
     // Cap and blank handling.
-    let many: Vec<String> = (0..150).map(|i| format!("model-{i}")).collect();
+    let many: Vec<String> = (0..600).map(|i| format!("model-{i}")).collect();
     assert_eq!(finalize_models(many).len(), MAX_MODEL_SUGGESTIONS);
     assert!(finalize_models(vec!["  ".to_string(), String::new()]).is_empty());
   }

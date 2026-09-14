@@ -29,6 +29,7 @@ const isInteractiveTarget = (target: EventTarget | null): boolean => {
 };
 
 const ALL_FILTER_ID = "__all__";
+const UNGROUPED_FILTER_ID = "__ungrouped__";
 
 interface Props {
   onCreateProfileDialogOpen: (open: boolean) => void;
@@ -254,6 +255,37 @@ const HomeHeader = ({
                   <span>{t("groups.all")}</span>
                   <span className="text-[11px] text-muted-foreground tabular-nums">
                     {totalProfiles}
+                  </span>
+                </button>
+              );
+            })()}
+            {(() => {
+              const grouped = groups.reduce((n, g) => n + (g.count ?? 0), 0);
+              const ungrouped = Math.max(0, totalProfiles - grouped);
+              // "All" already covers everything when there is nothing to
+              // isolate: no groups configured, nothing grouped yet, or nothing
+              // left ungrouped. Only show this filter when it narrows the list.
+              if (groups.length === 0 || grouped === 0 || ungrouped === 0) {
+                return null;
+              }
+              const active = selectedGroupId === UNGROUPED_FILTER_ID;
+              return (
+                <button
+                  key="__ungrouped__"
+                  type="button"
+                  onClick={() => {
+                    onGroupSelect(active ? ALL_FILTER_ID : UNGROUPED_FILTER_ID);
+                  }}
+                  className={cn(
+                    "flex h-7 shrink-0 items-center gap-1.5 px-1 text-xs transition-colors duration-100",
+                    active
+                      ? "font-medium text-foreground"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <span>{t("groups.ungrouped")}</span>
+                  <span className="text-[11px] text-muted-foreground tabular-nums">
+                    {ungrouped}
                   </span>
                 </button>
               );

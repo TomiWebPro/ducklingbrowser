@@ -587,7 +587,8 @@
     "all": "Todos",
     "noGroup": "Sem grupo",
     "pageTitle": "Grupos de perfis",
-    "pageDescription": "Os grupos de perfis permitem organizar os navegadores por cliente, ambiente ou caso de uso. Sincronize grupos entre dispositivos para compartilhá-los."
+    "pageDescription": "Os grupos de perfis permitem organizar os navegadores por cliente, ambiente ou caso de uso. Sincronize grupos entre dispositivos para compartilhá-los.",
+    "ungrouped": "Ungrouped"
   },
   "sync": {
     "mode": {
@@ -1141,7 +1142,9 @@
       "noRules": "Nenhuma regra de bypass configurada.",
       "ruleTypes": "Suporta nomes de host, endereços IP e padrões regex.",
       "vpnLabel": "VPN: {{name}}",
-      "proxyLabel": "Proxy: {{name}}"
+      "proxyLabel": "Proxy: {{name}}",
+      "ruleCount": "{{count}} regras",
+      "ruleCount_one": "{{count}} regra"
     },
     "launchHook": {
       "title": "URL do hook de inicialização",
@@ -1174,7 +1177,8 @@
       "security": "Segurança",
       "delete": "Excluir perfil",
       "activity": "Atividade",
-      "launchHook": "Hook de inicialização"
+      "launchHook": "Hook de inicialização",
+      "ai": "Agente de IA"
     },
     "sectionDesc": {
       "fingerprint": "Configure como este perfil aparece para scripts de fingerprinting.",
@@ -1184,7 +1188,8 @@
       "sync": "Configure como este perfil é espelhado entre seus dispositivos.",
       "automation": "Execute um comando ao iniciar este perfil.",
       "security": "Criptografe os dados do perfil com uma senha.",
-      "launchHook": "Envia uma requisição GET para esta URL toda vez que o perfil é iniciado."
+      "launchHook": "Envia uma requisição GET para esta URL toda vez que o perfil é iniciado.",
+      "ai": "Modelo e atribuição de agente mais uso para este perfil."
     },
     "badges": {
       "locked": "BLOQUEADO",
@@ -1219,6 +1224,30 @@
       "agentLabel": "Permitir downloads do agente",
       "agentDescription": "Permita que o agente de IA, os clientes MCP e as tarefas agendadas baixem arquivos neste perfil.",
       "saved": "Configurações de download salvas"
+    },
+    "ai": {
+      "title": "AI agent",
+      "description": "Model and agent pair plus full automation for this profile, with usage and scheduled runs.",
+      "loading": "Loading AI settings...",
+      "noKeys": "No AI keys configured yet, so this section is disabled. Add an endpoint under AI to enable it.",
+      "keyLabel": "Preferred AI key",
+      "keyPlaceholder": "Select a key",
+      "keyDefault": "First saved key",
+      "agentLabel": "Preferred agent",
+      "agentPlaceholder": "Direct chat",
+      "agentDirect": "Direct chat (no CLI agent)",
+      "autoApproveLabel": "Full automation for this profile",
+      "autoApproveDescription": "Apply all agent-proposed changes without asking. Off means only reversible changes apply.",
+      "statsTitle": "Usage for this profile",
+      "statsEmpty": "No recorded AI usage for this profile yet.",
+      "statsLine": "{{total}} tokens ({{prompt}} in / {{completion}} out) across {{count}} calls",
+      "tasksTitle": "Scheduled tasks ({{count}})",
+      "tasksEmpty": "No scheduled tasks target this profile.",
+      "upcomingLabel": "Next",
+      "noUpcoming": "Not scheduled",
+      "lastRunLabel": "Last",
+      "saved": "AI settings saved",
+      "refresh": "Atualizar listas"
     }
   },
   "extensions": {
@@ -1523,7 +1552,9 @@
       "description": "Tem certeza que deseja excluir {{count}} grupos? {{names}}. Os perfis serão movidos para Padrão.",
       "description_one": "Tem certeza que deseja excluir {{count}} grupo? {{names}}. Os perfis serão movidos para Padrão.",
       "confirmButton": "Excluir grupos"
-    }
+    },
+    "manageMembersTooltip": "Assign profiles to this group",
+    "membersCol": "Members"
   },
   "proxyAssignment": {
     "title": "Atribuir proxy / VPN",
@@ -1557,7 +1588,8 @@
     "selectedProfilesLabel": "Perfis selecionados:",
     "assignGroupLabel": "Atribuir ao grupo:",
     "noValidProfiles": "Nenhum perfil válido selecionado.",
-    "failedFallback": "Falha ao atribuir grupo aos perfis"
+    "failedFallback": "Falha ao atribuir grupo aos perfis",
+    "moveHint": "Move from {{from}} to {{to}}"
   },
   "profileSelector": {
     "title": "Selecionar perfil",
@@ -1905,7 +1937,8 @@
     "integrations": "Integrações",
     "account": "Conta",
     "tasks": "Tarefas",
-    "ai": "IA"
+    "ai": "IA",
+    "downloads": "Downloads"
   },
   "pageTitle": {
     "proxies": "Rede",
@@ -1919,7 +1952,8 @@
     "shortcuts": "Atalhos de teclado",
     "profiles": "Perfis",
     "tasks": "Tarefas",
-    "ai": "IA"
+    "ai": "IA",
+    "downloads": "Downloads"
   },
   "encryption": {
     "required": {
@@ -2159,13 +2193,24 @@
       "google": "Google",
       "openrouter": "OpenRouter",
       "opencode": "OpenCode Go",
-      "custom": "Personalizado (compatível com OpenAI)"
+      "custom": "Personalizado (compatível com OpenAI)",
+      "xai": "xAI (Grok)"
     },
     "endpoint": "URL do endpoint",
     "endpointPlaceholder": "https://.../v1",
     "endpointHint": "Opcional para provedores compatíveis com OpenAI. Deixe vazio para usar o padrão do provedor.",
     "endpointInvalid": "Digite uma URL http(s) válida",
-    "endpointRequired": "Um provedor personalizado precisa de uma URL de endpoint"
+    "endpointRequired": "Um provedor personalizado precisa de uma URL de endpoint",
+    "refreshModels": "Refresh models",
+    "refreshingModels": "Refreshing...",
+    "modelsLive": "{{count}} models from endpoint",
+    "modelsStatic": "Showing known models — refresh to query the endpoint",
+    "modelsEmpty": "No models returned — check the endpoint and key, then refresh",
+    "chooseModel": "Escolher um modelo",
+    "modelsLiveFailed": "Não foi possível carregar os modelos — mostrando padrões conhecidos",
+    "filterModels": "Filtrar modelos",
+    "filterNoMatch": "Nenhum modelo correspondente",
+    "modelsNeedKey": "Insira uma chave API primeiro — este provedor só lista modelos para requisições autenticadas."
   },
   "agentChat": {
     "title": "Agente IA",
@@ -2182,7 +2227,10 @@
     "fullAutomationHint": "Run tool actions immediately without confirmation cards. Only for direct chat; unavailable when delegating to an agent CLI.",
     "fullAutomationActive": "Full automation is on: actions run immediately without confirmation.",
     "activeRuns": "{{count}} running — click to stop",
-    "stopAllDone": "Stop requested for all running agent jobs"
+    "stopAllDone": "Stop requested for all running agent jobs",
+    "profilePlaceholder": "Profile (optional)",
+    "noProfile": "No profile",
+    "fullAutomationProfileHint": "Full automation for the selected profile. Saved to the profile immediately."
   },
   "changeCard": {
     "sectionTitle": "Alterações propostas",
@@ -2338,5 +2386,45 @@
       "confirm": "Excluir {{count}}"
     },
     "bulkDeleteFailed": "Falha ao excluir algumas assinaturas"
+  },
+  "groupMembers": {
+    "title": "Members of {{name}}",
+    "description": "Add profiles to this group or remove them. Moving a profile changes its group immediately.",
+    "loading": "Loading profiles...",
+    "membersTitle": "In this group ({{count}})",
+    "empty": "No profiles in this group yet. Add one below.",
+    "addTitle": "Add a profile",
+    "addPlaceholder": "Select a profile",
+    "addButton": "Add",
+    "removeButton": "Remove",
+    "addSuccess": "Profile added to group",
+    "removeSuccess": "Profile removed from group",
+    "moveHint": "Adding moves the profile from its current group (or Ungrouped) into this group."
+  },
+  "aiStats": {
+    "title": "Usage",
+    "description": "Recorded locally from completed runs. Cost appears when the provider reports it.",
+    "noData": "No recorded AI usage yet.",
+    "totalsLine": "{{total}} tokens ({{prompt}} in / {{completion}} out) across {{count}} calls",
+    "byProviderTitle": "By provider",
+    "reset": "Reset",
+    "resetDone": "Usage stats cleared"
+  },
+  "downloads": {
+    "title": "Downloads",
+    "description": "Component downloads: browser binaries, GeoIP data, and DNS blocklists.",
+    "activeTitle": "Active",
+    "refresh": "Refresh",
+    "noActive": "Nothing downloading right now.",
+    "geoipLabel": "GeoIP database",
+    "browsersTitle": "Browsers",
+    "loading": "Loading...",
+    "empty": "No browsers available.",
+    "noneDownloaded": "No versions downloaded yet.",
+    "dnsTitle": "DNS blocklists",
+    "dnsEmpty": "No blocklist status available.",
+    "cached": "Cached",
+    "notCached": "Not cached",
+    "entries": "entries"
   }
 }

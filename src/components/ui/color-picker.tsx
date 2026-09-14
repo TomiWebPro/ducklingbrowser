@@ -98,13 +98,37 @@ export const ColorPicker = ({
   const [lightness, setLightness] = useState(initialLightness);
   const [alpha, setAlpha] = useState(initialAlpha);
   const [mode, setMode] = useState("hex");
-  const lastEmittedRef = useRef<string>(
-    `${Math.round(initialHue)}|${Math.round(initialSaturation)}|${Math.round(initialLightness)}|${Math.round(initialAlpha)}`,
+  // Hex of the last color we emitted (or received) — comparing on the hex
+  // string breaks the emit/sync feedback loop: every rgb/hex round-trip
+  // drifts the hsl floats by quantization noise, so float comparison would
+  // ping-pong between adjacent values and re-emit forever.
+  const lastSeenHexRef = useRef<string>(
+    Color.hsl(initialHue, initialSaturation, initialLightness)
+      .alpha(initialAlpha / 100)
+      .hex()
+      .toLowerCase(),
   );
+  // The parent callback is usually an inline arrow (new identity each render);
+  // calling it through a ref keeps the emit effect from re-firing on every
+  // parent render.
+  const onColorChangeRef = useRef(onColorChange);
+  onColorChangeRef.current = onColorChange;
 
   // Update color when controlled value changes
   useEffect(() => {
     if (value !== undefined) {
+      let incomingHex: string;
+      try {
+        incomingHex = Color(value).hex().toLowerCase();
+      } catch {
+        return;
+      }
+      // Already emitted (or already synced) this exact color — syncing again
+      // would feed quantization drift back into state and loop forever.
+      if (incomingHex === lastSeenHexRef.current) {
+        return;
+      }
+      lastSeenHexRef.current = incomingHex;
       const c = Color(value).hsl();
       const nextHue = Number.isFinite(c.hue()) ? c.hue() : 0;
       const nextSat = Number.isFinite(c.saturationl()) ? c.saturationl() : 0;
@@ -113,28 +137,28 @@ export const ColorPicker = ({
         (Number.isFinite(c.alpha()) ? c.alpha() : 1) * 100,
       );
 
-      // Update internal state unconditionally when value prop changes
       setHue(nextHue);
       setSaturation(nextSat);
       setLightness(nextLight);
       setAlpha(nextAlpha);
     }
-  }, [value]); // Remove state values from dependency array to prevent infinite loop
+  }, [value]);
 
   // Notify parent of changes
   useEffect(() => {
-    if (onColorChange) {
-      const key = `${Math.round(hue)}|${Math.round(saturation)}|${Math.round(lightness)}|${Math.round(alpha)}`;
-      if (key === lastEmittedRef.current) {
-        return;
-      }
-      lastEmittedRef.current = key;
-
-      const color = Color.hsl(hue, saturation, lightness).alpha(alpha / 100);
-      const rgba = color.rgb().array();
-      onColorChange([rgba[0], rgba[1], rgba[2], alpha / 100]);
+    const emit = onColorChangeRef.current;
+    if (!emit) {
+      return;
     }
-  }, [hue, saturation, lightness, alpha, onColorChange]);
+    const color = Color.hsl(hue, saturation, lightness).alpha(alpha / 100);
+    const hex = color.hex().toLowerCase();
+    if (hex === lastSeenHexRef.current) {
+      return;
+    }
+    lastSeenHexRef.current = hex;
+    const rgba = color.rgb().array();
+    emit([rgba[0], rgba[1], rgba[2], alpha / 100]);
+  }, [hue, saturation, lightness, alpha]);
 
   return (
     <ColorPickerContext.Provider

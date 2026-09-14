@@ -174,9 +174,11 @@ export function BrowserConfigForm({
   const renderAdvancedForm = () => (
     <div className="space-y-6">
       {/* Operating System Selection */}
-      <div className="space-y-3">
+      <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <Label>{t("fingerprint.osLabel")}</Label>
+          <Label className="text-base font-semibold">
+            {t("fingerprint.osLabel")}
+          </Label>
           {profileVersion && (!isCreating || crossOsUnlocked) && (
             <LoadingButton
               isLoading={isGeneratingFingerprint}
@@ -226,8 +228,8 @@ export function BrowserConfigForm({
         )}
       </div>
 
-      {/* Randomize Fingerprint Option */}
-      <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
+      {/* Launch options: randomize + auto location share one box */}
+      <div className="rounded-md border border-border bg-muted/40 space-y-3 p-4">
         <div className="flex items-center gap-x-2">
           <Checkbox
             id="randomize-fingerprint"
@@ -244,10 +246,18 @@ export function BrowserConfigForm({
         <p className="ml-6 text-sm text-muted-foreground">
           {t("fingerprint.generateRandomDescription")}
         </p>
-      </div>
-
-      {/* Automatic Location Configuration */}
-      <div className="space-y-3">
+        <p className="ml-6 text-xs text-muted-foreground">
+          {t("fingerprint.basicWarning")}
+          {isEditingDisabled && (
+            <>
+              {" "}
+              {readOnly
+                ? t("fingerprint.editingDisabledRunning")
+                : t("fingerprint.editingDisabledRandomized")}
+            </>
+          )}
+        </p>
+        <div className="h-px bg-border" />
         <div className="flex items-center gap-x-2">
           <Checkbox
             id="auto-location-advanced"
@@ -255,7 +265,7 @@ export function BrowserConfigForm({
             onCheckedChange={handleAutoLocationToggle}
             disabled={readOnly}
           />
-          <Label htmlFor="auto-location-advanced">
+          <Label htmlFor="auto-location-advanced" className="font-medium">
             {t("fingerprint.autoLocationDescription")}
           </Label>
         </div>
@@ -266,30 +276,15 @@ export function BrowserConfigForm({
           limitedMode ? "relative overflow-hidden rounded-lg" : undefined
         }
       >
-        {!limitedMode &&
-          (isEditingDisabled ? (
-            <Alert>
-              <AlertDescription>
-                {readOnly
-                  ? t("fingerprint.editingDisabledRunning")
-                  : t("fingerprint.editingDisabledRandomized")}
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <Alert>
-              <AlertDescription>
-                {t("fingerprint.basicWarning")}
-              </AlertDescription>
-            </Alert>
-          ))}
-
         <fieldset
           disabled={isEditingDisabled || limitedMode}
-          className="space-y-6"
+          className="space-y-4"
         >
           {/* User Agent and Platform */}
-          <div className="space-y-3">
-            <Label>{t("fingerprint.userAgentAndPlatform")}</Label>
+          <div className="rounded-md border border-border bg-muted/40 space-y-3 p-4">
+            <p className="text-sm font-semibold text-foreground">
+              {t("fingerprint.userAgentAndPlatform")}
+            </p>
             <div className="grid grid-cols-1 gap-4 @md:grid-cols-2">
               <div className="col-span-full space-y-2">
                 <Label htmlFor="user-agent">{t("fingerprint.userAgent")}</Label>
@@ -379,8 +374,10 @@ export function BrowserConfigForm({
           </div>
 
           {/* Hardware Properties */}
-          <div className="space-y-3">
-            <Label>{t("fingerprint.hardwareProperties")}</Label>
+          <div className="rounded-md border border-border bg-muted/40 space-y-3 p-4">
+            <p className="text-sm font-semibold text-foreground">
+              {t("fingerprint.hardwareProperties")}
+            </p>
             <div className="grid grid-cols-1 gap-4 @md:grid-cols-2 @2xl:grid-cols-3">
               <div className="space-y-2">
                 <Label htmlFor="hardware-concurrency">
@@ -437,8 +434,10 @@ export function BrowserConfigForm({
           </div>
 
           {/* Screen Properties */}
-          <div className="space-y-3">
-            <Label>{t("fingerprint.screenProperties")}</Label>
+          <div className="rounded-md border border-border bg-muted/40 space-y-3 p-4">
+            <p className="text-sm font-semibold text-foreground">
+              {t("fingerprint.screenProperties")}
+            </p>
             <div className="grid grid-cols-1 gap-4 @md:grid-cols-2 @2xl:grid-cols-3">
               <div className="space-y-2">
                 <Label htmlFor="screen-width">
@@ -559,8 +558,10 @@ export function BrowserConfigForm({
           </div>
 
           {/* Window Properties */}
-          <div className="space-y-3">
-            <Label>{t("fingerprint.windowProperties")}</Label>
+          <div className="rounded-md border border-border bg-muted/40 space-y-3 p-4">
+            <p className="text-sm font-semibold text-foreground">
+              {t("fingerprint.windowProperties")}
+            </p>
             <div className="grid grid-cols-1 gap-4 @md:grid-cols-2 @2xl:grid-cols-3">
               <div className="space-y-2">
                 <Label htmlFor="window-outer-width">
@@ -672,8 +673,10 @@ export function BrowserConfigForm({
           </div>
 
           {/* Language & Locale */}
-          <div className="space-y-3">
-            <Label>{t("fingerprint.languageAndLocale")}</Label>
+          <div className="rounded-md border border-border bg-muted/40 space-y-3 p-4">
+            <p className="text-sm font-semibold text-foreground">
+              {t("fingerprint.languageAndLocale")}
+            </p>
             <div className="grid grid-cols-1 gap-4 @md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="language">
@@ -751,8 +754,10 @@ export function BrowserConfigForm({
           </div>
 
           {/* Timezone and Geolocation */}
-          <div className="space-y-3">
-            <Label>{t("fingerprint.timezoneAndGeolocation")}</Label>
+          <div className="rounded-md border border-border bg-muted/40 space-y-3 p-4">
+            <p className="text-sm font-semibold text-foreground">
+              {t("fingerprint.timezoneAndGeolocation")}
+            </p>
             <p className="text-sm text-muted-foreground">
               {t("fingerprint.timezoneGeolocationDescription")}
             </p>
@@ -851,8 +856,10 @@ export function BrowserConfigForm({
           </div>
 
           {/* WebGL Properties */}
-          <div className="space-y-3">
-            <Label>{t("fingerprint.webglProperties")}</Label>
+          <div className="rounded-md border border-border bg-muted/40 space-y-3 p-4">
+            <p className="text-sm font-semibold text-foreground">
+              {t("fingerprint.webglProperties")}
+            </p>
             <div className="grid grid-cols-1 gap-4 @md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="webgl-vendor">
@@ -894,8 +901,10 @@ export function BrowserConfigForm({
           </div>
 
           {/* WebGL Parameters (JSON) */}
-          <div className="space-y-3">
-            <Label>{t("fingerprint.webglParametersJson")}</Label>
+          <div className="rounded-md border border-border bg-muted/40 space-y-3 p-4">
+            <p className="text-sm font-semibold text-foreground">
+              {t("fingerprint.webglParametersJson")}
+            </p>
             <Textarea
               value={fingerprintConfig.webglParameters ?? ""}
               onChange={(e) => {
@@ -911,8 +920,10 @@ export function BrowserConfigForm({
           </div>
 
           {/* Canvas Noise Seed */}
-          <div className="space-y-3">
-            <Label>{t("fingerprint.canvasFingerprint")}</Label>
+          <div className="rounded-md border border-border bg-muted/40 space-y-3 p-4">
+            <p className="text-sm font-semibold text-foreground">
+              {t("fingerprint.canvasFingerprint")}
+            </p>
             <div className="space-y-2">
               <Label htmlFor="canvas-noise-seed">
                 {t("fingerprint.canvasNoiseSeed")}
@@ -935,8 +946,10 @@ export function BrowserConfigForm({
           </div>
 
           {/* Fonts (JSON) */}
-          <div className="space-y-3">
-            <Label>{t("fingerprint.fontsJson")}</Label>
+          <div className="rounded-md border border-border bg-muted/40 space-y-3 p-4">
+            <p className="text-sm font-semibold text-foreground">
+              {t("fingerprint.fontsJson")}
+            </p>
             <Textarea
               value={fingerprintConfig.fonts ?? ""}
               onChange={(e) => {
@@ -949,8 +962,10 @@ export function BrowserConfigForm({
           </div>
 
           {/* Audio */}
-          <div className="space-y-3">
-            <Label>{t("fingerprint.audioProperties")}</Label>
+          <div className="rounded-md border border-border bg-muted/40 space-y-3 p-4">
+            <p className="text-sm font-semibold text-foreground">
+              {t("fingerprint.audioProperties")}
+            </p>
             <div className="grid grid-cols-1 gap-4 @md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="audio-sample-rate">
@@ -992,8 +1007,10 @@ export function BrowserConfigForm({
           </div>
 
           {/* Battery */}
-          <div className="space-y-3">
-            <Label>{t("fingerprint.battery")}</Label>
+          <div className="rounded-md border border-border bg-muted/40 space-y-3 p-4">
+            <p className="text-sm font-semibold text-foreground">
+              {t("fingerprint.battery")}
+            </p>
             <div className="grid grid-cols-1 gap-4 @md:grid-cols-2 @2xl:grid-cols-3">
               <div className="space-y-2">
                 <div className="flex items-center gap-x-2">
@@ -1038,8 +1055,10 @@ export function BrowserConfigForm({
           </div>
 
           {/* Vendor Info */}
-          <div className="space-y-3">
-            <Label>{t("fingerprint.vendorInfo")}</Label>
+          <div className="rounded-md border border-border bg-muted/40 space-y-3 p-4">
+            <p className="text-sm font-semibold text-foreground">
+              {t("fingerprint.vendorInfo")}
+            </p>
             <div className="grid grid-cols-1 gap-4 @md:grid-cols-2 @2xl:grid-cols-3">
               <div className="space-y-2">
                 <Label htmlFor="vendor">{t("fingerprint.vendor")}</Label>
@@ -1134,8 +1153,10 @@ export function BrowserConfigForm({
 
           <TabsContent value="automatic" className="space-y-6">
             {/* Operating System Selection */}
-            <div className="mt-4 space-y-3">
-              <Label>{t("fingerprint.osLabel")}</Label>
+            <div className="mt-4 space-y-4">
+              <Label className="text-base font-semibold">
+                {t("fingerprint.osLabel")}
+              </Label>
               <Select
                 value={selectedOS}
                 onValueChange={(value: TargetOS) => {
@@ -1179,8 +1200,8 @@ export function BrowserConfigForm({
               )}
             </div>
 
-            {/* Randomize Fingerprint Option */}
-            <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
+            {/* Launch options: randomize + auto location share one box */}
+            <div className="rounded-md border border-border bg-muted/40 space-y-3 p-4">
               <div className="flex items-center gap-x-2">
                 <Checkbox
                   id="randomize-fingerprint-auto"
@@ -1200,10 +1221,7 @@ export function BrowserConfigForm({
               <p className="ml-6 text-sm text-muted-foreground">
                 {t("fingerprint.generateRandomDescription")}
               </p>
-            </div>
-
-            {/* Automatic Location Configuration */}
-            <div className="space-y-3">
+              <div className="h-px bg-border" />
               <div className="flex items-center gap-x-2">
                 <Checkbox
                   id="auto-location"
@@ -1211,7 +1229,7 @@ export function BrowserConfigForm({
                   onCheckedChange={handleAutoLocationToggle}
                   disabled={isEditingDisabled}
                 />
-                <Label htmlFor="auto-location">
+                <Label htmlFor="auto-location" className="font-medium">
                   {t("fingerprint.autoLocationDescription")}
                 </Label>
               </div>

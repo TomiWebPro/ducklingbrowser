@@ -86,6 +86,24 @@ export const AI_PROVIDERS: ProviderMeta[] = [
     ],
   },
   {
+    id: "xai",
+    defaultModel: "grok-4-1-fast-non-reasoning",
+    defaultEndpoint: "https://api.x.ai/v1",
+    showEndpoint: true,
+    requireEndpoint: false,
+    endpointPlaceholder: "https://api.x.ai/v1",
+    models: [
+      "grok-4-1-fast-non-reasoning",
+      "grok-4-1-fast-reasoning",
+      "grok-4-fast-non-reasoning",
+      "grok-4-fast-reasoning",
+      "grok-4-0709",
+      "grok-4",
+      "grok-3-mini",
+      "grok-3",
+    ],
+  },
+  {
     id: "google",
     defaultModel: "gemini-2.5-flash",
     showEndpoint: false,
@@ -165,6 +183,19 @@ export const AI_PROVIDERS: ProviderMeta[] = [
 export function providerMeta(id: string): ProviderMeta | undefined {
   return AI_PROVIDERS.find((p) => p.id === id);
 }
+
+/**
+ * Providers whose model catalog is reachable without an API key: OpenRouter
+ * serves its public catalog keyless, the OpenCode gateway accepts anonymous
+ * listing, and custom endpoints are often local servers (Ollama, LM Studio)
+ * with auth disabled. Every other provider 401s anonymous `/models` calls,
+ * so the UI asks for a key first instead of attempting a doomed fetch.
+ */
+export const CATALOG_KEY_OPTIONAL: ReadonlySet<string> = new Set([
+  "openrouter",
+  "opencode",
+  "custom",
+]);
 
 export function providerLabel(t: TFunction, provider: string): string {
   const key = `aiKeys.providers.${provider}`;

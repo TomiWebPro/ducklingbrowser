@@ -9,6 +9,7 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { FaApple, FaLinux, FaWindows } from "react-icons/fa";
 import {
+  LuBot,
   LuChevronRight,
   LuClipboard,
   LuClipboardCheck,
@@ -33,6 +34,7 @@ import {
   LuUsers,
   LuX,
 } from "react-icons/lu";
+import { CustomDnsEditor } from "@/components/dns-blocklist-dialog";
 import { SharedFingerprintConfigForm } from "@/components/shared-fingerprint-config-form";
 import { AnimatedSwitch } from "@/components/ui/animated-switch";
 import { Button } from "@/components/ui/button";
@@ -74,7 +76,10 @@ import {
 } from "@/components/ui/select";
 import { translateBackendError } from "@/lib/backend-errors";
 import { getProfileIcon } from "@/lib/browser-utils";
-import { DNS_BLOCKLIST_LEVELS } from "@/lib/dns-blocklist-levels";
+import {
+  DNS_BLOCKLIST_LEVELS,
+  dnsBlocklistLabelKey,
+} from "@/lib/dns-blocklist-levels";
 import { formatRelativeTime } from "@/lib/flag-utils";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import { cn } from "@/lib/utils";
@@ -182,7 +187,34 @@ function InfoCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-md border bg-muted/50 px-3 py-2.5">
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-0.5 truncate text-sm">{value}</p>
+      <p className="mt-0.5 truncate text-sm text-foreground">{value}</p>
+    </div>
+  );
+}
+
+/**
+ * Shared section heading: title renders in the strong foreground tone,
+ * description in muted — the same two-tone hierarchy in every tab so equal
+ * priority titles always share one size/weight/color.
+ */
+function SectionHeader({
+  icon,
+  title,
+  description,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description?: string;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+        {icon}
+        {title}
+      </div>
+      {description && (
+        <p className="text-xs text-muted-foreground">{description}</p>
+      )}
     </div>
   );
 }
@@ -547,6 +579,7 @@ export function ProfileInfoDialog({
       hidden: profile.ephemeral === true,
     },
     {
+      id: "bypass",
       icon: <LuShieldCheck className="size-4" />,
       label: t("profileInfo.network.bypassRulesTitle"),
       onClick: () => {
@@ -554,6 +587,7 @@ export function ProfileInfoDialog({
       },
     },
     {
+      id: "dns",
       icon: <LuShield className="size-4" />,
       label: t("dnsBlocklist.title"),
       onClick: () => {
@@ -700,6 +734,7 @@ type ProfileSection =
   | "extensions"
   | "sync"
   | "automation"
+  | "ai"
   | "security"
   | "delete";
 
@@ -743,6 +778,8 @@ function ProfileInfoLayout({
   const cookiesAction = cookiesManageAction ?? cookiesCopyAction;
   const extensionAction = findAction("extension");
   const syncAction = findAction("sync");
+  const bypassAction = findAction("bypass");
+  const dnsAction = findAction("dns");
   const _launchHookAction = findAction("hook");
   const _networkAction = findAction("network");
   // Password actions are no longer routed via the legacy action handlers —
@@ -837,6 +874,14 @@ function ProfileInfoLayout({
       badge: profile.launch_hook ? t("profileInfo.badges.active") : undefined,
     },
     {
+      id: "ai",
+      icon: <LuBot className="size-3.5" />,
+      label: t("profileInfo.sections.ai"),
+      badge: profile.agent_auto_approve
+        ? t("profileInfo.badges.active")
+        : undefined,
+    },
+    {
       id: "security",
       icon: <LuKey className="size-3.5" />,
       label: t("profileInfo.sections.security"),
@@ -926,9 +971,9 @@ function ProfileInfoLayout({
         </nav>
 
         {/* Main */}
-        <div className="scroll-fade min-w-0 flex-1 overflow-y-auto p-4">
+        <div className="scroll-fade min-w-0 flex-1 overflow-y-auto p-5">
           {section === "overview" && (
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-4">
               {/* Hero */}
               <div className="flex items-center gap-3">
                 <div className="shrink-0 rounded-lg bg-muted p-2.5">
@@ -1000,7 +1045,7 @@ function ProfileInfoLayout({
               </div>
 
               {/* Activity */}
-              <div className="mt-1 flex flex-col gap-1.5">
+              <div className="flex flex-col gap-2">
                 <span className="text-[10px] tracking-wide text-muted-foreground uppercase">
                   {t("profileInfo.sections.activity")}
                 </span>
@@ -1065,6 +1110,8 @@ function ProfileInfoLayout({
               storedProxies={storedProxies}
               vpnConfigs={vpnConfigs}
               isDisabled={isDisabled}
+              onOpenBypassRules={bypassAction?.onClick}
+              onOpenDnsBlocklist={dnsAction?.onClick}
               t={t}
             />
           )}
@@ -1099,7 +1146,7 @@ function ProfileInfoLayout({
           )}
 
           {section === "automation" && (
-            <div className="flex flex-col gap-5">
+            <div className="flex flex-col gap-4">
               <LaunchHookEditor profile={profile} t={t} />
               <DownloadsEditor
                 profile={profile}
@@ -1107,6 +1154,10 @@ function ProfileInfoLayout({
                 t={t}
               />
             </div>
+          )}
+
+          {section === "ai" && (
+            <AiSectionInline profile={profile} isDisabled={isDisabled} t={t} />
           )}
 
           {section === "security" && (
@@ -1239,14 +1290,12 @@ function LaunchHookEditor({
   };
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-2 text-sm font-semibold">
-        <LuLink className="size-4" />
-        {t("profileInfo.sections.launchHook")}
-      </div>
-      <p className="text-xs text-muted-foreground">
-        {t("profileInfo.sectionDesc.launchHook")}
-      </p>
+    <div className="flex flex-col gap-4">
+      <SectionHeader
+        icon={<LuLink className="size-4" />}
+        title={t("profileInfo.sections.launchHook")}
+        description={t("profileInfo.sectionDesc.launchHook")}
+      />
       <Input
         type="url"
         value={value}
@@ -1303,19 +1352,19 @@ function DownloadsEditor({
   const { t: tFn } = useTranslation();
   const [dir, setDir] = React.useState(profile.download_dir ?? "");
   const [allowAgent, setAllowAgent] = React.useState(
-    profile.allow_agent_downloads !== false,
+    profile.allow_agent_downloads === true,
   );
   const [isSaving, setIsSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     setDir(profile.download_dir ?? "");
-    setAllowAgent(profile.allow_agent_downloads !== false);
+    setAllowAgent(profile.allow_agent_downloads === true);
   }, [profile.download_dir, profile.allow_agent_downloads]);
 
   const initialDir = profile.download_dir ?? "";
   const dirtyDir = dir !== initialDir;
-  const dirtyAllow = allowAgent !== (profile.allow_agent_downloads !== false);
+  const dirtyAllow = allowAgent !== (profile.allow_agent_downloads === true);
 
   const onSave = async () => {
     setIsSaving(true);
@@ -1339,14 +1388,12 @@ function DownloadsEditor({
   };
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-2 text-sm font-semibold">
-        <LuDownload className="size-4" />
-        {t("profileInfo.downloads.title")}
-      </div>
-      <p className="text-xs text-muted-foreground">
-        {t("profileInfo.downloads.description")}
-      </p>
+    <div className="flex flex-col gap-4">
+      <SectionHeader
+        icon={<LuDownload className="size-4" />}
+        title={t("profileInfo.downloads.title")}
+        description={t("profileInfo.downloads.description")}
+      />
       <div className="space-y-1.5">
         <span className="text-[10px] tracking-wide text-muted-foreground uppercase">
           {t("profileInfo.downloads.folder")}
@@ -1397,7 +1444,7 @@ function DownloadsEditor({
             className="h-7 text-xs"
             onClick={() => {
               setDir(initialDir);
-              setAllowAgent(profile.allow_agent_downloads !== false);
+              setAllowAgent(profile.allow_agent_downloads === true);
               setError(null);
             }}
           >
@@ -1405,6 +1452,355 @@ function DownloadsEditor({
           </Button>
         )}
       </div>
+    </div>
+  );
+}
+
+interface AiUsageEntry {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  cost_usd?: number | null;
+  calls: number;
+}
+
+interface ProfileTaskRow {
+  id: string;
+  name: string;
+  mode: string;
+  enabled: boolean;
+  next_run_at?: string | null;
+  last_run_at?: string | null;
+  last_run_status?: string | null;
+  last_run_error?: string | null;
+  last_run_duration_ms?: number | null;
+}
+
+function AiSectionInline({
+  profile,
+  isDisabled,
+  t,
+}: {
+  profile: BrowserProfile;
+  isDisabled: boolean;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  const [keys, setKeys] = React.useState<
+    { id: string; name: string; provider: string; model: string }[]
+  >([]);
+  const [cliAgents, setCliAgents] = React.useState<
+    { id: string; display_name: string }[]
+  >([]);
+  const [stats, setStats] = React.useState<AiUsageEntry | null>(null);
+  const [tasks, setTasks] = React.useState<ProfileTaskRow[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [keyId, setKeyId] = React.useState(profile.agent_key_id ?? "");
+  const [agentId, setAgentId] = React.useState(profile.agent_id ?? "");
+  const [autoApprove, setAutoApprove] = React.useState(
+    profile.agent_auto_approve === true,
+  );
+  const [isSaving, setIsSaving] = React.useState(false);
+  const [refreshing, setRefreshing] = React.useState(false);
+
+  // Reloads keys/agents/usage/tasks from the backend. Kept separate from the
+  // initial `load` so a manual refresh doesn't flash the loading skeleton —
+  // the dropdowns stay mounted and just receive the fresh offerings.
+  const fetchLists = React.useCallback(async () => {
+    const [loadedKeys, loadedAgents, usage, allTasks] = await Promise.all([
+      invoke<{ id: string; name: string; provider: string; model: string }[]>(
+        "ai_keys_list",
+      ).catch(() => []),
+      invoke<
+        {
+          id: string;
+          display_name: string;
+          category: string;
+          detected: boolean;
+        }[]
+      >("list_mcp_agents").catch(
+        () =>
+          [] as {
+            id: string;
+            display_name: string;
+            category: string;
+            detected: boolean;
+          }[],
+      ),
+      invoke<{
+        by_profile?: Record<string, AiUsageEntry>;
+        byProfile?: Record<string, AiUsageEntry>;
+      }>("ai_usage_stats").catch(
+        (): { by_profile: Record<string, AiUsageEntry> } => ({
+          by_profile: {},
+        }),
+      ),
+      invoke<ProfileTaskRow[]>("scheduler_list").catch(() => []),
+    ]);
+    setKeys(Array.isArray(loadedKeys) ? loadedKeys : []);
+    const agents = Array.isArray(loadedAgents) ? loadedAgents : [];
+    setCliAgents(
+      agents
+        .filter((a) => a?.category === "cli" && a?.detected)
+        .map((a) => ({ id: a.id, display_name: a.display_name })),
+    );
+    // The backend serializes usage buckets as camelCase (`byProfile`); older
+    // callers expect snake_case (`by_profile`). Support both and tolerate a
+    // null/missing payload so a fresh install never crashes this dialog.
+    const buckets =
+      (usage as { byProfile?: Record<string, AiUsageEntry> } | null | undefined)
+        ?.byProfile ??
+      (
+        usage as
+          | { by_profile?: Record<string, AiUsageEntry> }
+          | null
+          | undefined
+      )?.by_profile ??
+      {};
+    setStats(buckets[profile.id] ?? null);
+    const taskList = Array.isArray(allTasks) ? allTasks : [];
+    setTasks(
+      taskList.filter(
+        (task) =>
+          task?.id &&
+          (task as { profile_id?: string }).profile_id === profile.id,
+      ),
+    );
+  }, [profile.id]);
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      await fetchLists();
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchLists]);
+
+  // Manual refresh for the dropdowns: re-reads keys/agents so endpoints
+  // added or refreshed in the AI dialog show up without reopening this tab.
+  const onRefreshLists = React.useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await fetchLists();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [fetchLists]);
+
+  React.useEffect(() => {
+    setKeyId(profile.agent_key_id ?? "");
+    setAutoApprove(profile.agent_auto_approve === true);
+    setAgentId(profile.agent_id ?? "");
+    void load();
+  }, [
+    profile.agent_key_id,
+    profile.agent_id,
+    profile.agent_auto_approve,
+    load,
+  ]);
+
+  const hasAi = keys.length > 0;
+
+  const onSavePair = async (nextKey: string, nextAgent: string) => {
+    setIsSaving(true);
+    try {
+      await invoke("update_profile_agent_pair", {
+        profileId: profile.id,
+        keyId: nextKey || null,
+        agentId: nextAgent || null,
+      });
+      showSuccessToast(t("profileInfo.ai.saved"));
+    } catch (e) {
+      showErrorToast(translateBackendError(t as never, e));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const onToggleAuto = async (v: boolean) => {
+    setAutoApprove(v);
+    try {
+      await invoke("update_profile_agent_auto_approve", {
+        profileId: profile.id,
+        autoApprove: v,
+      });
+      showSuccessToast(t("profileInfo.ai.saved"));
+    } catch (e) {
+      setAutoApprove(!v);
+      showErrorToast(translateBackendError(t as never, e));
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <SectionHeader
+            icon={<LuBot className="size-4" />}
+            title={t("profileInfo.sections.ai")}
+            description={t("profileInfo.sectionDesc.ai")}
+          />
+        </div>
+        <button
+          type="button"
+          onClick={() => void onRefreshLists()}
+          disabled={loading || refreshing}
+          title={t("profileInfo.ai.refresh")}
+          aria-label={t("profileInfo.ai.refresh")}
+          className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-accent/50 hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+        >
+          <LuRefreshCw
+            className={cn("size-3.5", refreshing && "animate-spin")}
+          />
+        </button>
+      </div>
+      {loading ? (
+        <p className="text-sm text-muted-foreground">
+          {t("profileInfo.ai.loading")}
+        </p>
+      ) : (
+        <div
+          className={cn(!hasAi && "pointer-events-none opacity-50")}
+          aria-disabled={!hasAi}
+        >
+          <div className="grid grid-cols-1 gap-4 @md:grid-cols-2">
+            <div className="space-y-1.5">
+              <span className="text-[10px] tracking-wide text-muted-foreground uppercase">
+                {t("profileInfo.ai.keyLabel")}
+              </span>
+              <Select
+                value={keyId || "__default__"}
+                disabled={isDisabled || isSaving}
+                onValueChange={(v) => {
+                  const next = v === "__default__" ? "" : v;
+                  setKeyId(next);
+                  void onSavePair(next, agentId);
+                }}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue
+                    placeholder={t("profileInfo.ai.keyPlaceholder")}
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__default__">
+                    {t("profileInfo.ai.keyDefault")}
+                  </SelectItem>
+                  {keys.map((k) => (
+                    <SelectItem key={k.id} value={k.id}>
+                      {k.name} ({k.provider})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <span className="text-[10px] tracking-wide text-muted-foreground uppercase">
+                {t("profileInfo.ai.agentLabel")}
+              </span>
+              <Select
+                value={agentId || "__direct__"}
+                disabled={isDisabled || isSaving}
+                onValueChange={(v) => {
+                  const next = v === "__direct__" ? "" : v;
+                  setAgentId(next);
+                  void onSavePair(keyId, next);
+                }}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue
+                    placeholder={t("profileInfo.ai.agentPlaceholder")}
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__direct__">
+                    {t("profileInfo.ai.agentDirect")}
+                  </SelectItem>
+                  {cliAgents.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.display_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="mt-4 flex items-center gap-3 rounded-md border border-border bg-muted/40 px-3 py-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">
+                {t("profileInfo.ai.autoApproveLabel")}
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                {t("profileInfo.ai.autoApproveDescription")}
+              </p>
+            </div>
+            <AnimatedSwitch
+              checked={autoApprove}
+              disabled={isDisabled}
+              onCheckedChange={(v) => void onToggleAuto(v === true)}
+              aria-label={t("profileInfo.ai.autoApproveLabel")}
+            />
+          </div>
+          <div className="mt-4 rounded-md border border-border bg-muted/40 px-3 py-2">
+            <p className="text-[10px] tracking-wide text-muted-foreground uppercase">
+              {t("profileInfo.ai.statsTitle")}
+            </p>
+            {!stats || stats.calls === 0 ? (
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {t("profileInfo.ai.statsEmpty")}
+              </p>
+            ) : (
+              <p className="mt-0.5 text-sm tabular-nums">
+                {t("profileInfo.ai.statsLine", {
+                  total: stats.total_tokens,
+                  prompt: stats.prompt_tokens,
+                  completion: stats.completion_tokens,
+                  calls: stats.calls,
+                })}
+                {stats.cost_usd !== null && stats.cost_usd !== undefined
+                  ? ` • $${stats.cost_usd.toFixed(4)}`
+                  : ""}
+              </p>
+            )}
+          </div>
+          <div className="mt-4 rounded-md border border-border bg-muted/40 px-3 py-2">
+            <p className="text-[10px] tracking-wide text-muted-foreground uppercase">
+              {t("profileInfo.ai.tasksTitle", { count: tasks.length })}
+            </p>
+            {tasks.length === 0 ? (
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {t("profileInfo.ai.tasksEmpty")}
+              </p>
+            ) : (
+              <div className="mt-1 space-y-1.5">
+                {tasks.map((task) => (
+                  <div key={task.id} className="text-xs">
+                    <p className="truncate text-sm font-medium">{task.name}</p>
+                    <p className="text-muted-foreground">
+                      {task.next_run_at
+                        ? `${t("profileInfo.ai.upcomingLabel")}: ${new Date(task.next_run_at).toLocaleString()}`
+                        : t("profileInfo.ai.noUpcoming")}
+                      {task.last_run_at
+                        ? ` • ${t("profileInfo.ai.lastRunLabel")}: ${new Date(task.last_run_at).toLocaleString()} (${task.last_run_status ?? "?"})`
+                        : ""}
+                    </p>
+                    {task.last_run_error && (
+                      <p className="truncate text-destructive">
+                        {task.last_run_error}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {!loading && !hasAi && (
+        <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+          {t("profileInfo.ai.noKeys")}
+        </p>
+      )}
     </div>
   );
 }
@@ -1441,14 +1837,12 @@ function SyncSectionInline({
   };
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-2 text-sm font-semibold">
-        <LuRefreshCw className="size-4" />
-        {t("profileInfo.sections.sync")}
-      </div>
-      <p className="text-xs text-muted-foreground">
-        {t("profileInfo.sectionDesc.sync")}
-      </p>
+    <div className="flex flex-col gap-4">
+      <SectionHeader
+        icon={<LuRefreshCw className="size-4" />}
+        title={t("profileInfo.sections.sync")}
+        description={t("profileInfo.sectionDesc.sync")}
+      />
       <div className="flex items-center gap-2">
         <span className="shrink-0 text-[10px] tracking-wide text-muted-foreground uppercase">
           {t("profileInfo.fields.syncMode")}
@@ -1495,12 +1889,16 @@ function NetworkSectionInline({
   storedProxies,
   vpnConfigs,
   isDisabled,
+  onOpenBypassRules,
+  onOpenDnsBlocklist,
   t,
 }: {
   profile: BrowserProfile;
   storedProxies: StoredProxy[];
   vpnConfigs: VpnConfig[];
   isDisabled: boolean;
+  onOpenBypassRules?: () => void;
+  onOpenDnsBlocklist?: () => void;
   t: (key: string, options?: Record<string, unknown>) => string;
 }) {
   const [isSaving, setIsSaving] = React.useState(false);
@@ -1558,14 +1956,12 @@ function NetworkSectionInline({
   };
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-2 text-sm font-semibold">
-        <LuGlobe className="size-4" />
-        {t("profileInfo.sections.network")}
-      </div>
-      <p className="text-xs text-muted-foreground">
-        {t("profileInfo.sectionDesc.network")}
-      </p>
+    <div className="flex flex-col gap-4">
+      <SectionHeader
+        icon={<LuGlobe className="size-4" />}
+        title={t("profileInfo.sections.network")}
+        description={t("profileInfo.sectionDesc.network")}
+      />
 
       <div className="flex items-center gap-2">
         <span className="w-12 shrink-0 text-[10px] tracking-wide text-muted-foreground uppercase">
@@ -1620,6 +2016,51 @@ function NetworkSectionInline({
           </SelectContent>
         </Select>
       </div>
+
+      {(onOpenBypassRules || onOpenDnsBlocklist) && (
+        <div className="flex flex-col gap-2">
+          {onOpenBypassRules && (
+            <button
+              type="button"
+              onClick={onOpenBypassRules}
+              className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-left transition-colors hover:bg-accent/50"
+            >
+              <LuShieldCheck className="size-4 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-foreground">
+                  {t("profileInfo.network.bypassRulesTitle")}
+                </span>
+                <span className="block truncate text-[11px] text-muted-foreground">
+                  {(profile.proxy_bypass_rules ?? []).length > 0
+                    ? t("profileInfo.network.ruleCount", {
+                        count: (profile.proxy_bypass_rules ?? []).length,
+                      })
+                    : t("profileInfo.network.noRules")}
+                </span>
+              </span>
+              <LuChevronRight className="size-4 shrink-0 text-muted-foreground" />
+            </button>
+          )}
+          {onOpenDnsBlocklist && (
+            <button
+              type="button"
+              onClick={onOpenDnsBlocklist}
+              className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-left transition-colors hover:bg-accent/50"
+            >
+              <LuShield className="size-4 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-foreground">
+                  {t("dnsBlocklist.title")}
+                </span>
+                <span className="block truncate text-[11px] text-muted-foreground">
+                  {t(dnsBlocklistLabelKey(profile.dns_blocklist))}
+                </span>
+              </span>
+              <LuChevronRight className="size-4 shrink-0 text-muted-foreground" />
+            </button>
+          )}
+        </div>
+      )}
 
       {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
@@ -1691,14 +2132,12 @@ function ExtensionsSectionInline({
   };
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-2 text-sm font-semibold">
-        <LuPuzzle className="size-4" />
-        {t("profileInfo.sections.extensions")}
-      </div>
-      <p className="text-xs text-muted-foreground">
-        {t("profileInfo.sectionDesc.extensions")}
-      </p>
+    <div className="flex flex-col gap-4">
+      <SectionHeader
+        icon={<LuPuzzle className="size-4" />}
+        title={t("profileInfo.sections.extensions")}
+        description={t("profileInfo.sectionDesc.extensions")}
+      />
       <div className="flex items-center gap-2">
         <span className="w-16 shrink-0 text-[10px] tracking-wide text-muted-foreground uppercase">
           {t("profileInfo.fields.extensionGroup")}
@@ -1820,9 +2259,9 @@ function CookiesSectionInline({
   const domains = stats?.domains ?? [];
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-sm font-semibold">
+        <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
           <LuCookie className="size-4" />
           {t("profileInfo.sections.cookies")}
         </div>
@@ -1975,14 +2414,12 @@ function FingerprintSectionInline({
 
   if (!isBrowser) {
     return (
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center gap-2 text-sm font-semibold">
-          <LuFingerprint className="size-4" />
-          {t("profileInfo.sections.fingerprint")}
-        </div>
-        <p className="text-xs text-muted-foreground">
-          {t("profileInfo.fingerprint.notSupported")}
-        </p>
+      <div className="flex flex-col gap-4">
+        <SectionHeader
+          icon={<LuFingerprint className="size-4" />}
+          title={t("profileInfo.sections.fingerprint")}
+          description={t("profileInfo.fingerprint.notSupported")}
+        />
       </div>
     );
   }
@@ -2015,14 +2452,12 @@ function FingerprintSectionInline({
   const dirty = current !== initial;
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-2 text-sm font-semibold">
-        <LuFingerprint className="size-4" />
-        {t("profileInfo.sections.fingerprint")}
-      </div>
-      <p className="text-xs text-muted-foreground">
-        {t("profileInfo.sectionDesc.fingerprint")}
-      </p>
+    <div className="flex flex-col gap-4">
+      <SectionHeader
+        icon={<LuFingerprint className="size-4" />}
+        title={t("profileInfo.sections.fingerprint")}
+        description={t("profileInfo.sectionDesc.fingerprint")}
+      />
 
       <SharedFingerprintConfigForm
         config={browserConfig}
@@ -2038,7 +2473,7 @@ function FingerprintSectionInline({
       {error && <p className="text-xs text-destructive">{error}</p>}
       {success && !error && <p className="text-xs text-success">{success}</p>}
 
-      <div className="mt-3 flex items-center gap-2 border-t border-border pt-3">
+      <div className="mt-4 flex items-center gap-2 border-t border-border pt-4">
         <Button
           size="sm"
           className="h-7 text-xs"
@@ -2187,16 +2622,16 @@ function SecuritySectionInline({
   };
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-2 text-sm font-semibold">
-        <LuKey className="size-4" />
-        {t("profileInfo.sections.security")}
-      </div>
-      <p className="text-xs text-muted-foreground">
-        {profile.password_protected
-          ? t("profileInfo.security.protected")
-          : t("profileInfo.security.unprotected")}
-      </p>
+    <div className="flex flex-col gap-4">
+      <SectionHeader
+        icon={<LuKey className="size-4" />}
+        title={t("profileInfo.sections.security")}
+        description={
+          profile.password_protected
+            ? t("profileInfo.security.protected")
+            : t("profileInfo.security.unprotected")
+        }
+      />
 
       {profile.password_protected && (
         <div className="flex gap-1.5">
@@ -2491,41 +2926,53 @@ export function ProfileDnsBlocklistDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-xs">
-        <DialogHeader>
+      <DialogContent
+        className={cn(
+          "flex max-h-[80vh] flex-col",
+          level === "custom" ? "max-w-md" : "max-w-xs",
+        )}
+      >
+        <DialogHeader className="shrink-0">
           <DialogTitle>{t("dnsBlocklist.title")}</DialogTitle>
         </DialogHeader>
-        <p className="text-xs text-muted-foreground">
-          {t("dnsBlocklist.settingsDescription")}{" "}
-          <a
-            href="https://github.com/hagezi/dns-blocklists"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-primary hover:underline"
-          >
-            {t("common.buttons.moreInfo")}
-          </a>
-        </p>
-        <div className="space-y-1">
-          {options.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => setLevel(option.value)}
-              className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
-                level === option.value
-                  ? "bg-primary/10 text-primary border border-primary/30"
-                  : "hover:bg-accent border border-transparent"
-              }`}
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
+          <p className="text-xs text-muted-foreground">
+            {t("dnsBlocklist.settingsDescription")}{" "}
+            <a
+              href="https://github.com/hagezi/dns-blocklists"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
             >
-              {option.label}
-            </button>
-          ))}
+              {t("common.buttons.moreInfo")}
+            </a>
+          </p>
+          <div className="space-y-1">
+            {options.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setLevel(option.value)}
+                className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
+                  level === option.value
+                    ? "bg-primary/10 text-primary border border-primary/30"
+                    : "hover:bg-accent border border-transparent"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          {level === "custom" && (
+            <div className="border-t border-border pt-4">
+              <CustomDnsEditor key={isOpen ? "open" : "closed"} />
+            </div>
+          )}
         </div>
         <Button
           onClick={() => void handleSave()}
           disabled={isSaving || level === (currentLevel ?? "")}
-          className="w-full"
+          className="w-full shrink-0"
         >
           {t("common.buttons.save")}
         </Button>

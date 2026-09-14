@@ -587,7 +587,8 @@
     "all": "Tümü",
     "noGroup": "Grup yok",
     "pageTitle": "Profil grupları",
-    "pageDescription": "Profil grupları, tarayıcıları müşteriye, ortama veya kullanım amacına göre düzenlemenizi sağlar. Grupları cihazlar arasında paylaşmak için eşitleyin."
+    "pageDescription": "Profil grupları, tarayıcıları müşteriye, ortama veya kullanım amacına göre düzenlemenizi sağlar. Grupları cihazlar arasında paylaşmak için eşitleyin.",
+    "ungrouped": "Ungrouped"
   },
   "sync": {
     "mode": {
@@ -1141,7 +1142,9 @@
       "noRules": "Yapılandırılmış atlama kuralı yok.",
       "ruleTypes": "Alan adları, IP adresleri ve regex desenleri desteklenir.",
       "vpnLabel": "VPN: {{name}}",
-      "proxyLabel": "Proxy: {{name}}"
+      "proxyLabel": "Proxy: {{name}}",
+      "ruleCount": "{{count}} kural",
+      "ruleCount_one": "{{count}} kural"
     },
     "launchHook": {
       "title": "Başlatma Kancası URL'si",
@@ -1174,7 +1177,8 @@
       "security": "Güvenlik",
       "delete": "Profili sil",
       "activity": "Etkinlik",
-      "launchHook": "Başlatma kancası"
+      "launchHook": "Başlatma kancası",
+      "ai": "YZ aracısı"
     },
     "sectionDesc": {
       "fingerprint": "Bu profilin parmak izi tarama betiklerine nasıl görüneceğini yapılandırın.",
@@ -1184,7 +1188,8 @@
       "sync": "Bu profilin diğer cihazlarınıza nasıl yansıtılacağını yapılandırın.",
       "automation": "Bu profil her başlatıldığında bir komut veya betik çalıştırın.",
       "security": "Profil verilerini bir parolayla şifreleyin.",
-      "launchHook": "Profil her başlatıldığında bu URL'ye bir GET isteği gönderin."
+      "launchHook": "Profil her başlatıldığında bu URL'ye bir GET isteği gönderin.",
+      "ai": "Bu profil için model ve aracı ataması ile kullanım."
     },
     "badges": {
       "locked": "KİLİTLİ",
@@ -1219,6 +1224,30 @@
       "agentLabel": "Ajan indirmelerine izin ver",
       "agentDescription": "AI ajanının, MCP istemcilerinin ve zamanlanmış görevlerin bu profilde dosya indirmesine izin verin.",
       "saved": "İndirme ayarları kaydedildi"
+    },
+    "ai": {
+      "title": "AI agent",
+      "description": "Model and agent pair plus full automation for this profile, with usage and scheduled runs.",
+      "loading": "Loading AI settings...",
+      "noKeys": "No AI keys configured yet, so this section is disabled. Add an endpoint under AI to enable it.",
+      "keyLabel": "Preferred AI key",
+      "keyPlaceholder": "Select a key",
+      "keyDefault": "First saved key",
+      "agentLabel": "Preferred agent",
+      "agentPlaceholder": "Direct chat",
+      "agentDirect": "Direct chat (no CLI agent)",
+      "autoApproveLabel": "Full automation for this profile",
+      "autoApproveDescription": "Apply all agent-proposed changes without asking. Off means only reversible changes apply.",
+      "statsTitle": "Usage for this profile",
+      "statsEmpty": "No recorded AI usage for this profile yet.",
+      "statsLine": "{{total}} tokens ({{prompt}} in / {{completion}} out) across {{count}} calls",
+      "tasksTitle": "Scheduled tasks ({{count}})",
+      "tasksEmpty": "No scheduled tasks target this profile.",
+      "upcomingLabel": "Next",
+      "noUpcoming": "Not scheduled",
+      "lastRunLabel": "Last",
+      "saved": "AI settings saved",
+      "refresh": "Listeleri yenile"
     }
   },
   "extensions": {
@@ -1523,7 +1552,9 @@
       "description": "{{count}} grubu silmek istediğinizden emin misiniz? {{names}}. Profiller Varsayılan grubuna taşınacak.",
       "description_one": "{{count}} grubu silmek istediğinizden emin misiniz? {{names}}. Profiller Varsayılan grubuna taşınacak.",
       "confirmButton": "Grupları sil"
-    }
+    },
+    "manageMembersTooltip": "Assign profiles to this group",
+    "membersCol": "Members"
   },
   "proxyAssignment": {
     "title": "Proxy / VPN Ata",
@@ -1557,7 +1588,8 @@
     "selectedProfilesLabel": "Seçili Profiller:",
     "assignGroupLabel": "Gruba Ata:",
     "noValidProfiles": "Geçerli profil seçilmedi.",
-    "failedFallback": "Profillere grup atanamadı"
+    "failedFallback": "Profillere grup atanamadı",
+    "moveHint": "Move from {{from}} to {{to}}"
   },
   "profileSelector": {
     "title": "Profil Seç",
@@ -1905,7 +1937,8 @@
     "integrations": "Entegrasyonlar",
     "account": "Hesap",
     "tasks": "Görevler",
-    "ai": "AI"
+    "ai": "AI",
+    "downloads": "Downloads"
   },
   "pageTitle": {
     "proxies": "Ağ",
@@ -1919,7 +1952,8 @@
     "shortcuts": "Klavye kısayolları",
     "profiles": "Profiller",
     "tasks": "Görevler",
-    "ai": "AI"
+    "ai": "AI",
+    "downloads": "Downloads"
   },
   "encryption": {
     "required": {
@@ -2159,13 +2193,24 @@
       "google": "Google",
       "openrouter": "OpenRouter",
       "opencode": "OpenCode Go",
-      "custom": "Özel (OpenAI uyumlu)"
+      "custom": "Özel (OpenAI uyumlu)",
+      "xai": "xAI (Grok)"
     },
     "endpoint": "Endpoint URL'si",
     "endpointPlaceholder": "https://.../v1",
     "endpointHint": "OpenAI uyumlu sağlayıcılar için isteğe bağlı geçersiz kılma. Sağlayıcının varsayılanını kullanmak için boş bırakın.",
     "endpointInvalid": "Geçerli bir http(s) URL girin",
-    "endpointRequired": "Özel bir sağlayıcı için endpoint URL gereklidir"
+    "endpointRequired": "Özel bir sağlayıcı için endpoint URL gereklidir",
+    "refreshModels": "Refresh models",
+    "refreshingModels": "Refreshing...",
+    "modelsLive": "{{count}} models from endpoint",
+    "modelsStatic": "Showing known models — refresh to query the endpoint",
+    "modelsEmpty": "No models returned — check the endpoint and key, then refresh",
+    "chooseModel": "Model seç",
+    "modelsLiveFailed": "Modeller yüklenemedi — bilinen varsayılanlar gösteriliyor",
+    "filterModels": "Modelleri filtrele",
+    "filterNoMatch": "Eşleşen model yok",
+    "modelsNeedKey": "Önce bir API anahtarı girin — bu sağlayıcı modelleri yalnızca kimliği doğrulanmış isteklere listeler."
   },
   "agentChat": {
     "title": "AI Ajanı",
@@ -2182,7 +2227,10 @@
     "fullAutomationHint": "Run tool actions immediately without confirmation cards. Only for direct chat; unavailable when delegating to an agent CLI.",
     "fullAutomationActive": "Full automation is on: actions run immediately without confirmation.",
     "activeRuns": "{{count}} running — click to stop",
-    "stopAllDone": "Stop requested for all running agent jobs"
+    "stopAllDone": "Stop requested for all running agent jobs",
+    "profilePlaceholder": "Profile (optional)",
+    "noProfile": "No profile",
+    "fullAutomationProfileHint": "Full automation for the selected profile. Saved to the profile immediately."
   },
   "changeCard": {
     "sectionTitle": "Önerilen değişiklikler",
@@ -2338,5 +2386,45 @@
       "confirm": "{{count}} öğeyi sil"
     },
     "bulkDeleteFailed": "Bazı abonelikler silinemedi"
+  },
+  "groupMembers": {
+    "title": "Members of {{name}}",
+    "description": "Add profiles to this group or remove them. Moving a profile changes its group immediately.",
+    "loading": "Loading profiles...",
+    "membersTitle": "In this group ({{count}})",
+    "empty": "No profiles in this group yet. Add one below.",
+    "addTitle": "Add a profile",
+    "addPlaceholder": "Select a profile",
+    "addButton": "Add",
+    "removeButton": "Remove",
+    "addSuccess": "Profile added to group",
+    "removeSuccess": "Profile removed from group",
+    "moveHint": "Adding moves the profile from its current group (or Ungrouped) into this group."
+  },
+  "aiStats": {
+    "title": "Usage",
+    "description": "Recorded locally from completed runs. Cost appears when the provider reports it.",
+    "noData": "No recorded AI usage yet.",
+    "totalsLine": "{{total}} tokens ({{prompt}} in / {{completion}} out) across {{count}} calls",
+    "byProviderTitle": "By provider",
+    "reset": "Reset",
+    "resetDone": "Usage stats cleared"
+  },
+  "downloads": {
+    "title": "Downloads",
+    "description": "Component downloads: browser binaries, GeoIP data, and DNS blocklists.",
+    "activeTitle": "Active",
+    "refresh": "Refresh",
+    "noActive": "Nothing downloading right now.",
+    "geoipLabel": "GeoIP database",
+    "browsersTitle": "Browsers",
+    "loading": "Loading...",
+    "empty": "No browsers available.",
+    "noneDownloaded": "No versions downloaded yet.",
+    "dnsTitle": "DNS blocklists",
+    "dnsEmpty": "No blocklist status available.",
+    "cached": "Cached",
+    "notCached": "Not cached",
+    "entries": "entries"
   }
 }
