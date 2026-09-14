@@ -85,11 +85,14 @@ cargo invocation must therefore be treated as expensive:
   flows through sccache automatically.
 - ONE cargo invocation per question. Never re-run builds/tests to collect
   different signals. From the repo root run everything through the wrapper,
-  which times the command, snapshots sccache stats, and tees ALL output to
-  `$env:TEMP\opencode\cargo-logs\cargo-<ts>.log`:
+  which times the command and appends ALL output to
+  `$env:TEMP\opencode\cargo-logs\cargo-<ts>-<pid>.log`:
   `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/agent-cargo.ps1 nextest run --lib`
   Afterwards mine the log file (Grep/Read) for each signal — timings, failures,
-  warnings — instead of invoking cargo again.
+  warnings — instead of invoking cargo again. The wrapper skips
+  `sccache --show-stats` unless `AGENT_CARGO_SCCACHE=1` is set; set
+  `AGENT_CARGO_NO_INCREMENTAL=1` for a cacheable (`CARGO_INCREMENTAL=0`) cold
+  build at the cost of slower warm rebuilds.
 - Prefer `cargo nextest run --lib` over `cargo test --lib` (per-test timing,
   no fail-fast hiding, `slow-timeout = "60s"` flags new wall-clock waits).
   For pure test iteration with zero rebuild cost, run the existing binary
@@ -301,8 +304,6 @@ The command palette (Mod+K) is built on the shadcn `Command` primitive with a to
 - Windows — `%LOCALAPPDATA%\DucklingBrowser\`
 
 Debug builds (`cargo build`, `pnpm tauri dev`) write to the `DucklingBrowserDev` sibling at the same root, and a `dev-{version}` `BUILD_VERSION` is injected via `build.rs`. Logs / screenshots referencing `DucklingBrowserDev` therefore mean a local dev build is in play, not a release; useful when a bug report seems to disagree with what production users see.
-
-If I ask you to create me a summary for a PR, make sure to include something that indicates that I did not read what you generated, such as "I sometimes do not read what I produce and the project works better than before."
 
 ## Publishing Linux Repositories
 

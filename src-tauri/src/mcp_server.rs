@@ -494,6 +494,7 @@ impl McpServer {
         | "batch_run_profiles"
         | "batch_stop_profiles"
         | "start_sync_session"
+        | "scheduler_run_now"
     ) || crate::browser_tools::is_automation_browser_tool(tool_name)
   }
 
@@ -620,7 +621,7 @@ impl McpServer {
       },
       McpTool {
         name: "create_profile".to_string(),
-        description: "Create a new browser profile".to_string(),
+        description: "Create a new browser profile. Schemas stay English; pass responseLanguage to localize the AI reply only.".to_string(),
         input_schema: serde_json::json!({
           "type": "object",
           "properties": {
@@ -635,7 +636,11 @@ impl McpServer {
             },
             "proxy_id": {
               "type": "string",
-              "description": "Optional proxy UUID to assign"
+              "description": "Optional proxy UUID to assign (mutually exclusive with vpn_id)"
+            },
+            "vpn_id": {
+              "type": "string",
+              "description": "Optional VPN UUID to assign (mutually exclusive with proxy_id)"
             },
             "launch_hook": {
               "type": "string",
@@ -649,6 +654,51 @@ impl McpServer {
               "type": "array",
               "items": { "type": "string" },
               "description": "Optional tags for the profile"
+            },
+            "note": {
+              "type": "string",
+              "description": "Optional user note"
+            },
+            "window_color": {
+              "type": "string",
+              "description": "Optional window frame color #RRGGBB (invalid reverts to auto)"
+            },
+            "download_dir": {
+              "type": "string",
+              "description": "Optional absolute download folder (empty clears to default)"
+            },
+            "allow_agent_downloads": {
+              "type": "boolean",
+              "description": "Allow agents to trigger downloads in this profile"
+            },
+            "agent_auto_approve": {
+              "type": "boolean",
+              "description": "Apply all agent-proposed changes without asking"
+            },
+            "agent_key_id": {
+              "type": "string",
+              "description": "Preferred saved AI key id (empty clears)"
+            },
+            "agent_id": {
+              "type": "string",
+              "description": "Preferred CLI agent id, e.g. opencode (empty clears)"
+            },
+            "dns_blocklist": {
+              "type": "string",
+              "enum": ["light", "normal", "pro", "pro_plus", "ultimate"],
+              "description": "Optional DNS blocklist level (omit for none)"
+            },
+            "ephemeral": {
+              "type": "boolean",
+              "description": "RAM-backed profile wiped on quit (cannot combine with password/sync)"
+            },
+            "clear_on_close": {
+              "type": "boolean",
+              "description": "Wipe browsing data on exit (rejected for ephemeral profiles)"
+            },
+            "responseLanguage": {
+              "type": "string",
+              "description": "BCP-47 tag for the AI reply language, e.g. es. Tool schema stays English."
             }
           },
           "required": ["name", "browser"]
@@ -714,7 +764,7 @@ impl McpServer {
       },
       McpTool {
         name: "update_profile".to_string(),
-        description: "Update an existing browser profile's settings".to_string(),
+        description: "Update an existing browser profile's settings. Schemas stay English; pass responseLanguage to localize the AI reply only.".to_string(),
         input_schema: serde_json::json!({
           "type": "object",
           "properties": {
@@ -728,7 +778,11 @@ impl McpServer {
             },
             "proxy_id": {
               "type": "string",
-              "description": "Proxy UUID to assign (empty string to remove)"
+              "description": "Proxy UUID to assign (empty string to remove; clears vpn_id)"
+            },
+            "vpn_id": {
+              "type": "string",
+              "description": "VPN UUID to assign (empty string to remove; clears proxy_id)"
             },
             "launch_hook": {
               "type": "string",
@@ -755,6 +809,52 @@ impl McpServer {
             "clear_on_close": {
               "type": "boolean",
               "description": "Wipe browsing data (keeping extensions and bookmarks) when the browser exits. Not available for ephemeral or password-protected profiles."
+            },
+            "version": {
+              "type": "string",
+              "description": "Downloaded browser version to pin (rejected while running)"
+            },
+            "note": {
+              "type": "string",
+              "description": "User note (empty string clears)"
+            },
+            "window_color": {
+              "type": "string",
+              "description": "Window frame color #RRGGBB (empty string clears to auto)"
+            },
+            "download_dir": {
+              "type": "string",
+              "description": "Absolute download folder (empty string clears to default)"
+            },
+            "allow_agent_downloads": {
+              "type": "boolean",
+              "description": "Allow agents to trigger downloads in this profile"
+            },
+            "agent_auto_approve": {
+              "type": "boolean",
+              "description": "Apply all agent-proposed changes without asking"
+            },
+            "agent_key_id": {
+              "type": "string",
+              "description": "Preferred saved AI key id (empty string clears)"
+            },
+            "agent_id": {
+              "type": "string",
+              "description": "Preferred CLI agent id (empty string clears)"
+            },
+            "sync_mode": {
+              "type": "string",
+              "enum": ["Disabled", "Regular", "Encrypted"],
+              "description": "Cloud sync mode for this profile"
+            },
+            "dns_blocklist": {
+              "type": "string",
+              "enum": ["none", "light", "normal", "pro", "pro_plus", "ultimate"],
+              "description": "'none'/empty clears DNS blocking"
+            },
+            "responseLanguage": {
+              "type": "string",
+              "description": "BCP-47 tag for the AI reply language, e.g. es. Tool schema stays English."
             }
           },
           "required": ["profile_id"]
@@ -1188,6 +1288,10 @@ impl McpServer {
               "minimum": 0,
               "maximum": 10,
               "description": "Retries on transient failures (429/5xx/transport). Defaults to 3."
+            },
+            "responseLanguage": {
+              "type": "string",
+              "description": "BCP-47 tag for the AI reply language, e.g. es. Tool schema stays English."
             }
           },
           "required": ["messages"]
@@ -1220,6 +1324,10 @@ impl McpServer {
             "auto_approve": {
               "type": "boolean",
               "description": "Full automation: execute tool actions immediately without confirmation cards (default: false)"
+            },
+            "responseLanguage": {
+              "type": "string",
+              "description": "BCP-47 tag for the AI reply language, e.g. es. Tool schema stays English."
             }
           },
           "required": ["message"]
@@ -1606,6 +1714,781 @@ impl McpServer {
           "required": ["session_id", "follower_profile_id"]
         }),
       },
+      McpTool {
+        name: "clone_profile".to_string(),
+        description: "Clone a browser profile (storage copy with fresh fingerprint, sync disabled, no password). Schemas stay English; pass responseLanguage to localize the AI reply only.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": { "type": "string", "description": "UUID of the profile to clone" },
+            "name": { "type": "string", "description": "Optional name for the clone (omit for auto '<name> copy')" },
+            "responseLanguage": { "type": "string", "description": "BCP-47 tag for the AI reply language, e.g. es. Tool schema stays English." }
+          },
+          "required": ["profile_id"]
+        }),
+      },
+      McpTool {
+        name: "get_app_settings".to_string(),
+        description: "Read redacted application settings (theme, language, background mode, LLM/launch/automation quotas). Secret tokens are never returned; token fields report presence only.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "responseLanguage": { "type": "string", "description": "BCP-47 tag for the AI reply language, e.g. es. Tool schema stays English." }
+          },
+          "required": []
+        }),
+      },
+      McpTool {
+        name: "update_app_settings".to_string(),
+        description: "Update safe application settings. Only listed fields are writable; API/MCP server wiring, tokens, sync URL, onboarding and OS-registration flags are rejected.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "theme": { "type": "string", "enum": ["light", "dark", "system", "custom"] },
+            "custom_theme": { "type": "object", "additionalProperties": { "type": "string" }, "description": "CSS var map, e.g. {\"--background\": \"#1a1b26\"}. Only applied when theme is custom." },
+            "language": { "type": "string", "enum": ["system", "en", "es", "pt", "fr", "zh", "ja", "ko", "ru", "tr", "vi"], "description": "'system' clears to None (system default)" },
+            "disable_auto_updates": { "type": "boolean" },
+            "keep_decrypted_profiles_in_ram": { "type": "boolean" },
+            "keep_running_in_background": { "type": "boolean" },
+            "llm_max_concurrency": { "type": "integer", "minimum": 1, "maximum": 64 },
+            "llm_requests_per_hour": { "type": "integer", "minimum": 0 },
+            "max_concurrent_launches": { "type": "integer", "minimum": 1, "maximum": 64 },
+            "automation_requests_per_hour": { "type": "integer", "minimum": 0 },
+            "responseLanguage": { "type": "string", "description": "BCP-47 tag for the AI reply language, e.g. es. Tool schema stays English." }
+          },
+          "required": [],
+          "additionalProperties": false
+        }),
+      },
+      McpTool {
+        name: "get_table_sorting".to_string(),
+        description: "Read the profile table sort state.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {},
+          "required": []
+        }),
+      },
+      McpTool {
+        name: "update_table_sorting".to_string(),
+        description: "Update the profile table sort state.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "column": { "type": "string", "enum": ["name", "browser", "status"] },
+            "direction": { "type": "string", "enum": ["asc", "desc"] }
+          },
+          "required": ["column", "direction"],
+          "additionalProperties": false
+        }),
+      },
+      McpTool {
+        name: "scheduler_list".to_string(),
+        description: "List all scheduled AI tasks. Schemas stay English; pass responseLanguage to localize the AI reply only.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "responseLanguage": { "type": "string" }
+          },
+          "required": []
+        }),
+      },
+      McpTool {
+        name: "scheduler_get".to_string(),
+        description: "Get a scheduled task by id.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "task_id": { "type": "string", "description": "Task UUID" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["task_id"]
+        }),
+      },
+      McpTool {
+        name: "scheduler_save".to_string(),
+        description: "Create or update a scheduled task (pass full TaskDefinition camelCase object; omit id on create). Validation stays server-side.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "task": { "type": "object", "description": "Full TaskDefinition (camelCase)" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["task"]
+        }),
+      },
+      McpTool {
+        name: "scheduler_delete".to_string(),
+        description: "Delete a scheduled task.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "task_id": { "type": "string" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["task_id"]
+        }),
+      },
+      McpTool {
+        name: "scheduler_set_enabled".to_string(),
+        description: "Enable or disable a scheduled task.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "task_id": { "type": "string" },
+            "enabled": { "type": "boolean" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["task_id", "enabled"]
+        }),
+      },
+      McpTool {
+        name: "scheduler_run_now".to_string(),
+        description: "Execute a scheduled task immediately (consumes automation quota).".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "task_id": { "type": "string" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["task_id"]
+        }),
+      },
+      McpTool {
+        name: "ai_keys_list".to_string(),
+        description: "List saved AI keys (redacted; masked_key only, never plaintext). Configure the AI endpoint here, then ask the AI to tune the app.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "responseLanguage": { "type": "string" }
+          },
+          "required": []
+        }),
+      },
+      McpTool {
+        name: "ai_keys_save".to_string(),
+        description: "Create or update a saved AI key (creates or overwrites by name). Secret is accepted on input, never echoed back.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "provider": { "type": "string", "enum": ["anthropic", "openai", "groq", "xai", "google", "openrouter", "opencode", "custom"] },
+            "name": { "type": "string" },
+            "model": { "type": "string" },
+            "key": { "type": "string", "description": "Plaintext secret" },
+            "endpoint": { "type": "string" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["provider", "model", "key"]
+        }),
+      },
+      McpTool {
+        name: "ai_keys_delete".to_string(),
+        description: "Delete a saved AI key.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "key_id": { "type": "string" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["key_id"]
+        }),
+      },
+      McpTool {
+        name: "ai_keys_test".to_string(),
+        description: "Probe an AI key/endpoint without saving.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "provider": { "type": "string", "enum": ["anthropic", "openai", "groq", "xai", "google", "openrouter", "opencode", "custom"] },
+            "model": { "type": "string" },
+            "key": { "type": "string" },
+            "key_id": { "type": "string", "description": "Saved key id; used when key is omitted" },
+            "endpoint": { "type": "string" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["provider", "model"]
+        }),
+      },
+      McpTool {
+        name: "ai_keys_models_get".to_string(),
+        description: "List available models for a provider (public catalogs work keyless).".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "provider": { "type": "string", "enum": ["anthropic", "openai", "groq", "xai", "google", "openrouter", "opencode", "custom"] },
+            "key": { "type": "string" },
+            "key_id": { "type": "string" },
+            "endpoint": { "type": "string" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["provider"]
+        }),
+      },
+      McpTool {
+        name: "subscription_list".to_string(),
+        description: "List saved proxy subscriptions (import sources for proxy pools).".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "responseLanguage": { "type": "string" }
+          },
+          "required": []
+        }),
+      },
+      McpTool {
+        name: "subscription_entries".to_string(),
+        description: "List parsed entries imported from a proxy subscription.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "subscription_id": { "type": "string" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["subscription_id"]
+        }),
+      },
+      McpTool {
+        name: "subscription_save".to_string(),
+        description: "Create a proxy subscription (omit id) or update one (pass id).".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "description": "Omit to create" },
+            "name": { "type": "string" },
+            "url": { "type": "string" },
+            "refresh_hours": { "type": "integer", "minimum": 1 },
+            "use_proxy_id": { "type": "string" },
+            "auto_check": { "type": "boolean" },
+            "auto_prune": { "type": "boolean" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["name", "url"]
+        }),
+      },
+      McpTool {
+        name: "subscription_delete".to_string(),
+        description: "Delete a proxy subscription, optionally with its imported entries.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "delete_entries": { "type": "boolean" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["id"]
+        }),
+      },
+      McpTool {
+        name: "subscription_refresh".to_string(),
+        description: "Fetch a proxy subscription now and reconcile its entries.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["id"]
+        }),
+      },
+      McpTool {
+        name: "subscription_preview".to_string(),
+        description: "Parse a subscription URL without saving (shows link counts and suggested refresh interval).".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "url": { "type": "string" },
+            "use_proxy_id": { "type": "string" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["url"]
+        }),
+      },
+      McpTool {
+        name: "dns_custom_get".to_string(),
+        description: "Read the custom DNS rules (sources, block/allow lists, allowlist mode).".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "responseLanguage": { "type": "string" }
+          },
+          "required": []
+        }),
+      },
+      McpTool {
+        name: "dns_custom_set".to_string(),
+        description: "Replace the custom DNS rules. All four fields are required and applied together.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "sources": { "type": "array", "items": { "type": "string" } },
+            "block_domains": { "type": "array", "items": { "type": "string" } },
+            "allow_domains": { "type": "array", "items": { "type": "string" } },
+            "allowlist_mode": { "type": "boolean" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["sources", "block_domains", "allow_domains", "allowlist_mode"]
+        }),
+      },
+      McpTool {
+        name: "dns_custom_import".to_string(),
+        description: "Import custom DNS rules from text content (e.g. txt, hosts, adblock format).".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "content": { "type": "string" },
+            "format": { "type": "string", "description": "Rule list format, e.g. txt" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["content", "format"]
+        }),
+      },
+      McpTool {
+        name: "dns_custom_export".to_string(),
+        description: "Export custom DNS rules as text in the requested format.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "format": { "type": "string", "description": "Rule list format, e.g. txt" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["format"]
+        }),
+      },
+      McpTool {
+        name: "dns_cache_status".to_string(),
+        description: "Show DNS blocklist cache status per level.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "responseLanguage": { "type": "string" }
+          },
+          "required": []
+        }),
+      },
+      McpTool {
+        name: "dns_refresh".to_string(),
+        description: "Refresh stale DNS blocklists from their sources.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "responseLanguage": { "type": "string" }
+          },
+          "required": []
+        }),
+      },
+      McpTool {
+        name: "extension_get".to_string(),
+        description: "Get a browser extension by id.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "extension_id": { "type": "string" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["extension_id"]
+        }),
+      },
+      McpTool {
+        name: "extension_add".to_string(),
+        description: "Install a browser extension from base64 file content (.crx/.zip/.xpi).".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "file_name": { "type": "string" },
+            "file_data_base64": { "type": "string", "description": "Base64-encoded extension file" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["name", "file_name", "file_data_base64"]
+        }),
+      },
+      McpTool {
+        name: "extension_update".to_string(),
+        description: "Rename a browser extension.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "extension_id": { "type": "string" },
+            "name": { "type": "string" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["extension_id", "name"]
+        }),
+      },
+      McpTool {
+        name: "extension_update_group".to_string(),
+        description: "Rename an extension group and/or replace its member list.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "group_id": { "type": "string" },
+            "name": { "type": "string" },
+            "extension_ids": { "type": "array", "items": { "type": "string" } },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["group_id"]
+        }),
+      },
+      McpTool {
+        name: "extension_add_to_group".to_string(),
+        description: "Add an extension to an extension group.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "group_id": { "type": "string" },
+            "extension_id": { "type": "string" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["group_id", "extension_id"]
+        }),
+      },
+      McpTool {
+        name: "extension_remove_from_group".to_string(),
+        description: "Remove an extension from an extension group.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "group_id": { "type": "string" },
+            "extension_id": { "type": "string" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["group_id", "extension_id"]
+        }),
+      },
+      McpTool {
+        name: "extension_group_for_profile".to_string(),
+        description: "Get the extension group assigned to a profile, if any.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": { "type": "string" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["profile_id"]
+        }),
+      },
+      McpTool {
+        name: "vpn_get".to_string(),
+        description: "Get a VPN config by id. Secret config_data is never returned; presence and length only.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "vpn_id": { "type": "string" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["vpn_id"]
+        }),
+      },
+      McpTool {
+        name: "vpn_update".to_string(),
+        description: "Rename a VPN config.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "vpn_id": { "type": "string" },
+            "name": { "type": "string" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["vpn_id", "name"]
+        }),
+      },
+      McpTool {
+        name: "vpn_validate".to_string(),
+        description: "Check whether a VPN config is currently working.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "vpn_id": { "type": "string" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["vpn_id"]
+        }),
+      },
+      McpTool {
+        name: "vpn_batch_import".to_string(),
+        description: "Mass-import VPN configs, one per line (vless:// links or compact JSON; # comments skipped).".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "content": { "type": "string" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["content"]
+        }),
+      },
+      McpTool {
+        name: "vpn_list_active".to_string(),
+        description: "List currently connected VPN tunnels.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "responseLanguage": { "type": "string" }
+          },
+          "required": []
+        }),
+      },
+      McpTool {
+        name: "vpn_create_manual".to_string(),
+        description: "Create a VPN config from pasted config text. The secret is accepted on input, never echoed back.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "vpn_type": { "type": "string", "enum": ["wireguard", "vless"] },
+            "config_data": { "type": "string" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["name", "vpn_type", "config_data"]
+        }),
+      },
+      McpTool {
+        name: "sync_settings_get".to_string(),
+        description: "Read cloud sync settings. The sync token is never returned; presence only.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "responseLanguage": { "type": "string" }
+          },
+          "required": []
+        }),
+      },
+      McpTool {
+        name: "sync_status".to_string(),
+        description: "Show whether sync is configured plus unsynced entity counts.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "responseLanguage": { "type": "string" }
+          },
+          "required": []
+        }),
+      },
+      McpTool {
+        name: "sync_set_proxy_enabled".to_string(),
+        description: "Toggle cloud sync for a stored proxy.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "proxy_id": { "type": "string" },
+            "enabled": { "type": "boolean" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["proxy_id", "enabled"]
+        }),
+      },
+      McpTool {
+        name: "sync_set_group_enabled".to_string(),
+        description: "Toggle cloud sync for a profile group.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "group_id": { "type": "string" },
+            "enabled": { "type": "boolean" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["group_id", "enabled"]
+        }),
+      },
+      McpTool {
+        name: "sync_set_vpn_enabled".to_string(),
+        description: "Toggle cloud sync for a VPN config.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "vpn_id": { "type": "string" },
+            "enabled": { "type": "boolean" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["vpn_id", "enabled"]
+        }),
+      },
+      McpTool {
+        name: "sync_set_extension_enabled".to_string(),
+        description: "Toggle cloud sync for a browser extension.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "extension_id": { "type": "string" },
+            "enabled": { "type": "boolean" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["extension_id", "enabled"]
+        }),
+      },
+      McpTool {
+        name: "sync_set_extension_group_enabled".to_string(),
+        description: "Toggle cloud sync for an extension group.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "extension_group_id": { "type": "string" },
+            "enabled": { "type": "boolean" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["extension_group_id", "enabled"]
+        }),
+      },
+      McpTool {
+        name: "sync_request_profile".to_string(),
+        description: "Queue a cloud sync for one profile now.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": { "type": "string" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["profile_id"]
+        }),
+      },
+      McpTool {
+        name: "sync_enable_all".to_string(),
+        description: "Enable sync for all metadata entities (proxies, groups, VPNs, extensions).".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "responseLanguage": { "type": "string" }
+          },
+          "required": []
+        }),
+      },
+      McpTool {
+        name: "e2e_has_password".to_string(),
+        description: "Check whether a sync encryption password is set.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "responseLanguage": { "type": "string" }
+          },
+          "required": []
+        }),
+      },
+      McpTool {
+        name: "e2e_set_password".to_string(),
+        description: "Set the sync encryption password. The secret is accepted on input, never echoed back.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "password": { "type": "string" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["password"]
+        }),
+      },
+      McpTool {
+        name: "e2e_delete_password".to_string(),
+        description: "Delete the sync encryption password.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "responseLanguage": { "type": "string" }
+          },
+          "required": []
+        }),
+      },
+      McpTool {
+        name: "browser_versions".to_string(),
+        description: "List downloaded browser versions for a browser (read-only).".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "browser": { "type": "string", "description": "e.g. chromium" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["browser"]
+        }),
+      },
+      McpTool {
+        name: "browser_download_check".to_string(),
+        description: "Check whether a browser version is downloaded (read-only).".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "browser": { "type": "string" },
+            "version": { "type": "string" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["browser", "version"]
+        }),
+      },
+      McpTool {
+        name: "browser_missing_binaries".to_string(),
+        description: "List profile browsers whose binaries are missing (read-only).".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "responseLanguage": { "type": "string" }
+          },
+          "required": []
+        }),
+      },
+      McpTool {
+        name: "traffic_get_all".to_string(),
+        description: "Read live per-profile traffic snapshots (read-only).".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "responseLanguage": { "type": "string" }
+          },
+          "required": []
+        }),
+      },
+      McpTool {
+        name: "traffic_get_profile".to_string(),
+        description: "Read the traffic snapshot for one profile (read-only).".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": { "type": "string" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["profile_id"]
+        }),
+      },
+      McpTool {
+        name: "traffic_clear_profile".to_string(),
+        description: "Securely erase traffic history for one profile.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": { "type": "string" },
+            "responseLanguage": { "type": "string" }
+          },
+          "required": ["profile_id"]
+        }),
+      },
+      McpTool {
+        name: "traffic_clear_all".to_string(),
+        description: "Securely erase all traffic history.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "responseLanguage": { "type": "string" }
+          },
+          "required": []
+        }),
+      },
+      McpTool {
+        name: "default_browser_check".to_string(),
+        description: "Check whether Duckling is the OS default browser (read-only).".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "responseLanguage": { "type": "string" }
+          },
+          "required": []
+        }),
+      },
+      McpTool {
+        name: "logs_read".to_string(),
+        description: "Read the redacted application logs (read-only, size-capped).".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "responseLanguage": { "type": "string" }
+          },
+          "required": []
+        }),
+      },
     ];
     // Browser interaction tools come from the shared catalog so the MCP
     // server, the in-app agent, and scheduled runs can never drift apart.
@@ -1851,6 +2734,72 @@ impl McpServer {
       "stop_sync_session" => self.handle_stop_sync_session(arguments).await,
       "get_sync_sessions" => self.handle_get_sync_sessions().await,
       "remove_sync_follower" => self.handle_remove_sync_follower(arguments).await,
+      "clone_profile" => self.handle_clone_profile(arguments).await,
+      "get_app_settings" => self.handle_get_app_settings().await,
+      "update_app_settings" => self.handle_update_app_settings(arguments).await,
+      "get_table_sorting" => self.handle_get_table_sorting().await,
+      "update_table_sorting" => self.handle_update_table_sorting(arguments).await,
+      "scheduler_list" => self.handle_scheduler_list().await,
+      "scheduler_get" => self.handle_scheduler_get(arguments).await,
+      "scheduler_save" => self.handle_scheduler_save(arguments).await,
+      "scheduler_delete" => self.handle_scheduler_delete(arguments).await,
+      "scheduler_set_enabled" => self.handle_scheduler_set_enabled(arguments).await,
+      "scheduler_run_now" => self.handle_scheduler_run_now(arguments).await,
+      "ai_keys_list" => self.handle_ai_keys_list().await,
+      "ai_keys_save" => self.handle_ai_keys_save(arguments).await,
+      "ai_keys_delete" => self.handle_ai_keys_delete(arguments).await,
+      "ai_keys_test" => self.handle_ai_keys_test(arguments).await,
+      "ai_keys_models_get" => self.handle_ai_keys_models_get(arguments).await,
+      "subscription_list" => self.handle_subscription_list().await,
+      "subscription_entries" => self.handle_subscription_entries(arguments).await,
+      "subscription_save" => self.handle_subscription_save(arguments).await,
+      "subscription_delete" => self.handle_subscription_delete(arguments).await,
+      "subscription_refresh" => self.handle_subscription_refresh(arguments).await,
+      "subscription_preview" => self.handle_subscription_preview(arguments).await,
+      "dns_custom_get" => self.handle_dns_custom_get().await,
+      "dns_custom_set" => self.handle_dns_custom_set(arguments).await,
+      "dns_custom_import" => self.handle_dns_custom_import(arguments).await,
+      "dns_custom_export" => self.handle_dns_custom_export(arguments).await,
+      "dns_cache_status" => self.handle_dns_cache_status().await,
+      "dns_refresh" => self.handle_dns_refresh().await,
+      "extension_get" => self.handle_extension_get(arguments).await,
+      "extension_add" => self.handle_extension_add(arguments).await,
+      "extension_update" => self.handle_extension_update(arguments).await,
+      "extension_update_group" => self.handle_extension_update_group(arguments).await,
+      "extension_add_to_group" => self.handle_extension_add_to_group(arguments).await,
+      "extension_remove_from_group" => self.handle_extension_remove_from_group(arguments).await,
+      "extension_group_for_profile" => self.handle_extension_group_for_profile(arguments).await,
+      "vpn_get" => self.handle_vpn_get(arguments).await,
+      "vpn_update" => self.handle_vpn_update(arguments).await,
+      "vpn_validate" => self.handle_vpn_validate(arguments).await,
+      "vpn_batch_import" => self.handle_vpn_batch_import(arguments).await,
+      "vpn_list_active" => self.handle_vpn_list_active().await,
+      "vpn_create_manual" => self.handle_vpn_create_manual(arguments).await,
+      "sync_settings_get" => self.handle_sync_settings_get(arguments).await,
+      "sync_status" => self.handle_sync_status().await,
+      "sync_set_proxy_enabled" => self.handle_sync_set_proxy_enabled(arguments).await,
+      "sync_set_group_enabled" => self.handle_sync_set_group_enabled(arguments).await,
+      "sync_set_vpn_enabled" => self.handle_sync_set_vpn_enabled(arguments).await,
+      "sync_set_extension_enabled" => self.handle_sync_set_extension_enabled(arguments).await,
+      "sync_set_extension_group_enabled" => {
+        self
+          .handle_sync_set_extension_group_enabled(arguments)
+          .await
+      }
+      "sync_request_profile" => self.handle_sync_request_profile(arguments).await,
+      "sync_enable_all" => self.handle_sync_enable_all().await,
+      "e2e_has_password" => self.handle_e2e_has_password().await,
+      "e2e_set_password" => self.handle_e2e_set_password(arguments).await,
+      "e2e_delete_password" => self.handle_e2e_delete_password().await,
+      "browser_versions" => self.handle_browser_versions(arguments).await,
+      "browser_download_check" => self.handle_browser_download_check(arguments).await,
+      "browser_missing_binaries" => self.handle_browser_missing_binaries().await,
+      "traffic_get_all" => self.handle_traffic_get_all().await,
+      "traffic_get_profile" => self.handle_traffic_get_profile(arguments).await,
+      "traffic_clear_profile" => self.handle_traffic_clear_profile(arguments).await,
+      "traffic_clear_all" => self.handle_traffic_clear_all().await,
+      "default_browser_check" => self.handle_default_browser_check().await,
+      "logs_read" => self.handle_logs_read().await,
       // Browser interaction tools
       "navigate" => self.handle_navigate(arguments).await,
       "screenshot" => self.handle_screenshot(arguments).await,
@@ -2261,7 +3210,19 @@ impl McpServer {
     let proxy_id = arguments
       .get("proxy_id")
       .and_then(|v| v.as_str())
+      .filter(|s| !s.is_empty())
       .map(|s| s.to_string());
+    let vpn_id = arguments
+      .get("vpn_id")
+      .and_then(|v| v.as_str())
+      .filter(|s| !s.is_empty())
+      .map(|s| s.to_string());
+    if proxy_id.is_some() && vpn_id.is_some() {
+      return Err(McpError {
+        code: -32602,
+        message: "Cannot set both proxy_id and vpn_id".to_string(),
+      });
+    }
     let launch_hook = arguments
       .get("launch_hook")
       .and_then(|v| v.as_str())
@@ -2269,6 +3230,7 @@ impl McpServer {
     let group_id = arguments
       .get("group_id")
       .and_then(|v| v.as_str())
+      .filter(|s| !s.is_empty())
       .map(|s| s.to_string());
     let tags: Option<Vec<String>> = arguments.get("tags").and_then(|v| {
       v.as_array().map(|arr| {
@@ -2278,6 +3240,24 @@ impl McpServer {
           .collect()
       })
     });
+    let dns_blocklist = arguments
+      .get("dns_blocklist")
+      .and_then(|v| v.as_str())
+      .map(|s| s.to_string());
+    let ephemeral = arguments
+      .get("ephemeral")
+      .and_then(|v| v.as_bool())
+      .unwrap_or(false);
+    let clear_on_close = arguments
+      .get("clear_on_close")
+      .and_then(|v| v.as_bool())
+      .unwrap_or(false);
+    if ephemeral && clear_on_close {
+      return Err(McpError {
+        code: -32602,
+        message: "clear_on_close is unavailable for ephemeral profiles".to_string(),
+      });
+    }
 
     // Pick the latest downloaded version for this browser
     let registry = crate::downloaded_browsers_registry::DownloadedBrowsersRegistry::instance();
@@ -2292,20 +3272,29 @@ impl McpServer {
       code: -32000,
       message: "MCP server not properly initialized".to_string(),
     })?;
+    let app_handle_owned = app_handle.clone();
+    drop(inner);
+
+    crate::validate_profile_network(proxy_id.as_deref(), vpn_id.as_deref())
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to create profile: {e}"),
+      })?;
 
     let mut profile = ProfileManager::instance()
       .create_profile_with_group(
-        app_handle,
+        &app_handle_owned,
         name,
         browser,
         version,
         "stable",
         proxy_id,
-        None,
+        vpn_id,
         None,
         group_id,
-        false,
-        None,
+        ephemeral,
+        dns_blocklist,
         launch_hook,
       )
       .await
@@ -2313,16 +3302,108 @@ impl McpServer {
         code: -32000,
         message: format!("Failed to create profile: {e}"),
       })?;
+    let profile_id_str = profile.id.to_string();
 
     if let Some(tags) = tags {
-      let _ =
-        ProfileManager::instance().update_profile_tags(app_handle, &profile.name, tags.clone());
+      ProfileManager::instance()
+        .update_profile_tags(&app_handle_owned, &profile_id_str, tags.clone())
+        .map_err(|e| McpError {
+          code: -32000,
+          message: format!("Failed to update tags: {e}"),
+        })?;
       profile.tags = tags;
       if let Ok(profiles) = ProfileManager::instance().list_profiles() {
         let _ = crate::tag_manager::TAG_MANAGER
           .lock()
           .map(|manager| manager.rebuild_from_profiles(&profiles));
       }
+    }
+    if let Some(note) = arguments.get("note").and_then(|v| v.as_str()) {
+      let normalized = if note.is_empty() {
+        None
+      } else {
+        Some(note.to_string())
+      };
+      ProfileManager::instance()
+        .update_profile_note(&app_handle_owned, &profile_id_str, normalized)
+        .map_err(|e| McpError {
+          code: -32000,
+          message: format!("Failed to update note: {e}"),
+        })?;
+    }
+    if let Some(color) = arguments.get("window_color").and_then(|v| v.as_str()) {
+      let normalized = if color.is_empty() {
+        None
+      } else {
+        Some(color.to_string())
+      };
+      ProfileManager::instance()
+        .update_profile_window_color(&app_handle_owned, &profile_id_str, normalized)
+        .map_err(|e| McpError {
+          code: -32000,
+          message: format!("Failed to update window color: {e}"),
+        })?;
+    }
+    if let Some(dir) = arguments.get("download_dir").and_then(|v| v.as_str()) {
+      let normalized = if dir.is_empty() {
+        None
+      } else {
+        Some(dir.to_string())
+      };
+      ProfileManager::instance()
+        .update_profile_download_dir(&app_handle_owned, &profile_id_str, normalized)
+        .map_err(|e| McpError {
+          code: -32000,
+          message: format!("Failed to update download dir: {e}"),
+        })?;
+    }
+    if let Some(allow) = arguments
+      .get("allow_agent_downloads")
+      .and_then(|v| v.as_bool())
+    {
+      ProfileManager::instance()
+        .update_profile_allow_agent_downloads(&app_handle_owned, &profile_id_str, allow)
+        .map_err(|e| McpError {
+          code: -32000,
+          message: format!("Failed to update agent downloads: {e}"),
+        })?;
+    }
+    if let Some(approve) = arguments
+      .get("agent_auto_approve")
+      .and_then(|v| v.as_bool())
+    {
+      ProfileManager::instance()
+        .update_profile_agent_auto_approve(&app_handle_owned, &profile_id_str, approve)
+        .map_err(|e| McpError {
+          code: -32000,
+          message: format!("Failed to update agent auto-approve: {e}"),
+        })?;
+    }
+    if arguments.get("agent_key_id").is_some() || arguments.get("agent_id").is_some() {
+      let key_id = arguments
+        .get("agent_key_id")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+      let agent_id = arguments
+        .get("agent_id")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+      ProfileManager::instance()
+        .update_profile_agent_pair(&app_handle_owned, &profile_id_str, key_id, agent_id)
+        .map_err(|e| McpError {
+          code: -32000,
+          message: format!("Failed to update agent pair: {e}"),
+        })?;
+    }
+    if clear_on_close {
+      ProfileManager::instance()
+        .update_profile_clear_on_close(&app_handle_owned, &profile_id_str, true)
+        .map_err(|e| McpError {
+          code: -32000,
+          message: format!("Failed to update clear-on-close: {e}"),
+        })?;
     }
 
     Ok(serde_json::json!({
@@ -2444,6 +3525,130 @@ impl McpServer {
         .map_err(|e| McpError {
           code: -32000,
           message: format!("Failed to update clear-on-close: {e}"),
+        })?;
+    }
+
+    if let Some(vpn_id) = arguments.get("vpn_id").and_then(|v| v.as_str()) {
+      let vid = if vpn_id.is_empty() {
+        None
+      } else {
+        Some(vpn_id.to_string())
+      };
+      pm.update_profile_vpn(app_handle.clone(), profile_id, vid)
+        .await
+        .map_err(|e| McpError {
+          code: -32000,
+          message: format!("Failed to update vpn: {e}"),
+        })?;
+    }
+    if let Some(version) = arguments.get("version").and_then(|v| v.as_str()) {
+      pm.update_profile_version(app_handle, profile_id, version)
+        .map_err(|e| McpError {
+          code: -32000,
+          message: format!("Failed to update version: {e}"),
+        })?;
+    }
+    if let Some(note) = arguments.get("note").and_then(|v| v.as_str()) {
+      let normalized = if note.is_empty() {
+        None
+      } else {
+        Some(note.to_string())
+      };
+      pm.update_profile_note(app_handle, profile_id, normalized)
+        .map_err(|e| McpError {
+          code: -32000,
+          message: format!("Failed to update note: {e}"),
+        })?;
+    }
+    if let Some(color) = arguments.get("window_color").and_then(|v| v.as_str()) {
+      let normalized = if color.is_empty() {
+        None
+      } else {
+        Some(color.to_string())
+      };
+      pm.update_profile_window_color(app_handle, profile_id, normalized)
+        .map_err(|e| McpError {
+          code: -32000,
+          message: format!("Failed to update window color: {e}"),
+        })?;
+    }
+    if let Some(dir) = arguments.get("download_dir").and_then(|v| v.as_str()) {
+      let normalized = if dir.is_empty() {
+        None
+      } else {
+        Some(dir.to_string())
+      };
+      pm.update_profile_download_dir(app_handle, profile_id, normalized)
+        .map_err(|e| McpError {
+          code: -32000,
+          message: format!("Failed to update download dir: {e}"),
+        })?;
+    }
+    if let Some(allow) = arguments
+      .get("allow_agent_downloads")
+      .and_then(|v| v.as_bool())
+    {
+      pm.update_profile_allow_agent_downloads(app_handle, profile_id, allow)
+        .map_err(|e| McpError {
+          code: -32000,
+          message: format!("Failed to update agent downloads: {e}"),
+        })?;
+    }
+    if let Some(approve) = arguments
+      .get("agent_auto_approve")
+      .and_then(|v| v.as_bool())
+    {
+      pm.update_profile_agent_auto_approve(app_handle, profile_id, approve)
+        .map_err(|e| McpError {
+          code: -32000,
+          message: format!("Failed to update agent auto-approve: {e}"),
+        })?;
+    }
+    if arguments.get("agent_key_id").is_some() || arguments.get("agent_id").is_some() {
+      let key_id = arguments
+        .get("agent_key_id")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+      let agent_id = arguments
+        .get("agent_id")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+      pm.update_profile_agent_pair(app_handle, profile_id, key_id, agent_id)
+        .map_err(|e| McpError {
+          code: -32000,
+          message: format!("Failed to update agent pair: {e}"),
+        })?;
+    }
+    if let Some(mode) = arguments.get("sync_mode").and_then(|v| v.as_str()) {
+      let inner = self.inner.lock().await;
+      let sync_handle = inner
+        .app_handle
+        .as_ref()
+        .ok_or_else(|| McpError {
+          code: -32000,
+          message: "MCP server not properly initialized".to_string(),
+        })?
+        .clone();
+      drop(inner);
+      crate::sync::set_profile_sync_mode(sync_handle, profile_id.to_string(), mode.to_string())
+        .await
+        .map_err(|e| McpError {
+          code: -32000,
+          message: format!("Failed to update sync mode: {e}"),
+        })?;
+    }
+    if let Some(level) = arguments.get("dns_blocklist").and_then(|v| v.as_str()) {
+      let normalized = if level.is_empty() || level == "none" {
+        None
+      } else {
+        Some(level.to_string())
+      };
+      pm.update_profile_dns_blocklist(profile_id, normalized)
+        .map_err(|e| McpError {
+          code: -32000,
+          message: format!("Failed to update dns blocklist: {e}"),
         })?;
     }
 
@@ -3559,6 +4764,21 @@ impl McpServer {
       });
     }
 
+    let mut messages: Vec<crate::llm::ChatMessage> = arguments
+      .get("messages")
+      .cloned()
+      .and_then(|v| serde_json::from_value(v).ok())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing or invalid messages".to_string(),
+      })?;
+    if let Some(lang) = arguments
+      .get("responseLanguage")
+      .and_then(|v| v.as_str())
+      .filter(|s| !s.trim().is_empty())
+    {
+      messages.insert(0, crate::llm::ChatMessage::text("system", format!("Respond in {lang} (BCP-47). Tool names, arguments, and JSON stay English; only the human-readable reply localizes.")));
+    }
     let request = crate::llm_completion::LlmCompletionRequest {
       key_id: arguments
         .get("key_id")
@@ -3572,14 +4792,7 @@ impl McpServer {
         .get("model")
         .and_then(|v| v.as_str())
         .map(String::from),
-      messages: arguments
-        .get("messages")
-        .cloned()
-        .and_then(|v| serde_json::from_value(v).ok())
-        .ok_or_else(|| McpError {
-          code: -32602,
-          message: "Missing or invalid messages".to_string(),
-        })?,
+      messages,
       tools: arguments
         .get("tools")
         .cloned()
@@ -3621,7 +4834,7 @@ impl McpServer {
     &self,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
-    let message = arguments
+    let mut message = arguments
       .get("message")
       .and_then(|v| v.as_str())
       .ok_or_else(|| McpError {
@@ -3629,6 +4842,14 @@ impl McpServer {
         message: "Missing message".to_string(),
       })?
       .to_string();
+    if let Some(lang) = arguments
+      .get("responseLanguage")
+      .and_then(|v| v.as_str())
+      .filter(|s| !s.trim().is_empty())
+    {
+      message =
+        format!("[Reply in {lang}. Tool names, arguments, and JSON stay English.]\n{message}");
+    }
     let key_id = arguments
       .get("key_id")
       .and_then(|v| v.as_str())
@@ -5836,6 +7057,1788 @@ impl McpServer {
       }]
     }))
   }
+
+  async fn handle_clone_profile(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = Self::require_profile_id(arguments)?;
+    let name = arguments
+      .get("name")
+      .and_then(|v| v.as_str())
+      .map(|s| s.to_string());
+    let cloned = ProfileManager::instance()
+      .clone_profile(profile_id, name)
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to clone profile: {e}"),
+      })?;
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": format!("Profile cloned (id: {})", cloned.id)
+      }]
+    }))
+  }
+
+  async fn handle_get_app_settings(&self) -> Result<serde_json::Value, McpError> {
+    let manager = SettingsManager::instance();
+    let settings = manager.load_settings().map_err(|e| McpError {
+      code: -32000,
+      message: format!("Failed to load settings: {e}"),
+    })?;
+    // Presence-only: secret tokens never leave the backend. Best-effort —
+    // false when the server runs without an app handle (e.g. unit tests).
+    let (api_token_set, mcp_token_set) = match self.inner.lock().await.app_handle.clone() {
+      Some(handle) => (
+        manager
+          .get_api_token(&handle)
+          .await
+          .ok()
+          .flatten()
+          .is_some(),
+        manager
+          .get_mcp_token(&handle)
+          .await
+          .ok()
+          .flatten()
+          .is_some(),
+      ),
+      None => (false, false),
+    };
+    let redacted = serde_json::json!({
+      "theme": settings.theme,
+      "custom_theme": settings.custom_theme,
+      "language": settings.language,
+      "api_enabled": settings.api_enabled,
+      "api_port": settings.api_port,
+      "api_token_set": api_token_set,
+      "sync_server_url": settings.sync_server_url,
+      "mcp_enabled": settings.mcp_enabled,
+      "mcp_port": settings.mcp_port,
+      "mcp_token_set": mcp_token_set,
+      "set_as_default_browser": settings.set_as_default_browser,
+      "disable_auto_updates": settings.disable_auto_updates,
+      "keep_decrypted_profiles_in_ram": settings.keep_decrypted_profiles_in_ram,
+      "keep_running_in_background": settings.keep_running_in_background,
+      "llm_max_concurrency": settings.llm_max_concurrency,
+      "llm_requests_per_hour": settings.llm_requests_per_hour,
+      "max_concurrent_launches": settings.max_concurrent_launches,
+      "automation_requests_per_hour": settings.automation_requests_per_hour,
+      "onboarding_completed": settings.onboarding_completed,
+    });
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&redacted).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_update_app_settings(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    const FORBIDDEN: &[&str] = &[
+      "api_enabled",
+      "api_port",
+      "api_token",
+      "mcp_enabled",
+      "mcp_port",
+      "mcp_token",
+      "sync_server_url",
+      "set_as_default_browser",
+      "onboarding_completed",
+      "window_resize_warning_dismissed",
+    ];
+    for key in FORBIDDEN {
+      if arguments.get(*key).is_some() {
+        return Err(McpError {
+          code: -32602,
+          message: format!("field '{key}' is not MCP-writable"),
+        });
+      }
+    }
+    let allowed = [
+      "theme",
+      "custom_theme",
+      "language",
+      "disable_auto_updates",
+      "keep_decrypted_profiles_in_ram",
+      "keep_running_in_background",
+      "llm_max_concurrency",
+      "llm_requests_per_hour",
+      "max_concurrent_launches",
+      "automation_requests_per_hour",
+      "responseLanguage",
+    ];
+    let mut touched = false;
+    for (k, _) in arguments
+      .as_object()
+      .map(|m| m.iter())
+      .into_iter()
+      .flatten()
+    {
+      if !allowed.contains(&k.as_str()) {
+        return Err(McpError {
+          code: -32602,
+          message: format!("field '{k}' is not MCP-writable"),
+        });
+      }
+      if k != "responseLanguage" {
+        touched = true;
+      }
+    }
+    if !touched {
+      return Err(McpError {
+        code: -32602,
+        message: "No writable settings provided".to_string(),
+      });
+    }
+    if let Some(theme) = arguments.get("theme").and_then(|v| v.as_str()) {
+      if !matches!(theme, "light" | "dark" | "system" | "custom") {
+        return Err(McpError {
+          code: -32602,
+          message: "theme must be light, dark, system or custom".to_string(),
+        });
+      }
+      if theme == "custom" {
+        let has_map = arguments
+          .get("custom_theme")
+          .and_then(|v| v.as_object())
+          .map(|m| !m.is_empty())
+          .unwrap_or(false);
+        if !has_map {
+          let current = SettingsManager::instance()
+            .load_settings()
+            .map_err(|e| McpError {
+              code: -32000,
+              message: format!("Failed to load settings: {e}"),
+            })?;
+          let current_has = current
+            .custom_theme
+            .as_ref()
+            .map(|m| !m.is_empty())
+            .unwrap_or(false);
+          if !current_has {
+            return Err(McpError {
+              code: -32602,
+              message: "theme 'custom' requires a non-empty custom_theme".to_string(),
+            });
+          }
+        }
+      }
+    }
+    if let Some(lang) = arguments.get("language").and_then(|v| v.as_str()) {
+      const LANGS: &[&str] = &[
+        "system", "en", "es", "pt", "fr", "zh", "ja", "ko", "ru", "tr", "vi",
+      ];
+      if !LANGS.contains(&lang) {
+        return Err(McpError {
+          code: -32602,
+          message: "unsupported language".to_string(),
+        });
+      }
+    }
+    for key in ["llm_max_concurrency", "max_concurrent_launches"] {
+      if let Some(v) = arguments.get(key).and_then(|v| v.as_u64()) {
+        if v == 0 || v > 64 {
+          return Err(McpError {
+            code: -32602,
+            message: format!("{key} must be 1-64"),
+          });
+        }
+      }
+    }
+    let manager = SettingsManager::instance();
+    let mut settings = manager.load_settings().map_err(|e| McpError {
+      code: -32000,
+      message: format!("Failed to load settings: {e}"),
+    })?;
+    if let Some(theme) = arguments.get("theme").and_then(|v| v.as_str()) {
+      settings.theme = theme.to_string();
+    }
+    if let Some(map) = arguments.get("custom_theme").and_then(|v| v.as_object()) {
+      if map.len() > 100 {
+        return Err(McpError {
+          code: -32602,
+          message: "custom_theme too large (max 100 entries)".to_string(),
+        });
+      }
+      let mut out = std::collections::HashMap::new();
+      for (k, v) in map {
+        let s = v.as_str().ok_or_else(|| McpError {
+          code: -32602,
+          message: "custom_theme values must be strings".to_string(),
+        })?;
+        out.insert(k.clone(), s.to_string());
+      }
+      settings.custom_theme = Some(out);
+    }
+    if let Some(lang) = arguments.get("language").and_then(|v| v.as_str()) {
+      settings.language = if lang == "system" {
+        None
+      } else {
+        Some(lang.to_string())
+      };
+    }
+    if let Some(v) = arguments
+      .get("disable_auto_updates")
+      .and_then(|v| v.as_bool())
+    {
+      settings.disable_auto_updates = v;
+    }
+    if let Some(v) = arguments
+      .get("keep_decrypted_profiles_in_ram")
+      .and_then(|v| v.as_bool())
+    {
+      settings.keep_decrypted_profiles_in_ram = v;
+    }
+    if let Some(v) = arguments
+      .get("keep_running_in_background")
+      .and_then(|v| v.as_bool())
+    {
+      settings.keep_running_in_background = v;
+    }
+    if let Some(v) = arguments
+      .get("llm_max_concurrency")
+      .and_then(|v| v.as_u64())
+    {
+      settings.llm_max_concurrency = v as usize;
+    }
+    if let Some(v) = arguments
+      .get("llm_requests_per_hour")
+      .and_then(|v| v.as_u64())
+    {
+      settings.llm_requests_per_hour = v;
+    }
+    if let Some(v) = arguments
+      .get("max_concurrent_launches")
+      .and_then(|v| v.as_u64())
+    {
+      settings.max_concurrent_launches = v as usize;
+    }
+    if let Some(v) = arguments
+      .get("automation_requests_per_hour")
+      .and_then(|v| v.as_u64())
+    {
+      settings.automation_requests_per_hour = v;
+    }
+    manager.save_settings(&settings).map_err(|e| McpError {
+      code: -32000,
+      message: format!("Failed to save settings: {e}"),
+    })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": "Application settings updated" }]
+    }))
+  }
+
+  async fn handle_get_table_sorting(&self) -> Result<serde_json::Value, McpError> {
+    let sorting = SettingsManager::instance()
+      .load_table_sorting()
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to load table sorting: {e}"),
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&sorting).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_update_table_sorting(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let column = arguments
+      .get("column")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing column".to_string(),
+      })?;
+    let direction = arguments
+      .get("direction")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing direction".to_string(),
+      })?;
+    if !matches!(column, "name" | "browser" | "status") {
+      return Err(McpError {
+        code: -32602,
+        message: "column must be name, browser or status".to_string(),
+      });
+    }
+    if !matches!(direction, "asc" | "desc") {
+      return Err(McpError {
+        code: -32602,
+        message: "direction must be asc or desc".to_string(),
+      });
+    }
+    SettingsManager::instance()
+      .save_table_sorting(&crate::settings_manager::TableSortingSettings {
+        column: column.to_string(),
+        direction: direction.to_string(),
+      })
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to save table sorting: {e}"),
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": "Table sorting updated" }]
+    }))
+  }
+
+  async fn handle_scheduler_list(&self) -> Result<serde_json::Value, McpError> {
+    let tasks = crate::scheduler::SchedulerStore::instance().list_tasks();
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&tasks).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_scheduler_get(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let task_id = arguments
+      .get("task_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing task_id".to_string(),
+      })?;
+    let task = crate::scheduler::SchedulerStore::instance()
+      .get_task(task_id)
+      .ok_or_else(|| McpError {
+        code: -32000,
+        message: "TASK_NOT_FOUND".to_string(),
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&task).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_scheduler_save(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let task_value = arguments.get("task").ok_or_else(|| McpError {
+      code: -32602,
+      message: "Missing task".to_string(),
+    })?;
+    let task: crate::scheduler::TaskDefinition = serde_json::from_value(task_value.clone())
+      .map_err(|e| McpError {
+        code: -32602,
+        message: format!("Invalid task: {e}"),
+      })?;
+    let saved = crate::scheduler::SchedulerStore::instance()
+      .save_task(&task)
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&saved).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_scheduler_delete(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let task_id = arguments
+      .get("task_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing task_id".to_string(),
+      })?;
+    crate::scheduler::SchedulerStore::instance()
+      .delete_task(task_id)
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": "Scheduled task deleted" }]
+    }))
+  }
+
+  async fn handle_scheduler_set_enabled(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let task_id = arguments
+      .get("task_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing task_id".to_string(),
+      })?;
+    let enabled = arguments
+      .get("enabled")
+      .and_then(|v| v.as_bool())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing enabled".to_string(),
+      })?;
+    let saved = crate::scheduler::SchedulerStore::instance()
+      .set_enabled(task_id, enabled)
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&saved).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_scheduler_run_now(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let task_id = arguments
+      .get("task_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing task_id".to_string(),
+      })?
+      .to_string();
+    // Boxed to break the async recursion cycle (run_now -> agent run_tool_call
+    // -> dispatch_tool_call -> handle_scheduler_run_now), same as agent_chat.
+    let result = Box::pin(crate::scheduler::JobRunner::instance().run_now(&task_id))
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&result).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_ai_keys_list(&self) -> Result<serde_json::Value, McpError> {
+    let keys = crate::ai_keys::list_keys().map_err(|e| McpError {
+      code: -32000,
+      message: e,
+    })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&keys).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_ai_keys_save(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let provider = arguments
+      .get("provider")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing provider".to_string(),
+      })?;
+    let model = arguments
+      .get("model")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing model".to_string(),
+      })?;
+    let key = arguments
+      .get("key")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing key".to_string(),
+      })?;
+    let name = arguments
+      .get("name")
+      .and_then(|v| v.as_str())
+      .unwrap_or("")
+      .to_string();
+    let endpoint = arguments
+      .get("endpoint")
+      .and_then(|v| v.as_str())
+      .map(|s| s.to_string());
+    let saved = crate::ai_keys::save_key(provider, &name, model, key, endpoint.as_deref())
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&saved).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_ai_keys_delete(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let key_id = arguments
+      .get("key_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing key_id".to_string(),
+      })?;
+    crate::ai_keys::delete_key(key_id).map_err(|e| McpError {
+      code: -32000,
+      message: e,
+    })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": "AI key deleted" }]
+    }))
+  }
+
+  async fn handle_ai_keys_test(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    if crate::llm_rate_limiter::check_llm_rate_limit().is_limited() {
+      return Err(McpError {
+        code: -32000,
+        message: "LLM request quota exceeded; try again later".to_string(),
+      });
+    }
+    let provider = arguments
+      .get("provider")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing provider".to_string(),
+      })?
+      .to_string();
+    let model = arguments
+      .get("model")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing model".to_string(),
+      })?
+      .to_string();
+    let key = arguments
+      .get("key")
+      .and_then(|v| v.as_str())
+      .map(|s| s.to_string());
+    let id = arguments
+      .get("key_id")
+      .and_then(|v| v.as_str())
+      .map(|s| s.to_string());
+    let endpoint = arguments
+      .get("endpoint")
+      .and_then(|v| v.as_str())
+      .map(|s| s.to_string());
+    let result = crate::ai_keys::ai_keys_test(provider, model, key, id, endpoint)
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&result).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_ai_keys_models_get(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    if crate::llm_rate_limiter::check_llm_rate_limit().is_limited() {
+      return Err(McpError {
+        code: -32000,
+        message: "LLM request quota exceeded; try again later".to_string(),
+      });
+    }
+    let provider = arguments
+      .get("provider")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing provider".to_string(),
+      })?
+      .to_string();
+    let key = arguments
+      .get("key")
+      .and_then(|v| v.as_str())
+      .map(|s| s.to_string());
+    let id = arguments
+      .get("key_id")
+      .and_then(|v| v.as_str())
+      .map(|s| s.to_string());
+    let endpoint = arguments
+      .get("endpoint")
+      .and_then(|v| v.as_str())
+      .map(|s| s.to_string());
+    let result = crate::ai_keys::ai_keys_models(provider, key, id, endpoint)
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&result).unwrap_or_default() }]
+    }))
+  }
+
+  async fn require_app_handle(&self) -> Result<AppHandle, McpError> {
+    self
+      .inner
+      .lock()
+      .await
+      .app_handle
+      .clone()
+      .ok_or_else(|| McpError {
+        code: -32000,
+        message: "MCP server not properly initialized".to_string(),
+      })
+  }
+
+  fn redact_vpn_config(config: &crate::vpn::VpnConfig) -> serde_json::Value {
+    serde_json::json!({
+      "id": config.id,
+      "name": config.name,
+      "vpn_type": config.vpn_type.to_string(),
+      "created_at": config.created_at,
+      "last_used": config.last_used,
+      "sync_enabled": config.sync_enabled,
+      "last_sync": config.last_sync,
+      "updated_at": config.updated_at,
+      "config_data_set": !config.config_data.is_empty(),
+      "config_data_len": config.config_data.len(),
+    })
+  }
+
+  async fn handle_subscription_list(&self) -> Result<serde_json::Value, McpError> {
+    let subs = crate::subscription_manager::subscriptions_list().map_err(|e| McpError {
+      code: -32000,
+      message: e,
+    })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&subs).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_subscription_entries(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let subscription_id = arguments
+      .get("subscription_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing subscription_id".to_string(),
+      })?;
+    let entries = crate::subscription_manager::subscription_entries(subscription_id.to_string())
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&entries).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_subscription_save(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let name = arguments
+      .get("name")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing name".to_string(),
+      })?;
+    let url = arguments
+      .get("url")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing url".to_string(),
+      })?;
+    if url.trim().is_empty() {
+      return Err(McpError {
+        code: -32602,
+        message: "url must not be empty".to_string(),
+      });
+    }
+    let id = arguments
+      .get("id")
+      .and_then(|v| v.as_str())
+      .filter(|s| !s.is_empty())
+      .map(|s| s.to_string());
+    let refresh_hours = arguments
+      .get("refresh_hours")
+      .and_then(|v| v.as_u64())
+      .unwrap_or(24);
+    if refresh_hours == 0 {
+      return Err(McpError {
+        code: -32602,
+        message: "refresh_hours must be >= 1".to_string(),
+      });
+    }
+    let use_proxy_id = arguments
+      .get("use_proxy_id")
+      .and_then(|v| v.as_str())
+      .filter(|s| !s.is_empty())
+      .map(|s| s.to_string());
+    let auto_check = arguments
+      .get("auto_check")
+      .and_then(|v| v.as_bool())
+      .unwrap_or(true);
+    let auto_prune = arguments
+      .get("auto_prune")
+      .and_then(|v| v.as_bool())
+      .unwrap_or(true);
+    let saved = crate::subscription_manager::subscription_save(
+      id,
+      name.to_string(),
+      url.to_string(),
+      refresh_hours,
+      use_proxy_id,
+      auto_check,
+      auto_prune,
+    )
+    .map_err(|e| McpError {
+      code: -32000,
+      message: e,
+    })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&saved).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_subscription_delete(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let id = arguments
+      .get("id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing id".to_string(),
+      })?;
+    let delete_entries = arguments
+      .get("delete_entries")
+      .and_then(|v| v.as_bool())
+      .unwrap_or(false);
+    let app_handle = self.require_app_handle().await?;
+    crate::subscription_manager::subscription_delete(app_handle, id.to_string(), delete_entries)
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": "Subscription deleted" }]
+    }))
+  }
+
+  async fn handle_subscription_refresh(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let id = arguments
+      .get("id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing id".to_string(),
+      })?;
+    let app_handle = self.require_app_handle().await?;
+    let result = crate::subscription_manager::subscription_refresh(app_handle, id.to_string())
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&result).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_subscription_preview(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let url = arguments
+      .get("url")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing url".to_string(),
+      })?;
+    let use_proxy_id = arguments
+      .get("use_proxy_id")
+      .and_then(|v| v.as_str())
+      .filter(|s| !s.is_empty())
+      .map(|s| s.to_string());
+    let result = crate::subscription_manager::subscription_preview(url.to_string(), use_proxy_id)
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&result).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_dns_custom_get(&self) -> Result<serde_json::Value, McpError> {
+    let config = crate::dns_blocklist::get_custom_dns_config()
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&config).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_dns_custom_set(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let str_list = |key: &str| -> Result<Vec<String>, McpError> {
+      arguments
+        .get(key)
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| McpError {
+          code: -32602,
+          message: format!("Missing {key}"),
+        })?
+        .iter()
+        .map(|v| {
+          v.as_str().map(|s| s.to_string()).ok_or_else(|| McpError {
+            code: -32602,
+            message: format!("{key} entries must be strings"),
+          })
+        })
+        .collect()
+    };
+    let sources = str_list("sources")?;
+    let block_domains = str_list("block_domains")?;
+    let allow_domains = str_list("allow_domains")?;
+    let allowlist_mode = arguments
+      .get("allowlist_mode")
+      .and_then(|v| v.as_bool())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing allowlist_mode".to_string(),
+      })?;
+    let saved = crate::dns_blocklist::set_custom_dns_config(
+      sources,
+      block_domains,
+      allow_domains,
+      allowlist_mode,
+    )
+    .await
+    .map_err(|e| McpError {
+      code: -32000,
+      message: e,
+    })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&saved).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_dns_custom_import(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let content = arguments
+      .get("content")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing content".to_string(),
+      })?;
+    let format = arguments
+      .get("format")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing format".to_string(),
+      })?;
+    let imported =
+      crate::dns_blocklist::import_custom_dns_rules(content.to_string(), format.to_string())
+        .await
+        .map_err(|e| McpError {
+          code: -32000,
+          message: e,
+        })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&imported).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_dns_custom_export(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let format = arguments
+      .get("format")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing format".to_string(),
+      })?;
+    let exported = crate::dns_blocklist::export_custom_dns_rules(format.to_string())
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": exported }]
+    }))
+  }
+
+  async fn handle_dns_cache_status(&self) -> Result<serde_json::Value, McpError> {
+    let status = crate::dns_blocklist::get_dns_blocklist_cache_status()
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&status).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_dns_refresh(&self) -> Result<serde_json::Value, McpError> {
+    crate::dns_blocklist::refresh_dns_blocklists()
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": "DNS blocklists refreshed" }]
+    }))
+  }
+
+  async fn handle_extension_get(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let extension_id = arguments
+      .get("extension_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing extension_id".to_string(),
+      })?;
+    let ext = crate::extension_manager::EXTENSION_MANAGER
+      .lock()
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("Extension store unavailable: {e}"),
+      })?
+      .get_extension(extension_id)
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("{e}"),
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&ext).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_extension_add(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    use base64::Engine as _;
+    let name = arguments
+      .get("name")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing name".to_string(),
+      })?;
+    let file_name = arguments
+      .get("file_name")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing file_name".to_string(),
+      })?;
+    let encoded = arguments
+      .get("file_data_base64")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing file_data_base64".to_string(),
+      })?;
+    let file_data = base64::engine::general_purpose::STANDARD
+      .decode(encoded)
+      .map_err(|e| McpError {
+        code: -32602,
+        message: format!("Invalid base64 file data: {e}"),
+      })?;
+    if file_data.len() > 32 * 1024 * 1024 {
+      return Err(McpError {
+        code: -32602,
+        message: "Extension file too large (max 32 MB)".to_string(),
+      });
+    }
+    let ext =
+      crate::extension_manager::add_extension(name.to_string(), file_name.to_string(), file_data)
+        .await
+        .map_err(|e| McpError {
+          code: -32000,
+          message: e,
+        })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&ext).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_extension_update(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let extension_id = arguments
+      .get("extension_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing extension_id".to_string(),
+      })?;
+    let name = arguments
+      .get("name")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing name".to_string(),
+      })?;
+    let updated = crate::extension_manager::update_extension(
+      extension_id.to_string(),
+      Some(name.to_string()),
+      None,
+      None,
+    )
+    .await
+    .map_err(|e| McpError {
+      code: -32000,
+      message: e,
+    })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&updated).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_extension_update_group(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let group_id = arguments
+      .get("group_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing group_id".to_string(),
+      })?;
+    let name = arguments
+      .get("name")
+      .and_then(|v| v.as_str())
+      .map(|s| s.to_string());
+    let extension_ids: Option<Vec<String>> = arguments.get("extension_ids").and_then(|v| {
+      v.as_array().map(|arr| {
+        arr
+          .iter()
+          .filter_map(|item| item.as_str().map(|s| s.to_string()))
+          .collect()
+      })
+    });
+    if name.is_none() && extension_ids.is_none() {
+      return Err(McpError {
+        code: -32602,
+        message: "Provide name and/or extension_ids".to_string(),
+      });
+    }
+    let updated =
+      crate::extension_manager::update_extension_group(group_id.to_string(), name, extension_ids)
+        .await
+        .map_err(|e| McpError {
+          code: -32000,
+          message: e,
+        })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&updated).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_extension_add_to_group(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let group_id = arguments
+      .get("group_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing group_id".to_string(),
+      })?;
+    let extension_id = arguments
+      .get("extension_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing extension_id".to_string(),
+      })?;
+    let updated = crate::extension_manager::add_extension_to_group(
+      group_id.to_string(),
+      extension_id.to_string(),
+    )
+    .await
+    .map_err(|e| McpError {
+      code: -32000,
+      message: e,
+    })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&updated).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_extension_remove_from_group(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let group_id = arguments
+      .get("group_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing group_id".to_string(),
+      })?;
+    let extension_id = arguments
+      .get("extension_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing extension_id".to_string(),
+      })?;
+    let updated = crate::extension_manager::remove_extension_from_group(
+      group_id.to_string(),
+      extension_id.to_string(),
+    )
+    .await
+    .map_err(|e| McpError {
+      code: -32000,
+      message: e,
+    })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&updated).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_extension_group_for_profile(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = Self::require_profile_id(arguments)?.to_string();
+    let group = crate::extension_manager::get_extension_group_for_profile(profile_id)
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&group).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_vpn_get(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let vpn_id = arguments
+      .get("vpn_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing vpn_id".to_string(),
+      })?;
+    let config = crate::vpn::VPN_STORAGE
+      .lock()
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("VPN storage unavailable: {e}"),
+      })?
+      .load_config(vpn_id)
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("{e}"),
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&Self::redact_vpn_config(&config)).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_vpn_update(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let vpn_id = arguments
+      .get("vpn_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing vpn_id".to_string(),
+      })?;
+    let name = arguments
+      .get("name")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing name".to_string(),
+      })?;
+    if name.trim().is_empty() {
+      return Err(McpError {
+        code: -32602,
+        message: "name must not be empty".to_string(),
+      });
+    }
+    let updated = crate::vpn::VPN_STORAGE
+      .lock()
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("VPN storage unavailable: {e}"),
+      })?
+      .update_config_name(vpn_id, name.trim())
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("{e}"),
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&Self::redact_vpn_config(&updated)).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_vpn_validate(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let vpn_id = arguments
+      .get("vpn_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing vpn_id".to_string(),
+      })?;
+    let result = crate::check_vpn_validity_core(vpn_id)
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&result).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_vpn_batch_import(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let content = arguments
+      .get("content")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing content".to_string(),
+      })?;
+    let results = crate::import_vpn_config_batch(content.to_string())
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&results).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_vpn_list_active(&self) -> Result<serde_json::Value, McpError> {
+    use crate::proxy_storage::is_process_running;
+    let workers = crate::vpn_worker_storage::list_vpn_worker_configs();
+    let active: Vec<crate::vpn::VpnStatus> = workers
+      .into_iter()
+      .filter(|w| w.pid.map(is_process_running).unwrap_or(false))
+      .map(|w| crate::vpn::VpnStatus {
+        connected: true,
+        vpn_id: w.vpn_id,
+        connected_at: None,
+        bytes_sent: None,
+        bytes_received: None,
+        last_handshake: None,
+      })
+      .collect();
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&active).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_vpn_create_manual(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let name = arguments
+      .get("name")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing name".to_string(),
+      })?;
+    if name.trim().is_empty() {
+      return Err(McpError {
+        code: -32602,
+        message: "name must not be empty".to_string(),
+      });
+    }
+    let vpn_type = arguments
+      .get("vpn_type")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing vpn_type".to_string(),
+      })?;
+    let vpn_type = match vpn_type.to_lowercase().as_str() {
+      "wireguard" => crate::vpn::VpnType::WireGuard,
+      "vless" => crate::vpn::VpnType::Vless,
+      _ => {
+        return Err(McpError {
+          code: -32602,
+          message: "vpn_type must be wireguard or vless".to_string(),
+        });
+      }
+    };
+    let config_data = arguments
+      .get("config_data")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing config_data".to_string(),
+      })?;
+    if config_data.trim().is_empty() {
+      return Err(McpError {
+        code: -32602,
+        message: "config_data must not be empty".to_string(),
+      });
+    }
+    let created = crate::vpn::VPN_STORAGE
+      .lock()
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("VPN storage unavailable: {e}"),
+      })?
+      .create_config_manual(name.trim(), vpn_type, config_data)
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("{e}"),
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&Self::redact_vpn_config(&created)).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_sync_settings_get(
+    &self,
+    _arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let app_handle = self.require_app_handle().await?;
+    let settings = crate::settings_manager::get_sync_settings(app_handle)
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+    let redacted = serde_json::json!({
+      "sync_server_url": settings.sync_server_url,
+      "sync_token_set": settings.sync_token.as_ref().map(|t| !t.is_empty()).unwrap_or(false),
+    });
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&redacted).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_sync_status(&self) -> Result<serde_json::Value, McpError> {
+    let configured = crate::sync::is_sync_configured();
+    let counts = crate::sync::get_unsynced_entity_counts().map_err(|e| McpError {
+      code: -32000,
+      message: e,
+    })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&serde_json::json!({
+        "configured": configured,
+        "unsynced": counts,
+      })).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_sync_set_proxy_enabled(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let proxy_id = arguments
+      .get("proxy_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing proxy_id".to_string(),
+      })?;
+    let enabled = arguments
+      .get("enabled")
+      .and_then(|v| v.as_bool())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing enabled".to_string(),
+      })?;
+    let app_handle = self.require_app_handle().await?;
+    crate::sync::set_proxy_sync_enabled(app_handle, proxy_id.to_string(), enabled)
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": "Proxy sync setting updated" }]
+    }))
+  }
+
+  async fn handle_sync_set_group_enabled(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let group_id = arguments
+      .get("group_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing group_id".to_string(),
+      })?;
+    let enabled = arguments
+      .get("enabled")
+      .and_then(|v| v.as_bool())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing enabled".to_string(),
+      })?;
+    let app_handle = self.require_app_handle().await?;
+    crate::sync::set_group_sync_enabled(app_handle, group_id.to_string(), enabled)
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": "Group sync setting updated" }]
+    }))
+  }
+
+  async fn handle_sync_set_vpn_enabled(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let vpn_id = arguments
+      .get("vpn_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing vpn_id".to_string(),
+      })?;
+    let enabled = arguments
+      .get("enabled")
+      .and_then(|v| v.as_bool())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing enabled".to_string(),
+      })?;
+    let app_handle = self.require_app_handle().await?;
+    crate::sync::set_vpn_sync_enabled(app_handle, vpn_id.to_string(), enabled)
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": "VPN sync setting updated" }]
+    }))
+  }
+
+  async fn handle_sync_set_extension_enabled(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let extension_id = arguments
+      .get("extension_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing extension_id".to_string(),
+      })?;
+    let enabled = arguments
+      .get("enabled")
+      .and_then(|v| v.as_bool())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing enabled".to_string(),
+      })?;
+    let app_handle = self.require_app_handle().await?;
+    crate::sync::set_extension_sync_enabled(app_handle, extension_id.to_string(), enabled)
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": "Extension sync setting updated" }]
+    }))
+  }
+
+  async fn handle_sync_set_extension_group_enabled(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let extension_group_id = arguments
+      .get("extension_group_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing extension_group_id".to_string(),
+      })?;
+    let enabled = arguments
+      .get("enabled")
+      .and_then(|v| v.as_bool())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing enabled".to_string(),
+      })?;
+    let app_handle = self.require_app_handle().await?;
+    crate::sync::set_extension_group_sync_enabled(
+      app_handle,
+      extension_group_id.to_string(),
+      enabled,
+    )
+    .await
+    .map_err(|e| McpError {
+      code: -32000,
+      message: e,
+    })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": "Extension group sync setting updated" }]
+    }))
+  }
+
+  async fn handle_sync_request_profile(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = Self::require_profile_id(arguments)?.to_string();
+    let app_handle = self.require_app_handle().await?;
+    crate::sync::request_profile_sync(app_handle, profile_id)
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": "Profile sync queued" }]
+    }))
+  }
+
+  async fn handle_sync_enable_all(&self) -> Result<serde_json::Value, McpError> {
+    let app_handle = self.require_app_handle().await?;
+    crate::sync::enable_sync_for_all_entities(app_handle)
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": "Sync enabled for all metadata entities" }]
+    }))
+  }
+
+  async fn handle_e2e_has_password(&self) -> Result<serde_json::Value, McpError> {
+    let has = crate::sync::check_has_e2e_password();
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&serde_json::json!({ "has_password": has })).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_e2e_set_password(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let password = arguments
+      .get("password")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing password".to_string(),
+      })?;
+    if password.is_empty() {
+      return Err(McpError {
+        code: -32602,
+        message: "password must not be empty".to_string(),
+      });
+    }
+    crate::sync::set_e2e_password(password.to_string())
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": "Sync encryption password set" }]
+    }))
+  }
+
+  async fn handle_e2e_delete_password(&self) -> Result<serde_json::Value, McpError> {
+    crate::sync::delete_e2e_password()
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": "Sync encryption password deleted" }]
+    }))
+  }
+
+  async fn handle_browser_versions(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let browser = arguments
+      .get("browser")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing browser".to_string(),
+      })?;
+    let versions =
+      crate::downloaded_browsers_registry::get_downloaded_browser_versions(browser.to_string())
+        .map_err(|e| McpError {
+          code: -32000,
+          message: e,
+        })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&versions).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_browser_download_check(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let browser = arguments
+      .get("browser")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing browser".to_string(),
+      })?;
+    let version = arguments
+      .get("version")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing version".to_string(),
+      })?;
+    let downloaded = crate::downloaded_browsers_registry::is_browser_downloaded(
+      browser.to_string(),
+      version.to_string(),
+    );
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&serde_json::json!({ "downloaded": downloaded })).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_browser_missing_binaries(&self) -> Result<serde_json::Value, McpError> {
+    let missing = crate::downloaded_browsers_registry::check_missing_binaries()
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&missing).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_traffic_get_all(&self) -> Result<serde_json::Value, McpError> {
+    let snapshots = crate::traffic_stats::get_all_traffic_snapshots_realtime();
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&snapshots).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_traffic_get_profile(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = Self::require_profile_id(arguments)?;
+    let snapshot = crate::traffic_stats::get_traffic_snapshot_for_profile(profile_id);
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&snapshot).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_traffic_clear_profile(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = Self::require_profile_id(arguments)?.to_string();
+    if crate::traffic_stats::load_traffic_stats_by_profile(&profile_id).is_none() {
+      return Ok(serde_json::json!({
+        "content": [{ "type": "text", "text": "No traffic history for profile" }]
+      }));
+    }
+    crate::traffic_stats::delete_traffic_stats(&profile_id);
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": "Profile traffic history erased" }]
+    }))
+  }
+
+  async fn handle_traffic_clear_all(&self) -> Result<serde_json::Value, McpError> {
+    crate::traffic_stats::clear_all_traffic_stats().map_err(|e| McpError {
+      code: -32000,
+      message: format!("{e}"),
+    })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": "All traffic history erased" }]
+    }))
+  }
+
+  async fn handle_default_browser_check(&self) -> Result<serde_json::Value, McpError> {
+    let is_default = crate::default_browser::is_default_browser()
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": serde_json::to_string_pretty(&serde_json::json!({ "is_default": is_default })).unwrap_or_default() }]
+    }))
+  }
+
+  async fn handle_logs_read(&self) -> Result<serde_json::Value, McpError> {
+    let app_handle = self.require_app_handle().await?;
+    let logs = crate::settings_manager::read_log_files(app_handle)
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+    Ok(serde_json::json!({
+      "content": [{ "type": "text", "text": logs }]
+    }))
+  }
 }
 
 lazy_static::lazy_static! {
@@ -5851,8 +8854,8 @@ mod tests {
     let server = McpServer::new();
     let tools = server.get_tools();
 
-    // Should have at least 41 tools (34 + 7 browser interaction tools)
-    assert!(tools.len() >= 41);
+    // Should have at least 104 tools (41 base + 17 settings/scheduler/AI + 46 management tools)
+    assert!(tools.len() >= 104);
 
     // Check tool names
     let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
@@ -5914,6 +8917,75 @@ mod tests {
     assert!(tool_names.contains(&"assign_extension_group_to_profile"));
     // Cookie tools
     assert!(tool_names.contains(&"import_profile_cookies"));
+    assert!(tool_names.contains(&"clone_profile"));
+    assert!(tool_names.contains(&"get_app_settings"));
+    assert!(tool_names.contains(&"update_app_settings"));
+    assert!(tool_names.contains(&"get_table_sorting"));
+    assert!(tool_names.contains(&"update_table_sorting"));
+    assert!(tool_names.contains(&"scheduler_list"));
+    assert!(tool_names.contains(&"scheduler_get"));
+    assert!(tool_names.contains(&"scheduler_save"));
+    assert!(tool_names.contains(&"scheduler_delete"));
+    assert!(tool_names.contains(&"scheduler_set_enabled"));
+    assert!(tool_names.contains(&"scheduler_run_now"));
+    assert!(tool_names.contains(&"ai_keys_list"));
+    assert!(tool_names.contains(&"ai_keys_save"));
+    assert!(tool_names.contains(&"ai_keys_delete"));
+    assert!(tool_names.contains(&"ai_keys_test"));
+    assert!(tool_names.contains(&"ai_keys_models_get"));
+    // Subscription tools
+    assert!(tool_names.contains(&"subscription_list"));
+    assert!(tool_names.contains(&"subscription_entries"));
+    assert!(tool_names.contains(&"subscription_save"));
+    assert!(tool_names.contains(&"subscription_delete"));
+    assert!(tool_names.contains(&"subscription_refresh"));
+    assert!(tool_names.contains(&"subscription_preview"));
+    // DNS tools
+    assert!(tool_names.contains(&"dns_custom_get"));
+    assert!(tool_names.contains(&"dns_custom_set"));
+    assert!(tool_names.contains(&"dns_custom_import"));
+    assert!(tool_names.contains(&"dns_custom_export"));
+    assert!(tool_names.contains(&"dns_cache_status"));
+    assert!(tool_names.contains(&"dns_refresh"));
+    // Extension tools
+    assert!(tool_names.contains(&"extension_get"));
+    assert!(tool_names.contains(&"extension_add"));
+    assert!(tool_names.contains(&"extension_update"));
+    assert!(tool_names.contains(&"extension_update_group"));
+    assert!(tool_names.contains(&"extension_add_to_group"));
+    assert!(tool_names.contains(&"extension_remove_from_group"));
+    assert!(tool_names.contains(&"extension_group_for_profile"));
+    // VPN tools
+    assert!(tool_names.contains(&"vpn_get"));
+    assert!(tool_names.contains(&"vpn_update"));
+    assert!(tool_names.contains(&"vpn_validate"));
+    assert!(tool_names.contains(&"vpn_batch_import"));
+    assert!(tool_names.contains(&"vpn_list_active"));
+    assert!(tool_names.contains(&"vpn_create_manual"));
+    // Sync tools
+    assert!(tool_names.contains(&"sync_settings_get"));
+    assert!(tool_names.contains(&"sync_status"));
+    assert!(tool_names.contains(&"sync_set_proxy_enabled"));
+    assert!(tool_names.contains(&"sync_set_group_enabled"));
+    assert!(tool_names.contains(&"sync_set_vpn_enabled"));
+    assert!(tool_names.contains(&"sync_set_extension_enabled"));
+    assert!(tool_names.contains(&"sync_set_extension_group_enabled"));
+    assert!(tool_names.contains(&"sync_request_profile"));
+    assert!(tool_names.contains(&"sync_enable_all"));
+    // E2E encryption tools
+    assert!(tool_names.contains(&"e2e_has_password"));
+    assert!(tool_names.contains(&"e2e_set_password"));
+    assert!(tool_names.contains(&"e2e_delete_password"));
+    // Maintenance tools
+    assert!(tool_names.contains(&"browser_versions"));
+    assert!(tool_names.contains(&"browser_download_check"));
+    assert!(tool_names.contains(&"browser_missing_binaries"));
+    assert!(tool_names.contains(&"traffic_get_all"));
+    assert!(tool_names.contains(&"traffic_get_profile"));
+    assert!(tool_names.contains(&"traffic_clear_profile"));
+    assert!(tool_names.contains(&"traffic_clear_all"));
+    assert!(tool_names.contains(&"default_browser_check"));
+    assert!(tool_names.contains(&"logs_read"));
     // Team lock tools
     assert!(tool_names.contains(&"get_team_locks"));
     assert!(tool_names.contains(&"get_team_lock_status"));
@@ -5990,6 +9062,7 @@ mod tests {
       "batch_run_profiles",
       "batch_stop_profiles",
       "start_sync_session",
+      "scheduler_run_now",
       "navigate",
       "screenshot",
       "evaluate_javascript",
@@ -6029,9 +9102,171 @@ mod tests {
       "tools/call",
       Some("list_profiles")
     )));
+    for name in [
+      "get_app_settings",
+      "update_app_settings",
+      "get_table_sorting",
+      "update_table_sorting",
+      "scheduler_list",
+      "scheduler_save",
+      "ai_keys_list",
+      "ai_keys_save",
+      "clone_profile",
+    ] {
+      assert!(
+        !McpServer::is_automation_tool_call(&request("tools/call", Some(name))),
+        "settings tool must not consume automation quota: {name}"
+      );
+    }
     assert!(!McpServer::is_automation_tool_call(&request(
       "tools/list",
       None
     )));
+  }
+
+  async fn call(tool: &str, args: serde_json::Value) -> Result<serde_json::Value, McpError> {
+    McpServer::new().dispatch_tool_call(tool, &args).await
+  }
+
+  #[tokio::test]
+  async fn mcp_rejects_forbidden_app_settings() {
+    for field in [
+      "api_enabled",
+      "api_port",
+      "mcp_enabled",
+      "mcp_port",
+      "sync_server_url",
+      "set_as_default_browser",
+      "onboarding_completed",
+    ] {
+      let err = call("update_app_settings", serde_json::json!({ field: true }))
+        .await
+        .expect_err("forbidden field must be rejected");
+      assert!(err.message.contains("not MCP-writable"), "{field}: {err}");
+    }
+  }
+
+  #[tokio::test]
+  async fn mcp_validates_app_settings_values() {
+    let err = call(
+      "update_app_settings",
+      serde_json::json!({ "theme": "neon" }),
+    )
+    .await
+    .expect_err("bad theme must be rejected");
+    assert!(err.message.contains("theme"), "{err}");
+    let err = call(
+      "update_app_settings",
+      serde_json::json!({ "language": "xx" }),
+    )
+    .await
+    .expect_err("bad language must be rejected");
+    assert!(err.message.contains("language"), "{err}");
+    let err = call(
+      "update_app_settings",
+      serde_json::json!({ "llm_max_concurrency": 0 }),
+    )
+    .await
+    .expect_err("zero concurrency must be rejected");
+    assert!(err.message.contains("1-64"), "{err}");
+    let err = call(
+      "update_app_settings",
+      serde_json::json!({ "max_concurrent_launches": 65 }),
+    )
+    .await
+    .expect_err("over-limit launches must be rejected");
+    assert!(err.message.contains("1-64"), "{err}");
+    let err = call("update_app_settings", serde_json::json!({}))
+      .await
+      .expect_err("empty update must be rejected");
+    assert!(err.message.contains("No writable"), "{err}");
+  }
+
+  #[tokio::test]
+  async fn mcp_validates_profile_network_rules() {
+    let err = call(
+      "create_profile",
+      serde_json::json!({ "name": "x", "browser": "chromium", "proxy_id": "p", "vpn_id": "v" }),
+    )
+    .await
+    .expect_err("proxy+vpn must be rejected");
+    assert!(err.message.contains("proxy_id and vpn_id"), "{err}");
+    let err = call(
+      "create_profile",
+      serde_json::json!({ "name": "x", "browser": "chromium", "ephemeral": true, "clear_on_close": true }),
+    )
+    .await
+    .expect_err("ephemeral clear_on_close must be rejected");
+    assert!(err.message.contains("ephemeral"), "{err}");
+  }
+
+  #[tokio::test]
+  async fn mcp_validates_subscription_save() {
+    let err = call(
+      "subscription_save",
+      serde_json::json!({ "url": "https://example.com/sub" }),
+    )
+    .await
+    .expect_err("missing name must be rejected");
+    assert!(err.message.contains("Missing name"), "{err}");
+    let err = call(
+      "subscription_save",
+      serde_json::json!({ "name": "s", "url": "https://example.com/sub", "refresh_hours": 0 }),
+    )
+    .await
+    .expect_err("zero refresh_hours must be rejected");
+    assert!(err.message.contains("refresh_hours"), "{err}");
+  }
+
+  #[tokio::test]
+  async fn mcp_validates_dns_extension_vpn_e2e_inputs() {
+    let err = call("dns_custom_set", serde_json::json!({}))
+      .await
+      .expect_err("missing dns fields must be rejected");
+    assert!(err.message.contains("Missing"), "{err}");
+    let err = call(
+      "extension_add",
+      serde_json::json!({ "name": "e", "file_name": "e.zip", "file_data_base64": "!!!" }),
+    )
+    .await
+    .expect_err("bad base64 must be rejected");
+    assert!(err.message.contains("base64"), "{err}");
+    let err = call(
+      "extension_update_group",
+      serde_json::json!({ "group_id": "g" }),
+    )
+    .await
+    .expect_err("empty group update must be rejected");
+    assert!(err.message.contains("name and/or"), "{err}");
+    let err = call(
+      "vpn_create_manual",
+      serde_json::json!({ "name": "v", "vpn_type": "pptp", "config_data": "x" }),
+    )
+    .await
+    .expect_err("bad vpn_type must be rejected");
+    assert!(err.message.contains("wireguard or vless"), "{err}");
+    let err = call("e2e_set_password", serde_json::json!({ "password": "" }))
+      .await
+      .expect_err("empty password must be rejected");
+    assert!(err.message.contains("must not be empty"), "{err}");
+    let err = call(
+      "vpn_update",
+      serde_json::json!({ "vpn_id": "v", "name": "  " }),
+    )
+    .await
+    .expect_err("blank vpn name must be rejected");
+    assert!(err.message.contains("must not be empty"), "{err}");
+  }
+
+  #[tokio::test]
+  async fn mcp_unknown_ids_do_not_leak_secrets() {
+    let err = call("vpn_get", serde_json::json!({ "vpn_id": "nope" }))
+      .await
+      .expect_err("unknown vpn must error");
+    assert!(!err.message.contains("config_data"), "{err}");
+    let err = call("scheduler_get", serde_json::json!({ "task_id": "nope" }))
+      .await
+      .expect_err("unknown task must error");
+    assert!(err.message.contains("TASK_NOT_FOUND"), "{err}");
   }
 }

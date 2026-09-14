@@ -1,7 +1,17 @@
 [build]
 # Omit jobs setting to use all cores
-# sccache wraps rustc: clean/cold builds hit the shared cache, while local
-# incremental rebuilds still go through cargo's own incremental cache.
+# sccache wraps rustc as required by AGENTS.md (do not remove: rust-analyzer
+# `cargo check` traffic flows through it too). Cold dependency builds hit the
+# shared cache, while local incremental rebuilds still go through cargo's own
+# incremental cache.
+#
+# Tradeoff to know: sccache cannot cache incremental compilations, so the
+# top-level `ducklingbrowser` crate itself (incremental = true below) always
+# reports as non-cacheable in `sccache --show-stats`. That is expected — the
+# cache still pays off for the ~100 third-party crates on clean/cold builds.
+# To force a cacheable cold build, run with CARGO_INCREMENTAL=0
+# (scripts/agent-cargo.ps1 does this when AGENT_CARGO_NO_INCREMENTAL=1),
+# at the cost of slower warm rebuilds.
 rustc-wrapper = "sccache"
 
 incremental = true

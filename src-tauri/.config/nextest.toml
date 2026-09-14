@@ -1,7 +1,9 @@
 # cargo-nextest default profile for Duckling Browser.
 # Run unit tests with: cargo nextest run --lib
-# (compiles first via the shared target dir + sccache; use
-#  `cargo nextest run --lib --no-run` for a build-only check)
+# (compiles first via the shared target dir; use
+#  `cargo nextest run --lib --no-run` for a build-only check, or run the
+#  existing test binary in target/debug/deps directly to skip cargo entirely —
+#  see scripts/agent-cargo.ps1 for the timed wrapper and its env knobs)
 [profile.default]
 # Flag tests slower than this in the summary so new wall-clock sleeps and
 # network waits in unit tests get noticed before they land.
