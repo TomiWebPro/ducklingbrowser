@@ -10,6 +10,7 @@ import {
   LuBot,
   LuCalendarDays,
   LuCloud,
+  LuDownload,
   LuInfo,
   LuKeyboard,
   LuPlug,
@@ -33,6 +34,7 @@ export type AppPage =
   | "integrations"
   | "ai"
   | "tasks"
+  | "downloads"
   | "account"
   | "import"
   | "shortcuts";
@@ -206,6 +208,7 @@ const TOP_ITEMS: RailItem[] = [
   { page: "integrations", Icon: LuPlug, labelKey: "rail.integrations" },
   { page: "ai", Icon: LuBot, labelKey: "rail.ai" },
   { page: "tasks", Icon: LuCalendarDays, labelKey: "rail.tasks" },
+  { page: "downloads", Icon: LuDownload, labelKey: "rail.downloads" },
   { page: "account", Icon: LuCloud, labelKey: "rail.account" },
 ];
 

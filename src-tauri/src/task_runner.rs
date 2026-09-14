@@ -649,7 +649,11 @@ mod tests {
       created_at: Some(0),
       updated_at: Some(0),
       download_dir: None,
+      // Explicit opt-in: interaction-step tests exercise download macros.
       allow_agent_downloads: true,
+      agent_auto_approve: false,
+      agent_key_id: None,
+      agent_id: None,
     };
     ProfileManager::instance().save_profile(&profile).unwrap();
     profile.id.to_string()

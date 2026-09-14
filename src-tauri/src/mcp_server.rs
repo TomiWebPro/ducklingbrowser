@@ -1148,7 +1148,7 @@ impl McpServer {
             },
             "provider": {
               "type": "string",
-              "enum": ["anthropic", "openai", "groq", "google", "openrouter"],
+              "enum": ["anthropic", "openai", "groq", "xai", "google", "openrouter", "opencode", "custom"],
               "description": "Provider override. Omit to use the key's own provider."
             },
             "model": {

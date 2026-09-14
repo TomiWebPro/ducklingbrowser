@@ -10,7 +10,6 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { GoPlus } from "react-icons/go";
@@ -19,8 +18,8 @@ import {
   LuChevronUp,
   LuFolder,
   LuPencil,
-  LuRefreshCw,
   LuTrash2,
+  LuUsers,
 } from "react-icons/lu";
 import { CreateGroupDialog } from "@/components/create-group-dialog";
 import {
@@ -31,7 +30,7 @@ import {
 import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog";
 import { DeleteGroupDialog } from "@/components/delete-group-dialog";
 import { EditGroupDialog } from "@/components/edit-group-dialog";
-import { AnimatedSwitch } from "@/components/ui/animated-switch";
+import { GroupMembersDialog } from "@/components/group-members-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -63,55 +62,9 @@ import { cn } from "@/lib/utils";
 import type { GroupWithCount, ProfileGroup } from "@/types";
 import { RippleButton } from "./ui/ripple";
 
-type SyncStatus = "disabled" | "syncing" | "synced" | "error" | "waiting";
-
-function getSyncStatusDot(
-  group: GroupWithCount,
-  liveStatus: SyncStatus | undefined,
-  t: (key: string, options?: Record<string, unknown>) => string,
-  errorMessage?: string,
-): { color: string; tooltip: string; animate: boolean } {
-  const status = liveStatus ?? (group.sync_enabled ? "synced" : "disabled");
-
-  switch (status) {
-    case "syncing":
-      return {
-        color: "bg-warning",
-        tooltip: t("syncTooltips.syncing"),
-        animate: true,
-      };
-    case "synced":
-      return {
-        color: "bg-success",
-        tooltip: group.last_sync
-          ? t("syncTooltips.syncedAt", {
-              time: new Date(group.last_sync * 1000).toLocaleString(),
-            })
-          : t("syncTooltips.synced"),
-        animate: false,
-      };
-    case "waiting":
-      return {
-        color: "bg-warning",
-        tooltip: t("syncTooltips.waiting"),
-        animate: false,
-      };
-    case "error":
-      return {
-        color: "bg-destructive",
-        tooltip: errorMessage
-          ? t("syncTooltips.errorWith", { error: errorMessage })
-          : t("syncTooltips.error"),
-        animate: false,
-      };
-    default:
-      return {
-        color: "bg-muted-foreground",
-        tooltip: t("syncTooltips.notSynced"),
-        animate: false,
-      };
-  }
-}
+// Group sync status UI removed: group sync is not supported.
+// The backend still returns `sync_enabled`/`last_sync` for compatibility,
+// but no sync dot, toggle, or bulk-sync action is rendered.
 
 interface GroupManagementDialogProps {
   isOpen: boolean;
@@ -140,16 +93,13 @@ export function GroupManagementDialog({
   const [selectedGroup, setSelectedGroup] = useState<GroupWithCount | null>(
     null,
   );
-  const [groupSyncStatus, setGroupSyncStatus] = useState<
-    Record<string, SyncStatus>
-  >({});
-  const [groupSyncErrors, setGroupSyncErrors] = useState<
-    Record<string, string>
-  >({});
-  const [groupInUse, setGroupInUse] = useState<Record<string, boolean>>({});
-  const [isTogglingSync, setIsTogglingSync] = useState<Record<string, boolean>>(
-    {},
-  );
+  // NOTE: group sync is not supported — the sync toggle, status dot, and
+  // bulk-sync action are intentionally commented out below. The backend
+  // `sync_enabled` fields remain for compatibility but are hidden from UI.
+  // const [groupSyncStatus, setGroupSyncStatus] = ...
+  // const [groupSyncErrors, setGroupSyncErrors] = ...
+  // const [groupInUse, setGroupInUse] = ...
+  // const [isTogglingSync, setIsTogglingSync] = ...
 
   // Table state
   const [sorting, setSorting] = useState<SortingState>([
@@ -157,31 +107,9 @@ export function GroupManagementDialog({
   ]);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
-  // Listen for group sync status events
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-
-    const setupListener = async () => {
-      unlisten = await listen<{ id: string; status: string; error?: string }>(
-        "group-sync-status",
-        (event) => {
-          const { id, status, error } = event.payload;
-          setGroupSyncStatus((prev) => ({
-            ...prev,
-            [id]: status as SyncStatus,
-          }));
-          if (error) {
-            setGroupSyncErrors((prev) => ({ ...prev, [id]: error }));
-          }
-        },
-      );
-    };
-
-    void setupListener();
-    return () => {
-      unlisten?.();
-    };
-  }, []);
+  // Group members assignment state (assign profiles to a group from here)
+  const [membersGroup, setMembersGroup] = useState<GroupWithCount | null>(null);
+  const [membersOpen, setMembersOpen] = useState(false);
 
   const loadGroups = useCallback(async () => {
     setIsLoading(true);
@@ -191,21 +119,7 @@ export function GroupManagementDialog({
         "get_groups_with_profile_counts",
       );
       setGroups(groupList);
-
-      // Check which groups are in use by synced profiles
-      const inUse: Record<string, boolean> = {};
-      for (const group of groupList) {
-        try {
-          const inUseBySynced = await invoke<boolean>(
-            "is_group_in_use_by_synced_profile",
-            { groupId: group.id },
-          );
-          inUse[group.id] = inUseBySynced;
-        } catch (_error) {
-          // Ignore errors
-        }
-      }
-      setGroupInUse(inUse);
+      // Group-sync "in use" check removed: group sync is not supported.
     } catch (err) {
       console.error("Failed to load groups:", err);
       setError(
@@ -247,33 +161,12 @@ export function GroupManagementDialog({
     setDeleteDialogOpen(true);
   }, []);
 
-  const handleToggleSync = useCallback(
-    async (group: GroupWithCount) => {
-      setIsTogglingSync((prev) => ({ ...prev, [group.id]: true }));
-      try {
-        await invoke("set_group_sync_enabled", {
-          groupId: group.id,
-          enabled: !group.sync_enabled,
-        });
-        showSuccessToast(
-          group.sync_enabled
-            ? t("proxies.management.syncDisabled")
-            : t("proxies.management.syncEnabled"),
-        );
-        await loadGroups();
-      } catch (error) {
-        console.error("Failed to toggle sync:", error);
-        showErrorToast(
-          parseBackendError(error)
-            ? translateBackendError(t, error)
-            : t("proxies.management.updateSyncFailed"),
-        );
-      } finally {
-        setIsTogglingSync((prev) => ({ ...prev, [group.id]: false }));
-      }
-    },
-    [loadGroups, t],
-  );
+  // Group sync toggle removed: group sync is not supported.
+  // Previously called `set_group_sync_enabled` here.
+  const handleManageMembers = useCallback((group: GroupWithCount) => {
+    setMembersGroup(group);
+    setMembersOpen(true);
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
@@ -339,26 +232,8 @@ export function GroupManagementDialog({
         ),
         cell: ({ row }) => {
           const group = row.original;
-          const syncDot = getSyncStatusDot(
-            group,
-            groupSyncStatus[group.id],
-            t,
-            groupSyncErrors[group.id],
-          );
           return (
             <div className="flex min-w-0 items-center gap-2 font-medium">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div
-                    className={`size-2 rounded-full shrink-0 ${syncDot.color} ${
-                      syncDot.animate ? "animate-pulse" : ""
-                    }`}
-                  />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{syncDot.tooltip}</p>
-                </TooltipContent>
-              </Tooltip>
               <LuFolder className="size-4 shrink-0 text-muted-foreground" />
               <span className="truncate">{group.name}</span>
             </div>
@@ -374,49 +249,32 @@ export function GroupManagementDialog({
           <Badge variant="secondary">{row.original.count}</Badge>
         ),
       },
-      {
-        id: "sync",
-        size: 96,
-        enableSorting: false,
-        header: () => t("proxies.management.syncCol"),
-        cell: ({ row }) => {
-          const group = row.original;
-          const locked = groupInUse[group.id];
-          return (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="inline-flex items-center">
-                  <AnimatedSwitch
-                    checked={group.sync_enabled}
-                    onCheckedChange={() => handleToggleSync(group)}
-                    disabled={isTogglingSync[group.id] || locked}
-                  />
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>
-                {locked ? (
-                  <p>{t("syncTooltips.lockedInUse")}</p>
-                ) : (
-                  <p>
-                    {group.sync_enabled
-                      ? t("syncTooltips.disable")
-                      : t("syncTooltips.enable")}
-                  </p>
-                )}
-              </TooltipContent>
-            </Tooltip>
-          );
-        },
-      },
+      // Sync column removed: group sync is not supported.
       {
         id: "actions",
-        size: 96,
+        size: 140,
         enableSorting: false,
         header: () => t("common.labels.actions"),
         cell: ({ row }) => {
           const group = row.original;
           return (
             <div className="flex gap-1">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      handleManageMembers(group);
+                    }}
+                  >
+                    <LuUsers className="size-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{t("groupManagement.manageMembersTooltip")}</p>
+                </TooltipContent>
+              </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -454,16 +312,7 @@ export function GroupManagementDialog({
         },
       },
     ],
-    [
-      t,
-      groupSyncStatus,
-      groupSyncErrors,
-      groupInUse,
-      isTogglingSync,
-      handleToggleSync,
-      handleEditGroup,
-      handleDeleteGroup,
-    ],
+    [t, handleManageMembers, handleEditGroup, handleDeleteGroup],
   );
 
   const table = useReactTable({
@@ -519,40 +368,7 @@ export function GroupManagementDialog({
     }
   }, [selectedGroupsForBulk, table, loadGroups, onGroupManagementComplete, t]);
 
-  const handleBulkToggleSync = useCallback(async () => {
-    if (selectedGroupsForBulk.length === 0) return;
-    const allOn = selectedGroupsForBulk.every((g) => g.sync_enabled);
-    const targetEnabled = !allOn;
-    const targets = selectedGroupsForBulk.filter((g) =>
-      targetEnabled ? !g.sync_enabled : g.sync_enabled && !groupInUse[g.id],
-    );
-    if (targets.length === 0) return;
-    const results = await Promise.allSettled(
-      targets.map((group) =>
-        invoke("set_group_sync_enabled", {
-          groupId: group.id,
-          enabled: targetEnabled,
-        }),
-      ),
-    );
-    const firstRejection = results.find((r) => r.status === "rejected") as
-      | PromiseRejectedResult
-      | undefined;
-    if (firstRejection) {
-      showErrorToast(
-        parseBackendError(firstRejection.reason)
-          ? translateBackendError(t, firstRejection.reason)
-          : t("proxies.management.updateSyncFailed"),
-      );
-    } else {
-      showSuccessToast(
-        targetEnabled
-          ? t("proxies.management.syncEnabled")
-          : t("proxies.management.syncDisabled"),
-      );
-    }
-    await loadGroups();
-  }, [selectedGroupsForBulk, groupInUse, loadGroups, t]);
+  // Bulk sync toggle removed: group sync is not supported.
 
   return (
     <>
@@ -694,15 +510,7 @@ export function GroupManagementDialog({
       {isOpen && (
         <DataTableActionBar table={table}>
           <DataTableActionBarSelection table={table} />
-          <DataTableActionBarAction
-            tooltip={t("syncTooltips.bulkToggle")}
-            onClick={() => {
-              void handleBulkToggleSync();
-            }}
-            size="icon"
-          >
-            <LuRefreshCw />
-          </DataTableActionBarAction>
+          {/* Bulk sync toggle removed: group sync is not supported. */}
           <DataTableActionBarAction
             tooltip={t("common.buttons.delete")}
             onClick={() => setBulkDeleteOpen(true)}
@@ -754,6 +562,19 @@ export function GroupManagementDialog({
         }}
         group={selectedGroup}
         onGroupDeleted={handleGroupDeleted}
+      />
+
+      <GroupMembersDialog
+        isOpen={membersOpen}
+        onClose={() => {
+          setMembersOpen(false);
+          setMembersGroup(null);
+        }}
+        group={membersGroup}
+        onChanged={() => {
+          void loadGroups();
+          onGroupManagementComplete();
+        }}
       />
     </>
   );

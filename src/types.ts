@@ -44,6 +44,12 @@ export interface BrowserProfile {
   password_protected?: boolean;
   download_dir?: string;
   allow_agent_downloads?: boolean;
+  /** Per-profile full automation (default off). */
+  agent_auto_approve?: boolean;
+  /** Preferred saved AI key id for this profile. */
+  agent_key_id?: string;
+  /** Preferred CLI agent id for this profile. */
+  agent_id?: string;
 }
 
 export interface Extension {

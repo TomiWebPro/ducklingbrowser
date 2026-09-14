@@ -92,13 +92,23 @@ pub struct BrowserProfile {
   #[serde(default)]
   pub download_dir: Option<String>,
   /// When false, agents (chat, MCP, scheduled tasks) may not trigger or
-  /// redirect downloads in this profile. Defaults to true.
-  #[serde(default = "default_true")]
+  /// redirect downloads in this profile. Defaults to false (opt-in).
+  #[serde(default = "default_false")]
   pub allow_agent_downloads: bool,
+  /// Per-profile full automation: apply ALL agent-proposed changes without
+  /// asking. Defaults to false (safe). Replaces the old global toggle.
+  #[serde(default)]
+  pub agent_auto_approve: bool,
+  /// Preferred saved AI key id for this profile (None = first saved key).
+  #[serde(default)]
+  pub agent_key_id: Option<String>,
+  /// Preferred CLI agent id for this profile (e.g. "opencode", None = direct chat).
+  #[serde(default)]
+  pub agent_id: Option<String>,
 }
 
-fn default_true() -> bool {
-  true
+fn default_false() -> bool {
+  false
 }
 
 pub fn default_release_type() -> String {

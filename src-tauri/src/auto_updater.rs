@@ -672,7 +672,10 @@ mod tests {
       created_at: None,
       updated_at: None,
       download_dir: None,
-      allow_agent_downloads: true,
+      allow_agent_downloads: false,
+      agent_auto_approve: false,
+      agent_key_id: None,
+      agent_id: None,
     }
   }
 

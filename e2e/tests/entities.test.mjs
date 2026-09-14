@@ -190,6 +190,22 @@ test("profile, group, proxy, tag, metadata, clone, and bulk-delete lifecycle", a
       profileId: profile.id,
       allow: true,
     });
+    const withAuto = await app.invoke("update_profile_agent_auto_approve", {
+      profileId: profile.id,
+      autoApprove: true,
+    });
+    assert.equal(withAuto.agent_auto_approve, true);
+    const withPair = await app.invoke("update_profile_agent_pair", {
+      profileId: profile.id,
+      keyId: null,
+      agentId: null,
+    });
+    assert.equal(withPair.agent_key_id, null);
+    assert.equal(withPair.agent_id, null);
+    await app.invoke("update_profile_agent_auto_approve", {
+      profileId: profile.id,
+      autoApprove: false,
+    });
 
     const profiles = await app.invoke("list_browser_profiles");
     const changed = profiles.find((item) => item.id === profile.id);

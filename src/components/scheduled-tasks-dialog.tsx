@@ -156,7 +156,15 @@ export function ScheduledTasksDialog({
   const [tasks, setTasks] = useState<TaskDefinition[]>([]);
   const [agents, setAgents] = useState<McpAgentInfo[]>([]);
   const [browserTools, setBrowserTools] = useState<string[]>([]);
-  const [profiles, setProfiles] = useState<{ id: string; name: string }[]>([]);
+  const [profiles, setProfiles] = useState<
+    {
+      id: string;
+      name: string;
+      agent_key_id?: string | null;
+      agent_id?: string | null;
+      agent_auto_approve?: boolean;
+    }[]
+  >([]);
   const [aiKeys, setAiKeys] = useState<{ id: string; name: string }[]>([]);
   const [form, setForm] = useState(emptyForm());
   const [editing, setEditing] = useState(false);
@@ -182,10 +190,16 @@ export function ScheduledTasksDialog({
           setAgents(all.filter((a) => a.category === "cli" && a.detected)),
         )
         .catch(() => {});
-      void invoke<{ id: string; name: string }[]>("list_browser_profiles")
-        .then((all) =>
-          setProfiles(all.map((p) => ({ id: p.id, name: p.name }))),
-        )
+      void invoke<
+        {
+          id: string;
+          name: string;
+          agent_key_id?: string | null;
+          agent_id?: string | null;
+          agent_auto_approve?: boolean;
+        }[]
+      >("list_browser_profiles")
+        .then((all) => setProfiles(all))
         .catch(() => {});
       void invoke<{ id: string; name: string }[]>("ai_keys_list")
         .then((all) => setAiKeys(all.map((k) => ({ id: k.id, name: k.name }))))
@@ -599,7 +613,27 @@ export function ScheduledTasksDialog({
                               <Select
                                 value={form.profile_id}
                                 onValueChange={(v) =>
-                                  setForm((f) => ({ ...f, profile_id: v }))
+                                  setForm((f) => {
+                                    // Inherit the profile's agent pair + full
+                                    // automation default when picking a
+                                    // profile for a new task.
+                                    if (f.id) return { ...f, profile_id: v };
+                                    const p = profiles.find(
+                                      (pp) => pp.id === v,
+                                    );
+                                    return {
+                                      ...f,
+                                      profile_id: v,
+                                      key_id:
+                                        p?.agent_key_id && !f.key_id
+                                          ? p.agent_key_id
+                                          : f.key_id,
+                                      auto_approve:
+                                        p?.agent_auto_approve === true
+                                          ? true
+                                          : f.auto_approve,
+                                    };
+                                  })
                                 }
                               >
                                 <SelectTrigger>

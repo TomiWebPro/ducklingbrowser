@@ -101,6 +101,10 @@ pub async fn run_llm_completion(
       }
     })?;
 
+  if let Some(u) = &response.usage {
+    crate::ai_usage::record_usage(Some(record.id.as_str()), Some(provider.as_str()), None, u);
+  }
+
   Ok(LlmCompletionResult {
     reply: response.text,
     usage: response.usage,

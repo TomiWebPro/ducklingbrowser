@@ -45,6 +45,8 @@ export const commandCoverage = {
       "update_profile_clear_on_close",
       "update_profile_download_dir",
       "update_profile_allow_agent_downloads",
+      "update_profile_agent_auto_approve",
+      "update_profile_agent_pair",
       "update_profile_launch_hook",
       "update_profile_window_color",
       "update_profile_proxy_bypass_rules",
@@ -299,6 +301,8 @@ export const commandCoverage = {
       "ai_keys_delete",
       "ai_keys_test",
       "ai_keys_models",
+      "ai_usage_stats",
+      "ai_usage_reset",
     ],
   },
   aiAgent: {

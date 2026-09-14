@@ -115,6 +115,13 @@ test("AI key store supports custom endpoints and opencode provider", async () =>
     assert.ok(Array.isArray(models));
     assert.ok(models.every((m) => typeof m === "string"));
 
+    // Usage ledger: starts empty, resets cleanly.
+    const stats = await app.invoke("ai_usage_stats", {});
+    assert.ok(stats.by_key && stats.by_provider && stats.by_profile);
+    await app.invoke("ai_usage_reset", {});
+    const cleared = await app.invoke("ai_usage_stats", {});
+    assert.deepEqual(Object.keys(cleared.by_key).length, 0);
+
     await app.invoke("ai_keys_delete", { id: custom.id });
     await app.invoke("ai_keys_delete", { id: oc.id });
     await app.invoke("ai_keys_delete", { id: go.id });

@@ -56,12 +56,16 @@ pub struct ToolSpec {
 }
 
 /// Token usage reported by the provider, when the response carries it.
+/// `cost` is the provider-reported USD cost when streamed (e.g. OpenRouter);
+/// None when the provider does not report one.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatUsage {
   pub prompt_tokens: u32,
   pub completion_tokens: u32,
   pub total_tokens: u32,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub cost: Option<f64>,
 }
 
 /// A single native function/tool call requested by the model.
@@ -239,6 +243,13 @@ impl LlmClient {
           .endpoint_override
           .as_deref()
           .unwrap_or("https://openrouter.ai/api/v1/chat/completions"),
+        flavor,
+      ),
+      AiProvider::Xai => flavor_url(
+        self
+          .endpoint_override
+          .as_deref()
+          .unwrap_or("https://api.x.ai/v1/chat/completions"),
         flavor,
       ),
       AiProvider::Opencode | AiProvider::Custom => {
@@ -559,6 +570,23 @@ fn extract_text(provider: AiProvider, body: &serde_json::Value) -> Result<String
   }
 }
 
+/// Provider-reported USD cost, when streamed (OpenRouter puts it on the
+/// body or inside `usage`). None when the provider does not report one.
+fn extract_cost(body: &serde_json::Value) -> Option<f64> {
+  for candidate in [
+    body.get("cost"),
+    body.get("usage").and_then(|u| u.get("cost")),
+    body.get("usage").and_then(|u| u.get("total_cost")),
+  ] {
+    if let Some(v) = candidate.and_then(|v| v.as_f64()) {
+      if v.is_finite() && v >= 0.0 {
+        return Some(v);
+      }
+    }
+  }
+  None
+}
+
 /// Extract token usage from a provider response body.
 fn extract_usage(provider: AiProvider, body: &serde_json::Value) -> Option<ChatUsage> {
   match provider {
@@ -576,6 +604,7 @@ fn extract_usage(provider: AiProvider, body: &serde_json::Value) -> Option<ChatU
         prompt_tokens: input,
         completion_tokens: output,
         total_tokens: input.saturating_add(output),
+        cost: extract_cost(body),
       })
     }
     AiProvider::Google => {
@@ -592,6 +621,7 @@ fn extract_usage(provider: AiProvider, body: &serde_json::Value) -> Option<ChatU
         prompt_tokens: prompt,
         completion_tokens: completion,
         total_tokens: prompt.saturating_add(completion),
+        cost: extract_cost(body),
       })
     }
     _ => {
@@ -612,6 +642,7 @@ fn extract_usage(provider: AiProvider, body: &serde_json::Value) -> Option<ChatU
           .and_then(|v| v.as_u64())
           .map(|t| t as u32)
           .unwrap_or_else(|| prompt.saturating_add(completion)),
+        cost: extract_cost(body),
       })
     }
   }
@@ -1141,7 +1172,8 @@ mod tests {
       Some(ChatUsage {
         prompt_tokens: 7,
         completion_tokens: 3,
-        total_tokens: 10
+        total_tokens: 10,
+        cost: None,
       })
     );
     assert!(extract_responses_text(&serde_json::json!({})).is_err());
@@ -1274,7 +1306,8 @@ mod tests {
       Some(ChatUsage {
         prompt_tokens: 10,
         completion_tokens: 5,
-        total_tokens: 15
+        total_tokens: 15,
+        cost: None,
       })
     );
     let anthropic = serde_json::json!({
@@ -1285,7 +1318,8 @@ mod tests {
       Some(ChatUsage {
         prompt_tokens: 12,
         completion_tokens: 4,
-        total_tokens: 16
+        total_tokens: 16,
+        cost: None,
       })
     );
     let google = serde_json::json!({
@@ -1296,7 +1330,8 @@ mod tests {
       Some(ChatUsage {
         prompt_tokens: 8,
         completion_tokens: 2,
-        total_tokens: 10
+        total_tokens: 10,
+        cost: None,
       })
     );
     assert_eq!(
@@ -1344,7 +1379,8 @@ mod tests {
         Some(ChatUsage {
           prompt_tokens: 3,
           completion_tokens: 2,
-          total_tokens: 5
+          total_tokens: 5,
+          cost: None,
         })
       );
     });
@@ -1394,7 +1430,8 @@ mod tests {
         Some(ChatUsage {
           prompt_tokens: 4,
           completion_tokens: 2,
-          total_tokens: 6
+          total_tokens: 6,
+          cost: None,
         })
       );
       let received = mock_server.received_requests().await.unwrap();
@@ -1444,7 +1481,8 @@ mod tests {
         Some(ChatUsage {
           prompt_tokens: 5,
           completion_tokens: 1,
-          total_tokens: 6
+          total_tokens: 6,
+          cost: None,
         })
       );
     });
@@ -1539,7 +1577,8 @@ mod tests {
         Some(ChatUsage {
           prompt_tokens: 6,
           completion_tokens: 2,
-          total_tokens: 8
+          total_tokens: 8,
+          cost: None,
         })
       );
       let received = mock_server.received_requests().await.unwrap();
@@ -1589,7 +1628,8 @@ mod tests {
         Some(ChatUsage {
           prompt_tokens: 3,
           completion_tokens: 1,
-          total_tokens: 4
+          total_tokens: 4,
+          cost: None,
         })
       );
     });

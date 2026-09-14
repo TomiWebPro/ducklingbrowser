@@ -653,6 +653,9 @@ pub async fn agent_chat_inner_with_run(
   let cancel = register_agent_run(&run_id, message.chars().take(80).collect());
   let done = |reply: String, cards: Vec<ChangeCard>, usage: Option<ChatUsage>, steps: u32| {
     finish_agent_run(&run_id);
+    if let Some(u) = &usage {
+      crate::ai_usage::record_usage(Some(record.id.as_str()), Some(provider.as_str()), None, u);
+    }
     Ok::<AgentChatResult, String>(AgentChatResult {
       reply,
       cards,
@@ -695,6 +698,12 @@ pub async fn agent_chat_inner_with_run(
           prompt_tokens: acc.prompt_tokens.saturating_add(u.prompt_tokens),
           completion_tokens: acc.completion_tokens.saturating_add(u.completion_tokens),
           total_tokens: acc.total_tokens.saturating_add(u.total_tokens),
+          cost: match (acc.cost, u.cost) {
+            (Some(a), Some(b)) => Some(a + b),
+            (Some(a), None) => Some(a),
+            (None, Some(b)) => Some(b),
+            (None, None) => None,
+          },
         },
       });
     }
@@ -838,16 +847,25 @@ pub async fn agent_chat(
   message: String,
   use_agent: Option<String>,
   auto_approve: Option<bool>,
+  profile_id: Option<String>,
 ) -> Result<AgentChatResult, String> {
-  agent_chat_inner_with_run(
-    key_id,
-    model,
-    message,
-    use_agent,
-    None,
-    auto_approve.unwrap_or(false),
-  )
-  .await
+  // Per-profile full automation: an explicit flag always wins; otherwise
+  // inherit the target profile's `agent_auto_approve` (default off).
+  let resolved_approve = match auto_approve {
+    Some(v) => v,
+    None => profile_id
+      .as_deref()
+      .and_then(|id| Uuid::parse_str(id).ok())
+      .and_then(|uuid| {
+        crate::profile::ProfileManager::instance()
+          .get_profile_by_id(&uuid)
+          .ok()
+          .flatten()
+          .map(|p| p.agent_auto_approve)
+      })
+      .unwrap_or(false),
+  };
+  agent_chat_inner_with_run(key_id, model, message, use_agent, None, resolved_approve).await
 }
 
 /// Flag an in-flight chat or scheduled agent run for cancellation. Returns
@@ -1002,6 +1020,12 @@ pub async fn agent_browser_run(
           prompt_tokens: acc.prompt_tokens.saturating_add(u.prompt_tokens),
           completion_tokens: acc.completion_tokens.saturating_add(u.completion_tokens),
           total_tokens: acc.total_tokens.saturating_add(u.total_tokens),
+          cost: match (acc.cost, u.cost) {
+            (Some(a), Some(b)) => Some(a + b),
+            (Some(a), None) => Some(a),
+            (None, Some(b)) => Some(b),
+            (None, None) => None,
+          },
         },
       });
     }
@@ -1048,9 +1072,25 @@ pub async fn agent_browser_run(
     let raw = response.text;
     let Some(json) = parse_model_json(&raw) else {
       step_log.push(format!("step {}: plain-text reply", step + 1));
+      if let Some(u) = &usage {
+        crate::ai_usage::record_usage(
+          Some(record.id.as_str()),
+          Some(provider.as_str()),
+          Some(params.profile_id.as_str()),
+          u,
+        );
+      }
       return finish(&raw, step_log);
     };
     if let Some(reply) = json.get("reply").and_then(|v| v.as_str()) {
+      if let Some(u) = &usage {
+        crate::ai_usage::record_usage(
+          Some(record.id.as_str()),
+          Some(provider.as_str()),
+          Some(params.profile_id.as_str()),
+          u,
+        );
+      }
       return finish(reply, step_log);
     }
     let (Some(tool), Some(args)) = (
@@ -1102,6 +1142,12 @@ pub async fn agent_browser_run(
 
   let mut out = finish("Stopped after the maximum number of steps.", step_log)?;
   if let Some(usage) = usage {
+    crate::ai_usage::record_usage(
+      Some(record.id.as_str()),
+      Some(provider.as_str()),
+      Some(params.profile_id.as_str()),
+      &usage,
+    );
     out.insert(
       "usage".to_string(),
       serde_json::to_value(&usage).unwrap_or(serde_json::Value::Null),

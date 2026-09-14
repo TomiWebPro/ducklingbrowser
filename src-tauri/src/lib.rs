@@ -49,6 +49,7 @@ fn e2e_automation_profile_dir() -> Option<std::path::PathBuf> {
 
 mod agent_engine;
 mod ai_keys;
+mod ai_usage;
 mod api_client;
 mod api_server;
 mod app_auto_updater;
@@ -119,6 +120,7 @@ use browser_runner::{
 use profile::manager::{
   batch_create_browser_profiles, check_browser_status, clone_profile, create_browser_profile_new,
   delete_profile, list_browser_profiles, rename_profile, update_chromium_config,
+  update_profile_agent_auto_approve, update_profile_agent_pair,
   update_profile_allow_agent_downloads, update_profile_clear_on_close,
   update_profile_dns_blocklist, update_profile_download_dir, update_profile_launch_hook,
   update_profile_note, update_profile_proxy, update_profile_proxy_bypass_rules,
@@ -142,6 +144,7 @@ use downloaded_browsers_registry::{
 };
 
 use ai_keys::{ai_keys_delete, ai_keys_list, ai_keys_models, ai_keys_save, ai_keys_test};
+use ai_usage::{ai_usage_reset, ai_usage_stats};
 use subscription_manager::{
   subscription_delete, subscription_entries, subscription_preview, subscription_refresh,
   subscription_save, subscriptions_list,
@@ -1424,7 +1427,10 @@ async fn generate_sample_fingerprint(
     created_at: None,
     updated_at: None,
     download_dir: None,
-    allow_agent_downloads: true,
+    allow_agent_downloads: false,
+    agent_auto_approve: false,
+    agent_key_id: None,
+    agent_id: None,
   };
 
   if browser == "chromium" {
@@ -2473,6 +2479,8 @@ pub fn run_with_builder(
       update_profile_clear_on_close,
       update_profile_download_dir,
       update_profile_allow_agent_downloads,
+      update_profile_agent_auto_approve,
+      update_profile_agent_pair,
       update_profile_launch_hook,
       update_profile_window_color,
       update_profile_proxy_bypass_rules,
@@ -2655,6 +2663,8 @@ pub fn run_with_builder(
       ai_keys_delete,
       ai_keys_test,
       ai_keys_models,
+      ai_usage_stats,
+      ai_usage_reset,
       agent_chat,
       agent_chat_confirm,
       agent_chat_decline,
@@ -2728,6 +2738,10 @@ mod tests {
       "update_extension",
       "set_extension_sync_enabled",
       "set_extension_group_sync_enabled",
+      // Group sync has no UI toggle (unsupported in the frontend); it is
+      // driven by the sync engine and covered by the sync e2e suite.
+      "set_group_sync_enabled",
+      "is_group_in_use_by_synced_profile",
       "get_team_lock_status",
       "generate_sample_fingerprint",
       "lock_profile",

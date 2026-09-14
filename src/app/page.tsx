@@ -25,6 +25,7 @@ import { CookieManagementDialog } from "@/components/cookie-management-dialog";
 import { CreateProfileDialog } from "@/components/create-profile-dialog";
 import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog";
 import { DeviceCodeVerifyDialog } from "@/components/device-code-verify-dialog";
+import { DownloadsDialog } from "@/components/downloads-dialog";
 import { ExtensionGroupAssignmentDialog } from "@/components/extension-group-assignment-dialog";
 import { ExtensionManagementDialog } from "@/components/extension-management-dialog";
 import { GroupAssignmentDialog } from "@/components/group-assignment-dialog";
@@ -294,6 +295,7 @@ export default function Home() {
   );
   const [scheduledTasksDialogOpen, setScheduledTasksDialogOpen] =
     useState(false);
+  const [downloadsDialogOpen, setDownloadsDialogOpen] = useState(false);
   const [importProfileDialogOpen, setImportProfileDialogOpen] = useState(false);
   const [proxyManagementDialogOpen, setProxyManagementDialogOpen] =
     useState(false);
@@ -392,6 +394,7 @@ export default function Home() {
     setAccountDialogOpen(false);
     setAiDialogOpen(false);
     setScheduledTasksDialogOpen(false);
+    setDownloadsDialogOpen(false);
 
     setCurrentPage(page);
     switch (page) {
@@ -419,6 +422,9 @@ export default function Home() {
         break;
       case "tasks":
         setScheduledTasksDialogOpen(true);
+        break;
+      case "downloads":
+        setDownloadsDialogOpen(true);
         break;
       case "import":
         setImportProfileDialogOpen(true);
@@ -1145,8 +1151,9 @@ export default function Home() {
 
   const handleBulkGroupAssignment = useCallback(() => {
     if (selectedProfiles.length === 0) return;
+    // Keep the table selection until the assign completes or is confirmed,
+    // so cancelling the dialog does not lose the checked rows.
     handleAssignProfilesToGroup(selectedProfiles);
-    setSelectedProfiles([]);
   }, [selectedProfiles, handleAssignProfilesToGroup]);
 
   const handleAssignExtensionGroup = useCallback((profileIds: string[]) => {
@@ -1272,6 +1279,9 @@ export default function Home() {
     // No need to manually reload - useProfileEvents will handle the update
     setGroupAssignmentDialogOpen(false);
     setSelectedProfilesForGroup([]);
+    // Clear the bulk table selection only after a successful assign so
+    // cancelling the dialog preserves the checked rows.
+    setSelectedProfiles([]);
   }, []);
 
   const handleProxyAssignmentComplete = useCallback(() => {
@@ -1570,11 +1580,12 @@ export default function Home() {
   const filteredProfiles = useMemo(() => {
     let filtered = profiles;
 
-    // Filter by group. "__all__" is a virtual filter that shows every
-    // profile (including ungrouped ones). Any other value is a real
-    // group id; ungrouped profiles only show through "All".
+    // Filter by group. "__all__" shows everything, "__ungrouped__"
+    // isolates profiles with no group. Any other value is a real group id.
     if (!selectedGroupId || selectedGroupId === "__all__") {
       filtered = profiles;
+    } else if (selectedGroupId === "__ungrouped__") {
+      filtered = profiles.filter((profile) => !profile.group_id);
     } else {
       filtered = profiles.filter(
         (profile) => profile.group_id === selectedGroupId,
@@ -1753,6 +1764,17 @@ export default function Home() {
                 setCurrentPage("profiles");
               }}
               subPage={currentPage === "tasks"}
+            />
+          )}
+
+          {downloadsDialogOpen && currentPage === "downloads" && (
+            <DownloadsDialog
+              isOpen={downloadsDialogOpen}
+              onClose={() => {
+                setDownloadsDialogOpen(false);
+                setCurrentPage("profiles");
+              }}
+              subPage={currentPage === "downloads"}
             />
           )}
 

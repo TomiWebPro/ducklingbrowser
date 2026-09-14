@@ -406,7 +406,10 @@ impl ProfileManager {
           created_at: None,
           updated_at: None,
           download_dir: None,
-          allow_agent_downloads: true,
+          allow_agent_downloads: false,
+          agent_auto_approve: false,
+          agent_key_id: None,
+          agent_id: None,
         };
 
         match self
@@ -498,7 +501,10 @@ impl ProfileManager {
       ),
       updated_at: Some(crate::proxy_manager::now_secs()),
       download_dir: None,
-      allow_agent_downloads: true,
+      allow_agent_downloads: false,
+      agent_auto_approve: false,
+      agent_key_id: None,
+      agent_id: None,
     };
 
     // Save profile info
@@ -661,7 +667,10 @@ impl ProfileManager {
           created_at: None,
           updated_at: None,
           download_dir: None,
-          allow_agent_downloads: true,
+          allow_agent_downloads: false,
+          agent_auto_approve: false,
+          agent_key_id: None,
+          agent_id: None,
         };
         match self
           .chromium_manager
@@ -789,7 +798,10 @@ impl ProfileManager {
           ),
           updated_at: Some(crate::proxy_manager::now_secs()),
           download_dir: None,
-          allow_agent_downloads: true,
+          allow_agent_downloads: false,
+          agent_auto_approve: false,
+          agent_key_id: None,
+          agent_id: None,
         };
 
         self.save_profile_raw(&profile)?;
@@ -1408,6 +1420,78 @@ impl ProfileManager {
     Ok(profile)
   }
 
+  pub fn update_profile_agent_auto_approve(
+    &self,
+    _app_handle: &tauri::AppHandle,
+    profile_id: &str,
+    auto_approve: bool,
+  ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
+    let profile_uuid =
+      uuid::Uuid::parse_str(profile_id).map_err(|_| format!("Invalid profile ID: {profile_id}"))?;
+    let profiles = self.list_profiles()?;
+    let mut profile = profiles
+      .into_iter()
+      .find(|p| p.id == profile_uuid)
+      .ok_or_else(|| format!("Profile with ID '{profile_id}' not found"))?;
+
+    profile.agent_auto_approve = auto_approve;
+    profile.updated_at = Some(crate::proxy_manager::now_secs());
+
+    self.save_profile(&profile)?;
+
+    crate::sync::queue_profile_sync_if_eligible(&profile);
+
+    if let Err(e) = events::emit_empty("profiles-changed") {
+      log::warn!("Warning: Failed to emit profiles-changed event: {e}");
+    }
+
+    Ok(profile)
+  }
+
+  pub fn update_profile_agent_pair(
+    &self,
+    _app_handle: &tauri::AppHandle,
+    profile_id: &str,
+    key_id: Option<String>,
+    agent_id: Option<String>,
+  ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
+    let profile_uuid =
+      uuid::Uuid::parse_str(profile_id).map_err(|_| format!("Invalid profile ID: {profile_id}"))?;
+    let profiles = self.list_profiles()?;
+    let mut profile = profiles
+      .into_iter()
+      .find(|p| p.id == profile_uuid)
+      .ok_or_else(|| format!("Profile with ID '{profile_id}' not found"))?;
+
+    profile.agent_key_id = key_id.and_then(|k| {
+      let trimmed = k.trim().to_string();
+      if trimmed.is_empty() {
+        None
+      } else {
+        Some(trimmed)
+      }
+    });
+    profile.agent_id = agent_id.and_then(|a| {
+      let trimmed = a.trim().to_string();
+      if trimmed.is_empty() {
+        None
+      } else {
+        Some(trimmed)
+      }
+    });
+    profile.updated_at = Some(crate::proxy_manager::now_secs());
+
+    self.save_profile(&profile)?;
+
+    crate::sync::queue_profile_sync_if_eligible(&profile);
+
+    if let Err(e) = events::emit_empty("profiles-changed") {
+      log::warn!("Warning: Failed to emit profiles-changed event: {e}");
+    }
+
+    Ok(profile)
+  }
+
   pub fn update_profile_window_color(
     &self,
     _app_handle: &tauri::AppHandle,
@@ -1682,6 +1766,9 @@ impl ProfileManager {
       updated_at: Some(crate::proxy_manager::now_secs()),
       download_dir: source.download_dir,
       allow_agent_downloads: source.allow_agent_downloads,
+      agent_auto_approve: source.agent_auto_approve,
+      agent_key_id: source.agent_key_id,
+      agent_id: source.agent_id,
     };
 
     // Duckling: a clone must NOT be linkable to its source. The source
@@ -2566,6 +2653,29 @@ pub fn update_profile_allow_agent_downloads(
   ProfileManager::instance()
     .update_profile_allow_agent_downloads(&app_handle, &profile_id, allow)
     .map_err(|e| format!("Failed to update profile agent downloads: {e}"))
+}
+
+#[tauri::command]
+pub fn update_profile_agent_auto_approve(
+  app_handle: tauri::AppHandle,
+  profile_id: String,
+  auto_approve: bool,
+) -> Result<BrowserProfile, String> {
+  ProfileManager::instance()
+    .update_profile_agent_auto_approve(&app_handle, &profile_id, auto_approve)
+    .map_err(|e| format!("Failed to update profile automation: {e}"))
+}
+
+#[tauri::command]
+pub fn update_profile_agent_pair(
+  app_handle: tauri::AppHandle,
+  profile_id: String,
+  key_id: Option<String>,
+  agent_id: Option<String>,
+) -> Result<BrowserProfile, String> {
+  ProfileManager::instance()
+    .update_profile_agent_pair(&app_handle, &profile_id, key_id, agent_id)
+    .map_err(|e| format!("Failed to update profile agent pair: {e}"))
 }
 
 /// Validate a launch hook value. Returns `Ok(None)` for "clear the hook"

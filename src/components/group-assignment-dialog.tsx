@@ -110,10 +110,20 @@ export function GroupAssignmentDialog({
   useEffect(() => {
     if (isOpen) {
       void loadGroups();
-      setSelectedGroupId(null);
+      // Prefill the current group when moving a single profile so the
+      // dialog reflects reality instead of always defaulting to "No group".
+      // Multi-select stays on "No group" to avoid implying a shared group.
+      if (selectedProfiles.length === 1) {
+        const current = profiles.find(
+          (p: BrowserProfile) => p.id === selectedProfiles[0],
+        )?.group_id;
+        setSelectedGroupId(current ?? null);
+      } else {
+        setSelectedGroupId(null);
+      }
       setError(null);
     }
-  }, [isOpen, loadGroups]);
+  }, [isOpen, loadGroups, profiles, selectedProfiles]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -195,6 +205,30 @@ export function GroupAssignmentDialog({
                 </SelectContent>
               </Select>
             )}
+            {selectedProfiles.length === 1 &&
+              (() => {
+                const current = profiles.find(
+                  (p: BrowserProfile) => p.id === selectedProfiles[0],
+                )?.group_id;
+                const currentName = current
+                  ? (groups.find((g) => g.id === current)?.name ??
+                    t("groups.unknownGroup"))
+                  : t("groups.noGroup");
+                const nextName = selectedGroupId
+                  ? (groups.find((g) => g.id === selectedGroupId)?.name ??
+                    t("groups.unknownGroup"))
+                  : t("groups.noGroup");
+                if ((current ?? null) === (selectedGroupId ?? null))
+                  return null;
+                return (
+                  <p className="text-xs text-muted-foreground">
+                    {t("groupAssignment.moveHint", {
+                      from: currentName,
+                      to: nextName,
+                    })}
+                  </p>
+                );
+              })()}
           </div>
 
           {error && (
