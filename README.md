@@ -202,6 +202,13 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
                     <sub><b>liasica</b></sub>
                 </a>
             </td>
+            <td align="center">
+                <a href="https://github.com/TomiWebPro">
+                    <img src="https://avatars.githubusercontent.com/u/81004287?v=4" width="100;" alt="TomiWebPro"/>
+                    <br />
+                    <sub><b>TomiWebPro</b></sub>
+                </a>
+            </td>
 		</tr>
 	<tbody>
 </table>
