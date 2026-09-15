@@ -28,7 +28,7 @@
 ## Features
 
 - **Unlimited browser profiles**: each fully isolated with its own fingerprint, cookies, extensions, and data
-- **Anti-detect Chromium engine**: powered by [Chromium](https://chromium.org), which is privacy-focused Chromium fork that comes with advanced fingerprint spoofing which naturally hides information in a way that is not detected by Cloudflare, reCaptcha v3, and other browser fingerprinting and anti-bot services.
+- **Anti-detect Chromium engine**: stock [Chromium](https://chromium.org) paired with per-profile fingerprint spoofing (user agent, canvas, WebGL, timezone, locale and more), designed to reduce detectability by Cloudflare, reCaptcha v3, and other fingerprinting and anti-bot services.
 - **DNS AdBlocker** - block ads, trackers, and other unwanted content with per-profile DNS blocking
 - **Proxy support**: HTTP, HTTPS, SOCKS4, SOCKS5 per profile, with dynamic proxy URLs
 - **VPN support**: WireGuard configs per profile
