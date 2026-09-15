@@ -79,7 +79,7 @@ fn main() {
 }
 
 /// File name of the sidecar binary for the current target
-/// (must match tauri.conf.json externalBin).
+/// (must match the triple-suffixed copy in binaries/ used for dev).
 fn sidecar_binary_name() -> String {
   match std::env::var("TARGET") {
     Ok(target) if target.contains("windows") => {
@@ -100,7 +100,11 @@ fn external_binaries_exist() -> bool {
 
   let binaries_dir = PathBuf::from(&manifest_dir).join("binaries");
 
-  // Check for all required external binaries (must match tauri.conf.json externalBin)
+  // Check for all required sidecar binaries (triple-suffixed copies in
+  // binaries/, built by copy-proxy-binary.mjs; the installer itself bundles
+  // the duckling-proxy cargo bin target, so no externalBin entry is needed
+  // — listing it there too would bundle it twice and break the WiX build
+  // with an ICE30 duplicate-component error).
   binaries_dir.join(sidecar_binary_name()).exists()
 }
 

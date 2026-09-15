@@ -1,6 +1,6 @@
-import { execSync, execFileSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const MANIFEST_DIR = dirname(fileURLToPath(import.meta.url));
@@ -35,9 +35,18 @@ const isWindows = TARGET.includes("windows");
 // Determine source directory
 let srcDir;
 if (TARGET === HOST_TARGET || TARGET === "unknown") {
-  srcDir = join(MANIFEST_DIR, "target", PROFILE === "release" ? "release" : "debug");
+  srcDir = join(
+    MANIFEST_DIR,
+    "target",
+    PROFILE === "release" ? "release" : "debug",
+  );
 } else {
-  srcDir = join(MANIFEST_DIR, "target", TARGET, PROFILE === "release" ? "release" : "debug");
+  srcDir = join(
+    MANIFEST_DIR,
+    "target",
+    TARGET,
+    PROFILE === "release" ? "release" : "debug",
+  );
 }
 
 const destDir = join(MANIFEST_DIR, "binaries");
@@ -51,12 +60,21 @@ function copyBinary(baseName) {
   if (isWindows) destName += ".exe";
   const dest = join(destDir, destName);
 
-  const buildArgs = ["build", "--bin", baseName];
+  // Prefer cargo-zigbuild (parallel LLD link) when it and zig are available;
+  // fall back to plain cargo otherwise. Set CARGO_ZIGBUILD=0 to force cargo.
+  let runner = ["cargo"];
+  if (process.env.CARGO_ZIGBUILD !== "0") {
+    try {
+      execSync("cargo zigbuild --version", { stdio: "ignore" });
+      runner = ["cargo", "zigbuild"];
+    } catch {}
+  }
+  const buildArgs = [...runner.slice(1), "build", "--bin", baseName];
   if (PROFILE === "release") buildArgs.push("--release");
   if (TARGET !== "unknown" && TARGET !== HOST_TARGET) {
     buildArgs.push("--target", TARGET);
   }
-  execFileSync("cargo", buildArgs, {
+  execFileSync(runner[0], buildArgs, {
     cwd: MANIFEST_DIR,
     stdio: "inherit",
   });

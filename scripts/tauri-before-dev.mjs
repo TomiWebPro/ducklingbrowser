@@ -2,8 +2,8 @@
 // Smart beforeDevCommand for `tauri dev`.
 //
 // Behavior:
-// 1. Ensures the duckling-proxy sidecar binary exists (tauri's externalBin
-//    check requires it before the Rust build starts); builds it if missing.
+// 1. Ensures the duckling-proxy sidecar binary exists (build.rs skips
+//    tauri_build when it is missing); builds it if missing.
 // 2. If something is already serving the frontend on :12341 (e.g. the
 //    "Frontend (Next.js)" half of the VS Code "Run Full App" compound), exits
 //    immediately so tauri can proceed without starting a second dev server.
@@ -11,7 +11,7 @@
 //    exits 0. The Next process keeps running in the same console/process
 //    group, so it dies together with the tauri dev session.
 
-import { spawn, execSync } from "node:child_process";
+import { execSync, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import net from "node:net";
 import { dirname, join, resolve } from "node:path";
@@ -60,11 +60,11 @@ const sidecarDest = join(
 
 if (!existsSync(sidecarDest)) {
   console.log("[before-dev] sidecar missing, building duckling-proxy...");
-  const copy = spawn(
-    "node",
-    ["src-tauri/copy-proxy-binary.mjs"],
-    { stdio: "inherit", shell: isWindows, cwd: projectRoot },
-  );
+  const copy = spawn("node", ["src-tauri/copy-proxy-binary.mjs"], {
+    stdio: "inherit",
+    shell: isWindows,
+    cwd: projectRoot,
+  });
   const copyCode = await new Promise((resolvePromise) => {
     copy.on("exit", resolvePromise);
     copy.on("error", () => resolvePromise(1));

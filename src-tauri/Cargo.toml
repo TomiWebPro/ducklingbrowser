@@ -1,6 +1,6 @@
 [package]
 name = "ducklingbrowser"
-version = "0.28.2"
+version = "0.1.0"
 description = "Simple Yet Powerful Anti-Detect Browser"
 authors = ["TomiWebPro"]
 edition = "2021"
@@ -169,9 +169,21 @@ opt-level = 0
 split-debuginfo = "unpacked"
 
 [profile.release]
-codegen-units = 1
+# Parallel codegen: the ducklingbrowser crate is ~76k lines / 340MB of rlib.
+# codegen-units = 1 pins ALL of that onto a single thread (20+ min alone on a
+# 22-core / 36GB box: 16 parallel LLVM workers. Higher values risk OOM
+# (workers on this 340MB crate can exceed 1GB each); runtime cost negligible.
+# incremental MUST be off: incremental mode serializes codegen (observed:
+# one rustc thread burning 700+ CPU-s while 21 cores idled) and sccache
+# cannot cache incremental compilations anyway.
+codegen-units = 16
+incremental = false
 opt-level = 3
-lto = "thin"
+# No LTO: thin-LTO re-serializes the link on top of the giant static lib for
+# single-digit-% runtime gains. Re-enable (lto = "thin") if release-binary
+# benchmarks ever justify the link-time cost.
+lto = false
+strip = true
 # Split debuginfo on macOS for faster linking (ignored on other platforms)
 split-debuginfo = "unpacked"
 
